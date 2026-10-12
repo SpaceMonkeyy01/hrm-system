@@ -1,6 +1,5 @@
-import { Link } from '@inertiajs/react';
-import { ChevronLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { Breadcrumbs } from '@/components/breadcrumbs';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 
 /** Title, one line saying what the page is for, and the page's main actions on the right. */
@@ -20,11 +19,8 @@ export function PageHeader({
     return (
         <header className="relative isolate border-b px-4 pt-4 pb-4 md:px-6 md:pt-5">
             <div aria-hidden className="bg-grid-faint pointer-events-none absolute inset-0 -z-10" />
-            {back && (
-                <Link href={back.href} className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-                    <ChevronLeft className="size-4" /> {back.label}
-                </Link>
-            )}
+            {/* The trail you came through (Org chart / Ali Asghar), else the page's own back link. */}
+            <Breadcrumbs fallback={back} />
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-2">
                     <SidebarTrigger className="mt-0.5 -ml-1 hidden md:inline-flex" />

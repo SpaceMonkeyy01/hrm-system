@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Avatar } from '@/components/avatar';
 import { plural } from '@/lib/format';
+import { useSessionState } from '@/lib/use-session-state';
 import { cn } from '@/lib/utils';
 
 export type OrgPerson = { id: number; name: string; code?: string; role?: string | null; leaving?: boolean };
@@ -137,8 +138,15 @@ export type TreeCommand = { kind: 'open' | 'close'; n: number } | null;
  * Top-down flow chart. `startOpen` = boxes open at first (e.g. the root and companies). Zoom and the
  * open/close-all buttons live in the page's sticky bar (pages/org-chart.tsx) and arrive as props.
  */
-export function OrgTree({ root, startOpen, needle, zoom, command }: { root: OrgNode; startOpen: string[]; needle: string; zoom: number; command: TreeCommand }) {
-    const [open, setOpen] = useState<Set<string>>(() => new Set(startOpen));
+export function OrgTree({ root, startOpen, needle, zoom, command, storageKey }: {
+    root: OrgNode; startOpen: string[]; needle: string; zoom: number; command: TreeCommand;
+    /** Remembers which boxes are open for this tab of the browser, so coming back shows the same chart. */
+    storageKey: string;
+}) {
+    const [openList, setOpenList] = useSessionState<string[]>(`org-tree:${storageKey}`, startOpen);
+    const open = new Set(openList);
+    const setOpen = (next: Set<string> | ((prev: Set<string>) => Set<string>)) =>
+        setOpenList((prev) => [...(typeof next === 'function' ? next(new Set(prev)) : next)]);
     // Start with the top box in view: a wide chart would otherwise open scrolled to its left edge.
     const scroller = useRef<HTMLDivElement>(null);
     useEffect(() => {

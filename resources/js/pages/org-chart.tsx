@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { plural } from '@/lib/format';
+import { useSessionState } from '@/lib/use-session-state';
 import { cn } from '@/lib/utils';
 
 type Person = { id: number; name: string; code: string; role: string | null; department: string | null; leaving: boolean };
@@ -114,16 +115,17 @@ function managerTree(roots: Node[], total: number): OrgNode {
 }
 
 export default function OrgChart(props: Props) {
-    const [q, setQ] = useState('');
+    const [q, setQ] = useSessionState('org-chart:q', '');
     const needle = q.trim().toLowerCase();
     // Searching keeps only the departments with a match, opened, with the person highlighted.
     const structure = useMemo(() => !needle ? props.structure : props.structure
         .map((c) => ({ ...c, departments: c.departments.filter((d) => d.teams.some((t) => t.people.some((p) => p.name.toLowerCase().includes(needle)))) }))
         .filter((c) => c.departments.length), [props.structure, needle]);
 
-    const [view, setView] = useState('chart');
+    // Kept for this browser tab, so the breadcrumb back from a profile lands on the same view.
+    const [view, setView] = useSessionState('org-chart:view', 'chart');
     // Phones start zoomed out so a box and its neighbours fit.
-    const [zoom, setZoom] = useState(() => (typeof window !== 'undefined' && window.innerWidth < 640 ? 0.7 : 1));
+    const [zoom, setZoom] = useSessionState('org-chart:zoom', () => (typeof window !== 'undefined' && window.innerWidth < 640 ? 0.7 : 1));
     const [command, setCommand] = useState<TreeCommand>(null);
     const chartView = view === 'chart' || (view === 'managers' && props.managers.roots.length > 0);
     const chart = useMemo(() => structureTree(props.structure), [props.structure]);
@@ -175,7 +177,7 @@ export default function OrgChart(props: Props) {
 
                 <TabsContent value="chart">
                     {props.structure.length === 0 ? <EmptyState title="No current employees." /> : (
-                        <OrgTree key={props.filters.company ?? 'all'} root={chart} needle={needle} zoom={zoom} command={command}
+                        <OrgTree key={props.filters.company ?? 'all'} storageKey={`chart:${props.filters.company ?? 'all'}`} root={chart} needle={needle} zoom={zoom} command={command}
                             startOpen={chart.kind === 'root' ? [chart.key, ...(chart.children ?? []).map((c) => c.key)] : [chart.key]} />
                     )}
                 </TabsContent>
@@ -209,7 +211,7 @@ export default function OrgChart(props: Props) {
                             <p className="text-sm text-muted-foreground">
                                 {props.managers.inTree} people are in a reporting line. {props.managers.withoutManager > 0 && `${plural(props.managers.withoutManager, 'person', 'people')} have no manager set and nobody reporting to them.`}
                             </p>
-                            <OrgTree root={reporting} needle={needle} zoom={zoom} command={command} startOpen={[reporting.key, ...(reporting.children ?? []).map((c) => c.key)]} />
+                            <OrgTree storageKey={`managers:${props.filters.company ?? 'all'}`} root={reporting} needle={needle} zoom={zoom} command={command} startOpen={[reporting.key, ...(reporting.children ?? []).map((c) => c.key)]} />
                             <details className="text-sm">
                                 <summary className="cursor-pointer font-semibold text-cascade">Show as an indented list</summary>
                                 <ul className="mt-2 rounded-lg border p-3">
