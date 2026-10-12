@@ -118,6 +118,11 @@ class Employee extends Model
         return $this->hasMany(EmployeeFile::class)->latest('id');
     }
 
+    public function assetAssignments(): HasMany
+    {
+        return $this->hasMany(AssetAssignment::class)->orderByDesc('assigned_on')->orderByDesc('id');
+    }
+
     public function leaveRecords(): HasMany
     {
         return $this->hasMany(LeaveRecord::class);

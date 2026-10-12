@@ -5,6 +5,8 @@ import { DayStatus, duration, TimeCell } from '@/components/attendance';
 import type { AttendanceDay } from '@/components/attendance';
 import { EmptyState } from '@/components/empty-state';
 import { Detail, Field } from '@/components/field';
+import { AssetList } from '@/components/assets';
+import type { AssetRow } from '@/components/assets';
 import { leaveDates } from '@/components/leave';
 import type { LeaveRecordRow } from '@/components/leave';
 import { PageHeader, Section } from '@/components/page-header';
@@ -41,6 +43,7 @@ type Props = {
     attendance?: AttendanceMonth;
     leave?: { year: number; records: LeaveRecordRow[]; totals: Record<string, number> };
     requests?: FixRequest[];
+    assets?: AssetRow[];
     rules?: { daysBack: number; editable: string[] };
     today?: string;
 };
@@ -319,6 +322,9 @@ export default function MyPage(props: Props) {
                         </Section>
                         <Section title="Contact details" description="Keep these up to date. Changes save straight to your record." className="lg:col-span-2">
                             <ContactForm me={me} />
+                        </Section>
+                        <Section title="Company property with you" className="lg:col-span-2" description="Hand these back to HR when you leave. Tell HR if anything here is wrong.">
+                            <AssetList rows={props.assets ?? []} empty="Nothing from the asset register is with you." />
                         </Section>
                         <Section title="Documents HR has on file" className="lg:col-span-2"
                             description={owed.length ? `HR still needs ${owed.length} from you. Hand them to HR.` : 'HR has everything it needs from you.'}>

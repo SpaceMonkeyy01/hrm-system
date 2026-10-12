@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AssetAssignment;
 use App\Models\AttendanceRequest;
 use App\Models\Employee;
 use App\Services\EmployeeRecords;
@@ -64,6 +65,7 @@ class MeController extends Controller
             ])->values(),
             'attendance' => EmployeeRecords::attendanceMonth($employee, $request->input('month')),
             'leave' => EmployeeRecords::leaveYear($employee),
+            'assets' => AssetAssignment::rowsFor($employee->id, withReturned: false),
             'requests' => AttendanceRequest::query()->with('decider:id,name')->where('employee_id', $employee->id)
                 ->latest('id')->limit(30)->get()->map->props(),
             'rules' => [

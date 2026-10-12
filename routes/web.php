@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccountController;
+use App\Http\Controllers\AssetController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\AttendanceRequestController;
 use App\Http\Controllers\Auth\LoginController;
@@ -16,6 +17,7 @@ use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\MeController;
 use App\Http\Controllers\OffboardingController;
 use App\Http\Controllers\OnboardingController;
+use App\Http\Controllers\OrgChartController;
 use App\Http\Controllers\OverviewController;
 use App\Http\Controllers\ProbationPlanController;
 use App\Http\Controllers\ReportController;
@@ -140,6 +142,18 @@ Route::middleware('auth')->group(function () {
             Route::post('leave/types', [LeaveController::class, 'storeType'])->name('leave-types.store');
             Route::put('leave/types/{type}', [LeaveController::class, 'updateType'])->name('leave-types.update');
         });
+
+        // Asset register (status rules: AssetController)
+        Route::get('assets', [AssetController::class, 'index'])->name('assets.index');
+        Route::middleware('can:edit-hr')->group(function () {
+            Route::post('assets', [AssetController::class, 'store'])->name('assets.store');
+            Route::put('assets/{asset}', [AssetController::class, 'update'])->name('assets.update');
+            Route::post('assets/{asset}/assign', [AssetController::class, 'assign'])->name('assets.assign');
+            Route::post('assets/{asset}/return', [AssetController::class, 'return'])->name('assets.return');
+        });
+
+        // Org chart
+        Route::get('org-chart', OrgChartController::class)->name('org-chart');
 
         // Controlled documents
         Route::get('controlled-documents', [ControlledDocumentController::class, 'index'])->name('controlled-documents.index');

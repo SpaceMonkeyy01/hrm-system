@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AssetAssignment;
 use App\Models\ChecklistEntry;
 use App\Models\Employee;
 use App\Models\Offboarding;
@@ -105,6 +106,7 @@ class OffboardingController extends Controller
                 'department' => $e->department?->name, 'company' => $e->company?->name,
                 'start_date' => $e->start_date?->toDateString(), 'status' => $e->status],
             'checklist' => ['columns' => $board->columns('offboarding'), 'values' => $board->values($e->id, 'offboarding')],
+            'assets' => AssetAssignment::rowsFor($e->id, withReturned: false),
             'optionSets' => StatusBoard::optionSets(),
             'types' => config('hrm.offboarding_types'),
         ]);
@@ -153,6 +155,10 @@ class OffboardingController extends Controller
             ->map(fn ($entry) => $entry->item->label.' (switched off in Settings)');
 
         $open = $open->concat($switchedOff);
+        $assets = AssetAssignment::outstandingFor([$offboarding->employee_id])[$offboarding->employee_id] ?? [];
+        if ($assets) {
+            $open->push('company assets still with them ('.implode(', ', $assets).'). Take them back or mark them lost on the Assets page');
+        }
         if ($open->isNotEmpty()) {
             return back()->with('error', 'Still open: '.$open->implode(', ').'. Mark them Done or Not Required first.');
         }

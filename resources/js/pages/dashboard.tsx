@@ -76,6 +76,8 @@ const reminderLabel: Record<ReminderType, string> = {
     checkin_due: 'Check-in',
     documents_pending: 'Documents',
     offboarding_due: 'Offboarding',
+    cnic_expired: 'CNIC',
+    cnic_expiring: 'CNIC',
 };
 
 const REMINDERS_SHOWN = 10;

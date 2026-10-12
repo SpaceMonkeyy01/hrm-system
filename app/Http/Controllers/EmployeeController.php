@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AssetAssignment;
 use App\Models\Company;
 use App\Models\Department;
 use App\Models\Employee;
@@ -150,6 +151,7 @@ class EmployeeController extends Controller
             'uploads' => ['extensions' => config('hrm.uploads.extensions'), 'max_kb' => config('hrm.uploads.max_kb')],
             'attendance' => EmployeeRecords::attendanceMonth($employee, request()->input('month')),
             'leave' => EmployeeRecords::leaveYear($employee),
+            'assets' => AssetAssignment::rowsFor($employee->id),
             'employmentHistory' => $employee->employmentHistory->map(fn (EmploymentHistory $h) => [
                 'id' => $h->id, 'effective_date' => $h->effective_date->toDateString(), 'change_type' => $h->change_type,
                 'changes' => $h->changes ?? [], 'note' => $h->note, 'by' => $h->author?->name,

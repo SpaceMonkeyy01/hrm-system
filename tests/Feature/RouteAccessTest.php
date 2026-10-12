@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Asset;
 use App\Models\AttendanceRequest;
 use App\Models\ChecklistItem;
 use App\Models\ControlledDocument;
@@ -139,6 +140,7 @@ class RouteAccessTest extends TestCase
             'history' => EmploymentHistory::create(['employee_id' => $e->id, 'effective_date' => '2026-01-01', 'change_type' => 'Other'])->id,
             'correction' => AttendanceRequest::create(['employee_id' => $e->id, 'date' => '2026-05-13', 'check_in' => '09:00', 'reason' => 'Test'])->id,
             'report' => 'headcount',
+            'asset' => Asset::create(['asset_tag' => 'T-1', 'type' => 'Laptop', 'name' => 'Test laptop'])->id,
         ];
         $out = [];
         foreach (Route::getRoutes() as $route) {

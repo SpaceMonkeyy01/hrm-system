@@ -25,7 +25,12 @@ class Reminders
         'checkin_due' => 'Check-ins due',
         'documents_pending' => 'Documents missing',
         'offboarding_due' => 'Offboarding clearance due',
+        'cnic_expired' => 'CNIC expired',
+        'cnic_expiring' => 'CNIC expiring soon',
     ];
+
+    /** Types that read private fields (Employee::PRIVATE_FIELDS): only HR and admin see them. */
+    public const PRIVATE_TYPES = ['cnic_expired', 'cnic_expiring'];
 
     /**
      * @return list<array{type: string, severity: 'overdue'|'due_soon', employee_id: int, employee_code: string,
@@ -37,7 +42,7 @@ class Reminders
         $cfg = config('hrm.reminders');
 
         $active = Employee::query()->where('status', 'active')
-            ->get(['id', 'employee_code', 'full_name', 'start_date', 'status']);
+            ->get(['id', 'employee_code', 'full_name', 'start_date', 'status', 'cnic_expiry']);
         $onboardings = Onboarding::query()->whereHas('employee', fn ($q) => $q->where('status', 'active'))
             ->get(['id', 'employee_id', 'probation_end_date', 'probation_result'])->keyBy('employee_id');
         // The relation includes trashed employees (case history), so skip them explicitly.
@@ -65,6 +70,15 @@ class Reminders
         };
 
         foreach ($active as $e) {
+            // ---------------------------------------------------------------- CNIC (everyone, not only recent starters)
+            $expiry = $e->cnic_expiry?->toDateString();
+            if ($expiry && ($severity = HrRules::dueSeverity($expiry, $today, (int) $cfg['cnic_expiry_days']))) {
+                $days = HrRules::daysUntil($expiry, $today);
+                $severity === 'overdue'
+                    ? $add($e, 'cnic_expired', 'overdue', $expiry, 'CNIC expired '.self::when($days).'. Ask for the renewed card', "/employees/{$e->id}")
+                    : $add($e, 'cnic_expiring', 'due_soon', $expiry, 'CNIC expires '.self::when($days), "/employees/{$e->id}");
+            }
+
             if (! HrRules::isRecentStarter($e->start_date, $today)) {
                 continue; // counted by documentsBacklog() instead
             }

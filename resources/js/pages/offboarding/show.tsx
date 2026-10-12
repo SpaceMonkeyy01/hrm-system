@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { formatDate, formatDateTime } from '@/lib/format';
+import { AssetList } from '@/components/assets';
+import type { AssetRow } from '@/components/assets';
 import type { ChecklistColumn, OptionSets, SharedProps } from '@/types';
 
 type Props = {
@@ -18,13 +20,14 @@ type Props = {
         notice_date: string | null; last_working_day: string | null; completed_at: string | null };
     employee: { id: number; code: string; name: string; department: string | null; company: string | null; start_date: string | null; status: string };
     checklist: { columns: ChecklistColumn[]; values: Record<string, string | null> };
+    assets: AssetRow[];
     optionSets: OptionSets;
     types: string[];
 };
 
 const statusLabel: Record<string, string> = { in_progress: 'In progress', completed: 'Completed', cancelled: 'Cancelled' };
 
-export default function OffboardingShow({ case: c, employee: e, checklist, optionSets, types }: Props) {
+export default function OffboardingShow({ case: c, employee: e, checklist, assets, optionSets, types }: Props) {
     const { auth } = usePage<SharedProps>().props;
     const open = c.status === 'in_progress';
     const can = auth.can.edit && open;
@@ -98,6 +101,17 @@ export default function OffboardingShow({ case: c, employee: e, checklist, optio
                             </li>
                         ))}
                     </ul>
+
+                    <h2 className="mt-8 font-bold">Company assets</h2>
+                    {assets.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Nothing on the asset register is with {e.name}.</p>
+                    ) : (
+                        <>
+                            <p className="mb-3 text-sm text-missing">{assets.length === 1 ? '1 asset is' : `${assets.length} assets are`} still with {e.name}. Take them back on the Assets page before marking as exited.</p>
+                            <AssetList rows={assets} />
+                            {auth.can.edit && <Link href={`/assets?q=${encodeURIComponent(e.code)}`} className="mt-2 inline-block text-sm font-semibold text-cascade hover:underline">Open on the Assets page</Link>}
+                        </>
+                    )}
                 </section>
 
                 <form onSubmit={submit} className="grid content-start gap-4">

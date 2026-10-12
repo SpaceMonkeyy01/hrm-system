@@ -16,6 +16,8 @@ import { formatDate, formatDateTime } from '@/lib/format';
 import type { ActivityItem, ChecklistColumn, OptionSets, SharedProps, Tone } from '@/types';
 import { AdjustDialog, DayStatus, duration, TimeCell } from '@/components/attendance';
 import type { AttendanceDay } from '@/components/attendance';
+import { AssetList } from '@/components/assets';
+import type { AssetRow } from '@/components/assets';
 import { leaveDates } from '@/components/leave';
 import type { LeaveRecordRow } from '@/components/leave';
 
@@ -57,6 +59,7 @@ type Props = {
     employmentHistory: HistoryEntry[];
     attendance: AttendanceMonth;
     leave: { year: number; records: LeaveRecordRow[]; totals: Record<string, number> };
+    assets: AssetRow[];
     /** Null for viewer logins: they only get fileCount. */
     files: EmployeeFile[] | null;
     fileCount: number;
@@ -407,6 +410,7 @@ export default function EmployeeShow(props: Props) {
                     <TabsTrigger value="documents">Documents <StatusPill value={props.documentStatus} tone={computedTone(props.documentStatus)} /></TabsTrigger>
                     <TabsTrigger value="attendance">Attendance</TabsTrigger>
                     <TabsTrigger value="leave">Leave</TabsTrigger>
+                    <TabsTrigger value="assets">Assets{props.assets.some((x) => !x.returned_on) ? ` (${props.assets.filter((x) => !x.returned_on).length})` : ''}</TabsTrigger>
                     <TabsTrigger value="offboarding">Offboarding</TabsTrigger>
                     <TabsTrigger value="job">Job history</TabsTrigger>
                     <TabsTrigger value="history">Change log</TabsTrigger>
@@ -484,6 +488,14 @@ export default function EmployeeShow(props: Props) {
 
                 <TabsContent value="leave">
                     <LeaveTab leave={props.leave} />
+                </TabsContent>
+
+                <TabsContent value="assets">
+                    <div className="grid max-w-3xl gap-3">
+                        <p className="text-sm text-muted-foreground">Company property given to {e.full_name}. Still with them first, then returned.</p>
+                        <AssetList rows={props.assets} empty="Nothing from the asset register has been given to them." />
+                        {can && <Link href={`/assets?q=${encodeURIComponent(e.employee_code)}`} className="text-sm font-semibold text-cascade hover:underline">Give or take back on the Assets page</Link>}
+                    </div>
                 </TabsContent>
 
                 <TabsContent value="job">

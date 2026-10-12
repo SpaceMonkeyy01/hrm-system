@@ -20,6 +20,19 @@ return [
         'employee' => 'Employee: only their own record',
     ],
 
+    // Asset register (Assets page). Types are a plain list HR picks from; add one here when needed.
+    'assets' => [
+        'types' => ['Laptop', 'Desktop', 'Monitor', 'Mobile phone', 'SIM card', 'ID card', 'Access card', 'Headset', 'Other'],
+        // status => [label, status-pill tone]. "assigned" is set only by giving the asset to someone.
+        'statuses' => [
+            'in_stock' => ['label' => 'In stock', 'tone' => 'done'],
+            'assigned' => ['label' => 'With someone', 'tone' => 'info'],
+            'repair' => ['label' => 'In repair', 'tone' => 'pending'],
+            'lost' => ['label' => 'Lost', 'tone' => 'missing'],
+            'retired' => ['label' => 'Retired', 'tone' => 'neutral'],
+        ],
+    ],
+
     // Self-service (My page)
     'self_service' => [
         // How far back someone can ask HR to fix a day.
@@ -200,6 +213,9 @@ return [
         'recent_start_days' => 180,
         // Day the summary line goes in the email (ISO weekday: 1 = Monday ... 7 = Sunday).
         'documents_backlog_weekday' => 1,
+
+        // CNIC expires within this many days (or has expired). Applies to every active employee with an expiry date.
+        'cnic_expiry_days' => 30,
 
         // In-progress offboarding with clearance still open and the last working day within this many days (or past).
         'offboarding_days' => 3,

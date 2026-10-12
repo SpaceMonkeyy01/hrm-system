@@ -44,7 +44,9 @@ class DashboardController extends Controller
 
         return Inertia::render('dashboard', [
             'today' => $today->toDateString(),
-            'reminders' => Reminders::forDate($today),
+            // Viewers don't see reminders built on private fields (CNIC expiry).
+            'reminders' => array_values(array_filter(Reminders::forDate($today),
+                fn ($r) => $private || ! in_array($r['type'], Reminders::PRIVATE_TYPES, true))),
             'totals' => [
                 'current' => $current->count(),
                 'unassigned' => $current->whereNull('company_id')->count(),

@@ -10,6 +10,7 @@ import {
     FileChartColumn,
     FileCheck2,
     House,
+    Laptop,
     ListChecks,
     LogOut,
     Network,
@@ -18,6 +19,7 @@ import {
     UserCog,
     UserRound,
     Users,
+    Workflow,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -55,6 +57,8 @@ const work: Item[] = [
     { title: 'Attendance', href: '/attendance', icon: Clock },
     { title: 'Work schedules', href: '/attendance/schedules', icon: CalendarClock },
     { title: 'Leave & holidays', href: '/leave', icon: Palmtree },
+    { title: 'Assets', href: '/assets', icon: Laptop },
+    { title: 'Org chart', href: '/org-chart', icon: Workflow },
     { title: 'Controlled documents', href: '/controlled-documents', icon: ScrollText },
 ];
 

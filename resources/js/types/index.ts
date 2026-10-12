@@ -55,7 +55,7 @@ export type ActivityItem = {
 };
 
 /** app/Services/Reminders.php: one thing HR has to act on, computed live (never stored). */
-export type ReminderType = 'probation_overdue' | 'probation_ending' | 'checkin_missed' | 'checkin_due' | 'documents_pending' | 'offboarding_due';
+export type ReminderType = 'probation_overdue' | 'probation_ending' | 'checkin_missed' | 'checkin_due' | 'documents_pending' | 'offboarding_due' | 'cnic_expired' | 'cnic_expiring';
 
 export type Reminder = {
     type: ReminderType;
