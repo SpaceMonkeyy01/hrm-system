@@ -21,6 +21,7 @@ use App\Http\Controllers\OrgChartController;
 use App\Http\Controllers\OverviewController;
 use App\Http\Controllers\ProbationPlanController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\Settings\ChecklistItemController;
 use App\Http\Controllers\Settings\StructureController;
 use App\Http\Controllers\Settings\UserController;
@@ -57,6 +58,8 @@ Route::middleware('auth')->group(function () {
         Route::put('me/contact', [MeController::class, 'updateContact'])->name('me.contact');
         Route::post('me/requests', [MeController::class, 'storeRequest'])->name('me.requests.store');
         Route::delete('me/requests/{correction}', [MeController::class, 'cancelRequest'])->name('me.requests.cancel');
+        Route::put('me/reviews/{review}', [MeController::class, 'saveSelfReview'])->name('me.reviews.save');
+        Route::post('me/reviews/{review}/acknowledge', [MeController::class, 'acknowledgeReview'])->name('me.reviews.acknowledge');
     });
 
     // Everything below is HR records: admin, hr and viewer logins only. Employee logins get 403.
@@ -150,6 +153,21 @@ Route::middleware('auth')->group(function () {
             Route::put('assets/{asset}', [AssetController::class, 'update'])->name('assets.update');
             Route::post('assets/{asset}/assign', [AssetController::class, 'assign'])->name('assets.assign');
             Route::post('assets/{asset}/return', [AssetController::class, 'return'])->name('assets.return');
+        });
+
+        // Performance reviews: HR and admin only, even for reading (ratings are as private as pay). Rules: ReviewRules.
+        Route::middleware('can:edit-hr')->group(function () {
+            Route::get('reviews', [ReviewController::class, 'index'])->name('reviews.index');
+            Route::post('reviews', [ReviewController::class, 'store'])->name('reviews.store');
+            Route::get('reviews/{cycle}', [ReviewController::class, 'show'])->name('reviews.show');
+            Route::put('reviews/{cycle}', [ReviewController::class, 'update'])->name('reviews.update');
+            Route::post('reviews/{cycle}/people', [ReviewController::class, 'addPeople'])->name('reviews.people');
+            Route::post('reviews/{cycle}/open', [ReviewController::class, 'open'])->name('reviews.open');
+            Route::post('reviews/{cycle}/close', [ReviewController::class, 'close'])->name('reviews.close');
+            Route::get('reviews/{cycle}/people/{review}', [ReviewController::class, 'review'])->name('reviews.review');
+            Route::put('reviews/{cycle}/people/{review}', [ReviewController::class, 'saveReview'])->name('reviews.save');
+            Route::post('reviews/{cycle}/people/{review}/skip-self', [ReviewController::class, 'skipSelf'])->name('reviews.skip-self');
+            Route::delete('reviews/{cycle}/people/{review}', [ReviewController::class, 'remove'])->name('reviews.remove');
         });
 
         // Org chart

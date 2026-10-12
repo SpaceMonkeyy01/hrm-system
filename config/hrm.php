@@ -33,6 +33,22 @@ return [
         ],
     ],
 
+    // Performance reviews (rules: app/Services/ReviewRules.php). HR and admin only: ratings are as private as pay.
+    'reviews' => [
+        'scale' => [1 => 'Unsatisfactory', 2 => 'Needs improvement', 3 => 'Meets expectations', 4 => 'Exceeds expectations', 5 => 'Outstanding'],
+        // What a new cycle rates. Each cycle keeps its own copy, so changing this never rewrites old reviews.
+        'default_criteria' => [
+            ['key' => 'quality', 'label' => 'Quality of work', 'description' => 'Accurate, thorough, meets the standard without rework.'],
+            ['key' => 'delivery', 'label' => 'Delivery and deadlines', 'description' => 'Gets agreed work done on time.'],
+            ['key' => 'ownership', 'label' => 'Ownership and reliability', 'description' => 'Takes responsibility, follows through, can be counted on.'],
+            ['key' => 'communication', 'label' => 'Communication', 'description' => 'Clear, timely and professional with the team and clients.'],
+            ['key' => 'teamwork', 'label' => 'Teamwork', 'description' => 'Helps others, shares knowledge, works well across teams.'],
+            ['key' => 'growth', 'label' => 'Learning and growth', 'description' => 'Takes feedback, builds skills, improves over the period.'],
+            ['key' => 'attendance', 'label' => 'Attendance and punctuality', 'description' => 'On time, follows the leave policy.'],
+        ],
+        'recommendations' => ['No change', 'Pay increase', 'Promotion', 'Training', 'Improvement plan', 'Confirm employment'],
+    ],
+
     // Self-service (My page)
     'self_service' => [
         // How far back someone can ask HR to fix a day.

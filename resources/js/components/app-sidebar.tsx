@@ -16,6 +16,7 @@ import {
     Network,
     Palmtree,
     ScrollText,
+    Star,
     UserCog,
     UserRound,
     Users,
@@ -44,7 +45,8 @@ import {
 import { APP_CREDIT } from '@/lib/app-info';
 import type { SharedProps } from '@/types';
 
-type Item = { title: string; href: string; icon: LucideIcon };
+/** edit: only for HR and admin logins (the page itself returns 403 to others). */
+type Item = { title: string; href: string; icon: LucideIcon; edit?: boolean };
 
 const work: Item[] = [
     { title: 'Home', href: '/dashboard', icon: House },
@@ -58,6 +60,7 @@ const work: Item[] = [
     { title: 'Work schedules', href: '/attendance/schedules', icon: CalendarClock },
     { title: 'Leave & holidays', href: '/leave', icon: Palmtree },
     { title: 'Assets', href: '/assets', icon: Laptop },
+    { title: 'Reviews', href: '/reviews', icon: Star, edit: true },
     { title: 'Org chart', href: '/org-chart', icon: Workflow },
     { title: 'Controlled documents', href: '/controlled-documents', icon: ScrollText },
 ];
@@ -143,7 +146,7 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                {auth.can.view && <NavGroup label="HR records" items={work} />}
+                {auth.can.view && <NavGroup label="HR records" items={work.filter((i) => !i.edit || auth.can.edit)} />}
                 {(auth.can.self || !auth.can.view) && <NavGroup label="Me" items={mine} />}
                 {auth.can.admin && <NavGroup label="Settings" items={settings} />}
             </SidebarContent>

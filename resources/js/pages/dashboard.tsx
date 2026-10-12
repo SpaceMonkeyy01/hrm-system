@@ -14,7 +14,7 @@ type DocItem = { key: string; label: string; yes: number; na: number; pending: n
 type Props = {
     today: string;
     reminders: Reminder[];
-    totals: { current: number; unassigned: number; needsReview: number; inOnboarding: number; offboarding: number; requests: number };
+    totals: { current: number; unassigned: number; needsReview: number; inOnboarding: number; offboarding: number; requests: number; reviews: number };
     onboarding: {
         total: number;
         orientation: Record<'Not Started' | 'In Progress' | 'Complete', number>;
@@ -245,6 +245,11 @@ export default function Dashboard(props: Props) {
                             {auth.can.edit && (
                                 <Attention n={totals.requests} href="/attendance/requests" tone="missing">
                                     attendance fixes asked for on My page are waiting for HR
+                                </Attention>
+                            )}
+                            {auth.can.edit && totals.reviews > 0 && (
+                                <Attention n={totals.reviews} href="/reviews">
+                                    performance reviews are waiting for HR's part
                                 </Attention>
                             )}
                             <Attention n={o.overdue.length} href="/onboarding?probation=overdue" tone="missing">

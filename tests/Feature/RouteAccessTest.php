@@ -14,6 +14,8 @@ use App\Models\Holiday;
 use App\Models\LeaveRecord;
 use App\Models\LeaveType;
 use App\Models\Offboarding;
+use App\Models\Review;
+use App\Models\ReviewCycle;
 use App\Models\Team;
 use App\Models\WorkSchedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -78,7 +80,8 @@ class RouteAccessTest extends TestCase
                 $open[] = $route->uri();
             }
         }
-        $expected = ['/', 'account', 'login', 'logout', 'me', 'me/contact', 'me/requests', 'me/requests/{correction}', 'storage/{path}', 'up'];
+        $expected = ['/', 'account', 'login', 'logout', 'me', 'me/contact', 'me/requests', 'me/requests/{correction}',
+            'me/reviews/{review}', 'me/reviews/{review}/acknowledge', 'storage/{path}', 'up'];
         $this->assertSame([], array_values(array_diff(array_unique($open), $expected)));
     }
 
@@ -141,6 +144,8 @@ class RouteAccessTest extends TestCase
             'correction' => AttendanceRequest::create(['employee_id' => $e->id, 'date' => '2026-05-13', 'check_in' => '09:00', 'reason' => 'Test'])->id,
             'report' => 'headcount',
             'asset' => Asset::create(['asset_tag' => 'T-1', 'type' => 'Laptop', 'name' => 'Test laptop'])->id,
+            'cycle' => $cycle = ReviewCycle::create(['name' => 'Test cycle', 'period_start' => '2026-01-01', 'period_end' => '2026-06-30', 'criteria' => config('hrm.reviews.default_criteria')])->id,
+            'review' => Review::create(['review_cycle_id' => $cycle, 'employee_id' => $e->id])->id,
         ];
         $out = [];
         foreach (Route::getRoutes() as $route) {

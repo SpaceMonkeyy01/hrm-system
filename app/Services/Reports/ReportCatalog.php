@@ -11,7 +11,7 @@ namespace App\Services\Reports;
  */
 final class ReportCatalog
 {
-    public const GROUPS = ['attendance' => 'Attendance', 'people' => 'People', 'compliance' => 'Compliance', 'leave' => 'Leave and holidays'];
+    public const GROUPS = ['attendance' => 'Attendance', 'people' => 'People', 'performance' => 'Performance', 'compliance' => 'Compliance', 'leave' => 'Leave and holidays'];
 
     /** @return array<string, array{group: string, title: string, description: string, filters: list<string>, run: array{0: class-string, 1: string}, private?: bool, wide?: bool}> */
     public static function all(): array
@@ -50,6 +50,10 @@ final class ReportCatalog
             'probation' => ['group' => 'people', 'title' => 'Probation outcomes',
                 'description' => 'Probations ending between two dates and their result.',
                 'filters' => ['range', ...$org], 'run' => [PeopleReports::class, 'probation']],
+
+            'review-outcomes' => ['group' => 'performance', 'title' => 'Review outcomes',
+                'description' => 'Finished performance reviews for a year: overall rating, band and recommendation.',
+                'filters' => ['year', ...$org], 'run' => [PerformanceReports::class, 'outcomes'], 'private' => true],
 
             'missing-documents' => ['group' => 'compliance', 'title' => 'Missing documents',
                 'description' => 'Current employees still owing a document, and which ones.',

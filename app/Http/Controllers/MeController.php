@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\AssetAssignment;
 use App\Models\AttendanceRequest;
 use App\Models\Employee;
+use App\Models\Review;
 use App\Services\EmployeeRecords;
 use App\Services\HrRules;
+use App\Services\ReviewRules;
 use App\Services\StatusBoard;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
@@ -66,6 +68,17 @@ class MeController extends Controller
             'attendance' => EmployeeRecords::attendanceMonth($employee, $request->input('month')),
             'leave' => EmployeeRecords::leaveYear($employee),
             'assets' => AssetAssignment::rowsFor($employee->id, withReturned: false),
+            // Reviews in cycles HR has opened; HR's side only once it's finished (ReviewController::reviewProps).
+            'reviews' => Review::query()->with(['cycle', 'reviewer:id,name'])->where('employee_id', $employee->id)
+                ->where('status', '!=', 'cancelled')->whereHas('cycle', fn ($q) => $q->where('status', '!=', 'draft'))
+                ->latest('id')->get()->map(fn (Review $r) => [
+                    'cycle' => ReviewController::cycleProps($r->cycle) + ['criteria' => $r->cycle->criteria],
+                    'canSelfReview' => ReviewRules::canSelfReview($r, $r->cycle),
+                    ...ReviewController::reviewProps($r, withManager: false),
+                    // A pay or promotion recommendation is HR's to act on, not part of the feedback.
+                    'recommendation' => null,
+                ]),
+            'scale' => config('hrm.reviews.scale'),
             'requests' => AttendanceRequest::query()->with('decider:id,name')->where('employee_id', $employee->id)
                 ->latest('id')->limit(30)->get()->map->props(),
             'rules' => [
@@ -132,6 +145,43 @@ class MeController extends Controller
         $correction->update(['status' => 'cancelled']);
 
         return back()->with('success', 'Request cancelled.');
+    }
+
+    /** The person's self-review. "submit" sends it to HR; without it the answers are saved as a draft. */
+    public function saveSelfReview(Request $request, Review $review): RedirectResponse
+    {
+        $employee = $this->employee($request);
+        abort_unless($review->employee_id === $employee->id, 404);
+        $review->load('cycle');
+        if (! ReviewRules::canSelfReview($review, $review->cycle)) {
+            throw ValidationException::withMessages(['review' => 'This self-review can\'t be changed now.']);
+        }
+        $data = ReviewController::answers($request, $review->cycle, 'self');
+        $submit = $request->boolean('submit');
+        if ($submit) {
+            $missing = ReviewRules::missingRatings($review->cycle->criteria, $data['self_ratings']);
+            if ($missing) {
+                throw ValidationException::withMessages(['self_ratings' => 'Rate every line before sending: '.implode(', ', $missing).'.']);
+            }
+            $data += ['status' => 'manager_review', 'self_submitted_at' => now()];
+        }
+        $review->update($data);
+
+        return back()->with('success', $submit ? 'Sent to HR. You\'ll see the result here once HR finishes the review.' : 'Saved. You can come back and finish it.');
+    }
+
+    /** "I have read my review", with an optional comment for HR. */
+    public function acknowledgeReview(Request $request, Review $review): RedirectResponse
+    {
+        $employee = $this->employee($request);
+        abort_unless($review->employee_id === $employee->id, 404);
+        if ($review->status !== 'completed' || $review->acknowledged_at) {
+            throw ValidationException::withMessages(['review' => 'There is nothing to acknowledge on this review.']);
+        }
+        $data = $request->validate(['employee_comment' => ['nullable', 'string', 'max:2000']]);
+        $review->update(['acknowledged_at' => now(), 'employee_comment' => $data['employee_comment'] ?? null]);
+
+        return back()->with('success', 'Thanks. HR can see you have read your review.');
     }
 
     private function employee(Request $request, bool $required = true): ?Employee

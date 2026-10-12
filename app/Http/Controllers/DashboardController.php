@@ -9,6 +9,7 @@ use App\Models\Employee;
 use App\Models\Holiday;
 use App\Models\LeaveRecord;
 use App\Models\Offboarding;
+use App\Models\Review;
 use App\Services\AttendanceBoard;
 use App\Services\HrSnapshot;
 use App\Services\Reminders;
@@ -55,6 +56,7 @@ class DashboardController extends Controller
                 // Skip cases whose employee was soft-deleted, like every other tile (the relation itself includes trashed).
                 'offboarding' => Offboarding::where('status', 'in_progress')->whereHas('employee', fn ($q) => $q->withoutTrashed())->count(),
                 'requests' => AttendanceRequest::where('status', 'pending')->whereHas('employee')->count(),
+                'reviews' => Review::where('status', 'manager_review')->whereHas('cycle', fn ($q) => $q->where('status', 'open'))->whereHas('employee')->count(),
             ],
             ...$snapshot,
             'attendance' => $this->latestAttendance($current, $today, $now),

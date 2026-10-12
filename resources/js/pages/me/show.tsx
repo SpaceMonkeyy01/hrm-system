@@ -8,6 +8,8 @@ import { Detail, Field } from '@/components/field';
 import { AssetList } from '@/components/assets';
 import type { AssetRow } from '@/components/assets';
 import { leaveDates } from '@/components/leave';
+import { MyReviews } from '@/components/my-reviews';
+import type { MyReview } from '@/components/my-reviews';
 import type { LeaveRecordRow } from '@/components/leave';
 import { PageHeader, Section } from '@/components/page-header';
 import { StatusPill } from '@/components/status-pill';
@@ -44,6 +46,8 @@ type Props = {
     leave?: { year: number; records: LeaveRecordRow[]; totals: Record<string, number> };
     requests?: FixRequest[];
     assets?: AssetRow[];
+    reviews?: MyReview[];
+    scale?: Record<string, string>;
     rules?: { daysBack: number; editable: string[] };
     today?: string;
 };
@@ -150,6 +154,7 @@ export default function MyPage(props: Props) {
     const a = props.attendance;
     const today = props.today;
     const pending = props.requests.filter((r) => r.status === 'pending').length;
+    const yourTurn = (props.reviews ?? []).filter((r) => r.canSelfReview || (r.status === 'completed' && !r.acknowledged_at)).length;
     const owed = props.documents.filter((d) => !d.done);
     const order = ['Present', 'Late', 'Half day', 'Missing punch', 'Absent', 'On leave', 'Holiday', 'Worked day off'];
 
@@ -161,11 +166,13 @@ export default function MyPage(props: Props) {
                 description={[me.role_title, me.department, me.company].filter(Boolean).join(', ') || 'Your own record, attendance and leave.'}
                 actions={<Button onClick={() => setAsking({ day: null, date: today })}><Send /> Ask HR to fix a day</Button>}
             />
-            <Tabs defaultValue="attendance" className="px-4 py-6 md:px-6">
+            {/* Opens on a #tab link, else on Reviews when there is one to do, else Attendance. */}
+            <Tabs defaultValue={(typeof window !== 'undefined' && window.location.hash.slice(1)) || (yourTurn ? 'reviews' : 'attendance')} className="px-4 py-6 md:px-6">
                 <TabsList className="mb-4">
                     <TabsTrigger value="attendance">Attendance</TabsTrigger>
                     <TabsTrigger value="leave">Leave</TabsTrigger>
                     <TabsTrigger value="requests">Requests{pending ? ` (${pending})` : ''}</TabsTrigger>
+                    <TabsTrigger value="reviews">Reviews{yourTurn ? ` (${yourTurn})` : ''}</TabsTrigger>
                     <TabsTrigger value="details">My details</TabsTrigger>
                 </TabsList>
 
@@ -292,6 +299,10 @@ export default function MyPage(props: Props) {
                             </ul>
                         )}
                     </div>
+                </TabsContent>
+
+                <TabsContent value="reviews">
+                    <MyReviews reviews={props.reviews ?? []} scale={props.scale ?? {}} />
                 </TabsContent>
 
                 <TabsContent value="details">
