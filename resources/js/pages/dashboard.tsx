@@ -1,11 +1,12 @@
-import { Head, Link } from '@inertiajs/react';
-import { ArrowUpRight } from 'lucide-react';
+import { Head, Link, usePage } from '@inertiajs/react';
+import { ArrowUpRight, Cake, CalendarDays, FileChartColumn, Palmtree, PartyPopper, Upload, UserPlus } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { PageHeader, Section } from '@/components/page-header';
 import { StatusPill } from '@/components/status-pill';
-import { daysBetween, formatDate, formatDateTime, percent, plural } from '@/lib/format';
+import { Button } from '@/components/ui/button';
+import { daysBetween, formatDate, formatDateTime, plural } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import type { ActivityItem, Reminder, ReminderType } from '@/types';
+import type { ActivityItem, Reminder, ReminderType, SharedProps } from '@/types';
 
 type Person = { id: number; code: string; name: string; department: string | null; end: string };
 type DocItem = { key: string; label: string; yes: number; na: number; pending: number; no: number; blank: number };
@@ -25,25 +26,13 @@ type Props = {
         overdue: Person[];
     };
     documents: { population: number; compliant: number; items: DocItem[] };
-    headcount: { company: string; departments: { id: number; name: string; count: number }[] }[];
+    attendance: { date: string; statuses: Record<string, number>; late: number; working_days: number; people: number; linked: number } | null;
+    away: { id: number; name: string; type: string; from: string; to: string; part: 'full' | 'first_half' | 'second_half' }[];
+    newPeople: { id: number; name: string; role: string | null; start: string }[];
+    celebrations: { id: number; name: string; date: string; kind: 'anniversary' | 'birthday'; years: number | null }[];
+    holidays: { date: string; name: string; company: string | null }[];
     activity: ActivityItem[];
 };
-
-const segment = {
-    yes: 'bg-done',
-    na: 'bg-[#9AA7B6]',
-    pending: 'bg-[#D99A2B]',
-    no: 'bg-missing',
-    blank: 'bg-transparent',
-} as const;
-
-function Bar({ parts, total, label }: { parts: { key: keyof typeof segment; n: number }[]; total: number; label: string }) {
-    return (
-        <div className="flex h-3 w-full overflow-hidden rounded-sm border border-rule bg-[repeating-linear-gradient(135deg,#f3f5f8_0_4px,#e6eaf0_4px_6px)]" role="img" aria-label={label}>
-            {parts.map((p) => (p.n > 0 ? <div key={p.key} className={segment[p.key]} style={{ width: `${(p.n / Math.max(total, 1)) * 100}%` }} /> : null))}
-        </div>
-    );
-}
 
 function Attention({ n, href, children, tone = 'pending' }: { n: number; href: string; children: ReactNode; tone?: 'pending' | 'missing' | 'neutral' }) {
     const color = n === 0 ? 'text-muted-foreground' : tone === 'missing' ? 'text-missing' : tone === 'neutral' ? 'text-ink' : 'text-pending';
@@ -98,7 +87,6 @@ function RemindersCard({ reminders }: { reminders: Reminder[] }) {
 
     return (
         <Section
-            className="xl:col-span-2"
             title="Needs attention"
             description={reminders.length ? `${plural(reminders.length, 'thing')} to act on, ${overdue} overdue. Overdue first, then by date.` : 'Probation, check-ins, documents and offboarding that are due or overdue.'}
         >
@@ -145,48 +133,142 @@ function describe(a: ActivityItem): string {
     return `${a.description ?? 'Record'} ${a.event}`;
 }
 
+function SmallList<T>({ items, empty, render }: { items: T[]; empty: string; render: (item: T) => ReactNode }) {
+    if (!items.length) return <p className="rounded-lg border px-3 py-3 text-sm text-muted-foreground">{empty}</p>;
+    return <ul className="divide-y rounded-lg border">{items.map(render)}</ul>;
+}
+
+const relative = (today: string, date: string) => {
+    const d = daysBetween(today, date);
+    return d === 0 ? 'today' : d === 1 ? 'tomorrow' : d === -1 ? 'yesterday' : d > 0 ? `in ${plural(d, 'day')}` : `${plural(-d, 'day')} ago`;
+};
+
+/** Counts on the Home attendance strip; each opens the Attendance page filtered to that status. */
+const attendanceTiles = [
+    { key: 'Present', label: 'Present', tone: 'text-done' },
+    { key: 'Late', label: 'Late', tone: 'text-pending' },
+    { key: 'Absent', label: 'Absent', tone: 'text-missing' },
+    { key: 'Missing punch', label: 'Missing punch', tone: 'text-pending' },
+    { key: 'On leave', label: 'On leave', tone: 'text-ink' },
+];
+
+type Upcoming = { key: string; id: number | null; name: string; date: string; kind: 'anniversary' | 'birthday' | 'holiday'; years: number | null };
+
 export default function Dashboard(props: Props) {
-    const { totals, onboarding: o, documents: d } = props;
+    const { auth } = usePage<SharedProps>().props;
+    const { totals, onboarding: o, documents: d, attendance: att } = props;
     const legal = o.legalPending;
+    const firstName = auth.user?.name.split(' ')[0];
+    const upcoming: Upcoming[] = [
+        ...props.celebrations.map((c) => ({ ...c, key: `${c.kind}-${c.id}-${c.date}` })),
+        ...props.holidays.map((h) => ({ key: `holiday-${h.date}-${h.name}`, id: null, name: h.company ? `${h.name} (${h.company})` : h.name, date: h.date, kind: 'holiday' as const, years: null })),
+    ].sort((x, y) => x.date.localeCompare(y.date)).slice(0, 10);
+    const count = (key: string) => !att ? 0 : key === 'Late' ? att.late : key === 'Present' ? (att.statuses.Present ?? 0) + (att.statuses['In office'] ?? 0) : att.statuses[key] ?? 0;
 
     return (
         <>
-            <Head title="Dashboard" />
-            <PageHeader title="Dashboard" description={`Where onboarding, documents and probation stand on ${formatDate(props.today)}.`} />
+            <Head title="Home" />
+            <PageHeader
+                title={firstName ? `Hello, ${firstName}` : 'Home'}
+                description={`What needs doing on ${formatDate(props.today)}. Company-wide numbers are on Overview, and the full lists are on Reports.`}
+                actions={auth.can.edit && (
+                    <>
+                        <Button variant="outline" asChild><Link href="/employees/create"><UserPlus /> Add employee</Link></Button>
+                        <Button variant="outline" asChild><Link href="/attendance/imports"><Upload /> Upload attendance</Link></Button>
+                        <Button variant="outline" asChild><Link href="/leave"><Palmtree /> Record leave</Link></Button>
+                        <Button variant="outline" asChild><Link href="/reports"><FileChartColumn /> Reports</Link></Button>
+                    </>
+                )}
+            />
 
             <div className="grid gap-8 p-4 md:p-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-                <RemindersCard reminders={props.reminders} />
+                <div className="grid content-start gap-8">
+                    <RemindersCard reminders={props.reminders} />
+                    <Section title="Recent changes" description="Every change is kept in the activity log.">
+                        {props.activity.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">No changes yet.</p>
+                        ) : (
+                            <ol className="divide-y rounded-lg border">
+                                {props.activity.map((a) => (
+                                    <li key={a.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 px-3 py-2 text-sm">
+                                        <span className="w-28 shrink-0 text-xs text-muted-foreground tabular-nums">{formatDateTime(a.when)}</span>
+                                        <span className="font-semibold">{a.user}</span>
+                                        <span className="min-w-0 flex-1">
+                                            {describe(a)}
+                                            {a.employee && (
+                                                <>
+                                                    {' for '}
+                                                    <Link href={`/employees/${a.employee.id}`} className="text-cascade hover:underline">{a.employee.name}</Link>
+                                                </>
+                                            )}
+                                        </span>
+                                    </li>
+                                ))}
+                            </ol>
+                        )}
+                    </Section>
+                </div>
 
-                <Section title="Lists to check" description="Each line opens the list behind it.">
-                    <ul className="grid gap-0.5 rounded-lg border p-2">
-                        <Attention n={o.overdue.length} href="/onboarding?probation=overdue" tone="missing">
-                            people are past their probation end date with the result still Pending
-                        </Attention>
-                        <Attention n={o.endingSoon.length} href="/onboarding?probation=ending">
-                            people finish probation in the next 7 days
-                        </Attention>
-                        <Attention n={o.legalAnyPending} href="/onboarding?legal=pending">
-                            people in onboarding are missing a signed NDA, NCA or policy acknowledgment
-                            <span className="block text-xs text-muted-foreground">
-                                NDA {legal.nda_signed}, NCA {legal.nca_signed}, policy {legal.policy_acknowledgment}
-                            </span>
-                        </Attention>
-                        <Attention n={d.population - d.compliant} href="/documents?status=Pending">
-                            current employees have at least one document missing or pending
-                        </Attention>
-                        <Attention n={totals.needsReview} href="/employees?review=1" tone="neutral">
-                            records were flagged during the import and need a quick check
-                        </Attention>
-                        <Attention n={totals.unassigned} href="/employees?unassigned=1" tone="neutral">
-                            people aren't on the BCC or Emerge department lists yet
-                        </Attention>
-                        <Attention n={totals.offboarding} href="/offboarding" tone="neutral">
-                            offboardings are open
-                        </Attention>
-                    </ul>
-                </Section>
+                <div className="grid content-start gap-8">
+                    <Section
+                        title="Attendance"
+                        description={att
+                            ? `${att.date === props.today ? 'Today' : formatDate(att.date)}, the last day with punches loaded. ${att.linked} of ${att.people} people are linked.`
+                            : 'No attendance files uploaded yet.'}
+                        actions={att && <Link href={`/attendance?date=${att.date}`} className="text-sm font-semibold text-cascade hover:underline">Open the day</Link>}
+                    >
+                        {att && att.linked === 0 ? (
+                            <p className="rounded-lg border px-3 py-3 text-sm text-muted-foreground">
+                                Punches are loaded, but nobody is linked to a machine number or HR.my ID yet.{' '}
+                                {auth.can.edit && <Link href="/attendance/imports#link" className="font-semibold text-cascade hover:underline">Link people</Link>}
+                            </p>
+                        ) : att ? (
+                            <dl className="grid grid-cols-5 gap-2 text-center">
+                                {attendanceTiles.map((t) => (
+                                    <Link key={t.key} href={`/attendance?date=${att.date}&status=${encodeURIComponent(t.key)}`} className="rounded-md border px-1 py-2 hover:bg-accent">
+                                        <dd className={cn('text-lg font-bold', count(t.key) ? t.tone : 'text-muted-foreground')}>{count(t.key)}</dd>
+                                        <dt className="text-xs text-muted-foreground">{t.label}</dt>
+                                    </Link>
+                                ))}
+                            </dl>
+                        ) : auth.can.edit ? (
+                            <p className="rounded-lg border px-3 py-3 text-sm">
+                                <Link href="/attendance/imports" className="font-semibold text-cascade hover:underline">Upload a machine or HR.my file</Link> to see who came in.
+                            </p>
+                        ) : null}
+                    </Section>
 
-                <div className="grid content-start gap-6">
+                    <Section title="Lists to check" description="Each line opens the list behind it.">
+                        <ul className="grid gap-0.5 rounded-lg border p-2">
+                            <Attention n={o.overdue.length} href="/onboarding?probation=overdue" tone="missing">
+                                people are past their probation end date with the result still Pending
+                            </Attention>
+                            <Attention n={o.endingSoon.length} href="/onboarding?probation=ending">
+                                people finish probation in the next 7 days
+                            </Attention>
+                            <Attention n={o.legalAnyPending} href="/onboarding?legal=pending">
+                                people in onboarding are missing a signed NDA, NCA or policy acknowledgment
+                                <span className="block text-xs text-muted-foreground">
+                                    NDA {legal.nda_signed}, NCA {legal.nca_signed}, policy {legal.policy_acknowledgment}
+                                </span>
+                            </Attention>
+                            <Attention n={d.population - d.compliant} href="/documents?status=Pending">
+                                current employees have at least one document missing or pending
+                            </Attention>
+                            <Attention n={totals.needsReview} href="/employees?review=1" tone="neutral">
+                                records were flagged during the import and need a quick check
+                            </Attention>
+                            <Attention n={totals.unassigned} href="/employees?unassigned=1" tone="neutral">
+                                people aren't on the BCC or Emerge department lists yet
+                            </Attention>
+                            <Attention n={totals.offboarding} href="/offboarding" tone="neutral">
+                                offboardings are open
+                            </Attention>
+                        </ul>
+                    </Section>
+                </div>
+
+                <div className="grid gap-8 md:grid-cols-2 xl:col-span-2 xl:grid-cols-4">
                     <Section title="Probation ending" description="Result still Pending.">
                         <div className="grid gap-4">
                             <div>
@@ -199,122 +281,52 @@ export default function Dashboard(props: Props) {
                             </div>
                         </div>
                     </Section>
+
+                    <Section title="Away this week" description="Leave recorded from today to next week.">
+                        <SmallList items={props.away} empty="Nobody has leave recorded this week." render={(l) => (
+                            <li key={`${l.id}-${l.from}`} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                                <Link href={`/employees/${l.id}`} className="min-w-0 truncate font-semibold hover:text-cascade hover:underline">{l.name}</Link>
+                                <span className="shrink-0 text-right text-xs text-muted-foreground">
+                                    {l.type}{l.part !== 'full' && ', half day'}
+                                    <span className="block tabular-nums">{l.from === l.to ? formatDate(l.from) : `${formatDate(l.from)} to ${formatDate(l.to)}`}</span>
+                                </span>
+                            </li>
+                        )} />
+                    </Section>
+
+                    <Section title="New people" description="Started in the last 30 days or starting soon.">
+                        <SmallList items={props.newPeople} empty="Nobody new in the last 30 days." render={(p) => (
+                            <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                                <span className="min-w-0">
+                                    <Link href={`/employees/${p.id}`} className="block truncate font-semibold hover:text-cascade hover:underline">{p.name}</Link>
+                                    {p.role && <span className="block truncate text-xs text-muted-foreground">{p.role}</span>}
+                                </span>
+                                <span className={cn('shrink-0 text-xs tabular-nums', p.start > props.today ? 'text-info' : 'text-muted-foreground')}>
+                                    {p.start > props.today ? 'starts ' : 'started '}{relative(props.today, p.start)}
+                                </span>
+                            </li>
+                        )} />
+                    </Section>
+
+                    <Section title="Coming up" description={auth.can.edit ? 'Birthdays, work anniversaries and holidays.' : 'Work anniversaries and holidays.'}>
+                        <SmallList items={upcoming} empty="Nothing in the next week." render={(c) => (
+                            <li key={c.key} className="flex items-center gap-2.5 px-3 py-2 text-sm">
+                                {c.kind === 'birthday' ? <Cake className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                                    : c.kind === 'anniversary' ? <PartyPopper className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                                        : <CalendarDays className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
+                                <span className="min-w-0 flex-1">
+                                    {c.id ? <Link href={`/employees/${c.id}`} className="font-semibold hover:text-cascade hover:underline">{c.name}</Link>
+                                        : <span className="font-semibold">{c.name}</span>}
+                                    <span className="block text-xs text-muted-foreground">
+                                        {c.kind === 'birthday' ? 'Birthday' : c.kind === 'anniversary' ? `${plural(c.years ?? 0, 'year')} with us` : 'Holiday'}
+                                    </span>
+                                </span>
+                                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{relative(props.today, c.date)}</span>
+                            </li>
+                        )} />
+                    </Section>
                 </div>
 
-                <Section
-                    className="xl:col-span-2"
-                    title="Documents on file"
-                    description={`${d.compliant} of ${d.population} current employees (${percent(d.compliant, d.population)}) have every document. Each bar is one document across all ${d.population} people.`}
-                    actions={
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-sm bg-done" /> Yes</span>
-                            <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-sm bg-[#9AA7B6]" /> Not required / old employee / not available</span>
-                            <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-sm bg-[#D99A2B]" /> Pending</span>
-                            <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-sm bg-missing" /> No</span>
-                            <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-sm border border-rule bg-[#e6eaf0]" /> Not recorded</span>
-                        </div>
-                    }
-                >
-                    <div className="grid gap-x-10 gap-y-1 rounded-lg border p-3 lg:grid-cols-2">
-                        {d.items.map((item) => {
-                            const owed = item.no + item.pending + item.blank;
-                            return (
-                                <Link key={item.key} href={`/documents?missing=${item.key}`} className="group grid grid-cols-[10rem_1fr_5.5rem] items-center gap-3 rounded px-1.5 py-1.5 hover:bg-accent">
-                                    <span className="truncate text-sm font-semibold">{item.label}</span>
-                                    <Bar
-                                        total={d.population}
-                                        label={`${item.label}: ${item.yes} yes, ${item.na} not required, ${item.pending} pending, ${item.no} no, ${item.blank} not recorded`}
-                                        parts={[{ key: 'yes', n: item.yes }, { key: 'na', n: item.na }, { key: 'pending', n: item.pending }, { key: 'no', n: item.no }]}
-                                    />
-                                    <span className={cn('text-right text-sm tabular-nums', owed ? 'text-ink' : 'text-done')}>
-                                        {owed ? `${owed} owed` : 'All on file'}
-                                    </span>
-                                </Link>
-                            );
-                        })}
-                    </div>
-                </Section>
-
-                <Section title="Onboarding" description={`${o.total} people in the onboarding process.`}>
-                    <div className="grid gap-5 rounded-lg border p-4">
-                        <div>
-                            <div className="mb-1.5 flex justify-between text-sm">
-                                <span className="font-semibold">Orientation (3 sessions)</span>
-                                <span className="text-muted-foreground">{o.orientation.Complete} complete</span>
-                            </div>
-                            <Bar total={o.total} label="Orientation" parts={[{ key: 'yes', n: o.orientation.Complete }, { key: 'pending', n: o.orientation['In Progress'] }, { key: 'no', n: o.orientation['Not Started'] }]} />
-                            <div className="mt-1.5 flex gap-4 text-xs text-muted-foreground">
-                                <Link className="hover:underline" href="/onboarding?orientation=Complete">Complete {o.orientation.Complete}</Link>
-                                <Link className="hover:underline" href="/onboarding?orientation=In+Progress">In progress {o.orientation['In Progress']}</Link>
-                                <Link className="hover:underline" href="/onboarding?orientation=Not+Started">Not started {o.orientation['Not Started']}</Link>
-                            </div>
-                        </div>
-                        <div>
-                            <div className="mb-1.5 flex justify-between text-sm">
-                                <span className="font-semibold">Onboarding status</span>
-                                <span className="text-muted-foreground">{percent(o.status['Onboarding Complete'], o.total)} complete</span>
-                            </div>
-                            <Bar total={o.total} label="Onboarding status" parts={[{ key: 'yes', n: o.status['Onboarding Complete'] }, { key: 'pending', n: o.status['Onboarding In Progress'] }]} />
-                            <div className="mt-1.5 flex gap-4 text-xs text-muted-foreground">
-                                <Link className="hover:underline" href="/onboarding?status=complete">Complete {o.status['Onboarding Complete']}</Link>
-                                <Link className="hover:underline" href="/onboarding?status=in_progress">In progress {o.status['Onboarding In Progress']}</Link>
-                            </div>
-                        </div>
-                        <div>
-                            <p className="mb-1.5 text-sm font-semibold">Probation result</p>
-                            <dl className="grid grid-cols-5 gap-2 text-center">
-                                {(['Pending', 'Pass', 'Extend', 'Fail', 'Not tracked'] as const).map((k) => (
-                                    <Link key={k} href={`/onboarding?probation=${k === 'Not tracked' ? 'none' : k}`} className="rounded-md border px-1 py-2 hover:bg-accent">
-                                        <dd className="text-lg font-bold tabular-nums">{o.probation[k]}</dd>
-                                        <dt className="text-xs text-muted-foreground">{k}</dt>
-                                    </Link>
-                                ))}
-                            </dl>
-                        </div>
-                    </div>
-                </Section>
-
-                <Section title="Headcount" description={`${totals.current} current employees.`}>
-                    <div className="grid gap-4 rounded-lg border p-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-                        {props.headcount.map((c) => (
-                            <div key={c.company}>
-                                <p className="mb-1 text-sm font-semibold">{c.company}</p>
-                                <ul className="text-sm">
-                                    {c.departments.filter((dep) => dep.count > 0).map((dep) => (
-                                        <li key={dep.id} className="flex justify-between gap-2 py-0.5">
-                                            <Link href={`/employees?department=${dep.id}`} className="truncate hover:text-cascade hover:underline">{dep.name}</Link>
-                                            <span className="tabular-nums text-muted-foreground">{dep.count}</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        ))}
-                    </div>
-                </Section>
-
-                <Section className="xl:col-span-2" title="Recent changes" description="Every change is kept in the activity log.">
-                    {props.activity.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No changes yet.</p>
-                    ) : (
-                        <ol className="divide-y rounded-lg border">
-                            {props.activity.map((a) => (
-                                <li key={a.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 px-3 py-2 text-sm">
-                                    <span className="w-28 shrink-0 text-xs text-muted-foreground tabular-nums">{formatDateTime(a.when)}</span>
-                                    <span className="font-semibold">{a.user}</span>
-                                    <span className="min-w-0 flex-1">
-                                        {describe(a)}
-                                        {a.employee && (
-                                            <>
-                                                {' for '}
-                                                <Link href={`/employees/${a.employee.id}`} className="text-cascade hover:underline">{a.employee.name}</Link>
-                                            </>
-                                        )}
-                                    </span>
-                                </li>
-                            ))}
-                        </ol>
-                    )}
-                </Section>
             </div>
         </>
     );

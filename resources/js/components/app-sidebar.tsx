@@ -1,12 +1,14 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
     CalendarClock,
+    ChartColumnBig,
     ChevronsUpDown,
     ClipboardCheck,
     Clock,
     DoorOpen,
+    FileChartColumn,
     FileCheck2,
-    LayoutDashboard,
+    House,
     ListChecks,
     LogOut,
     Network,
@@ -41,7 +43,9 @@ import type { SharedProps } from '@/types';
 type Item = { title: string; href: string; icon: LucideIcon };
 
 const work: Item[] = [
-    { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { title: 'Home', href: '/dashboard', icon: House },
+    { title: 'Overview', href: '/overview', icon: ChartColumnBig },
+    { title: 'Reports', href: '/reports', icon: FileChartColumn },
     { title: 'Employees', href: '/employees', icon: Users },
     { title: 'Onboarding', href: '/onboarding', icon: ClipboardCheck },
     { title: 'Documents', href: '/documents', icon: FileCheck2 },

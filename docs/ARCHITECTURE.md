@@ -73,6 +73,8 @@ flowchart LR
 | Rules | `app/Services/HrRules.php`, `config/hrm.php` | The sheet's formulas as code. |
 | Status board | `app/Services/StatusBoard.php` | Loads checklist values for many employees in one query and applies `HrRules`. |
 | Reminders | `app/Services/Reminders.php`, `config/hrm.php` `reminders` | What HR has to act on today (probation, check-ins, documents, offboarding), computed live from `StatusBoard` and `HrRules`, never stored. Feeds the dashboard's "Needs attention" card and the daily email (`hr:send-reminders`, `app/Mail/RemindersDigest.php`). |
+| Home and Overview | `DashboardController` (Home, `/dashboard`), `OverviewController` (`/overview`), `app/Services/HrSnapshot.php`, `app/Services/PeopleStats.php` | Home is what needs doing today; Overview is company-wide charts. Both read onboarding and document numbers from `HrSnapshot`, and headcount, joiners, leavers and turnover from `PeopleStats`. |
+| Reports | `app/Services/Reports` (`ReportCatalog` lists them), `ReportController`, `resources/js/pages/reports` | Each report returns a `ReportResult` (columns, rows, summary, notes). The screen and the CSV download read the same result. Attendance reports go through `AttendanceBoard`, so they match the Attendance page. A new report is one catalog entry plus one method. |
 | Models | `app/Models` | Eloquent models. `LogsActivity` writes every create, update and delete to `activity_log`. |
 | Import | `app/Services/Import`, `app/Support/Xlsx` | `php artisan hr:import`: reads the workbook, matches names, writes data and a report. |
 

@@ -147,6 +147,33 @@ class AttendanceBoard
         return $day + ['schedule_id' => $schedule?->id];
     }
 
+    /**
+     * Totals over every person and day on the board: day count per status, plus late arrivals, working days
+     * and the people with any punches. "Late" is a subset of Present.
+     *
+     * @return array{statuses: array<string, int>, late: int, working_days: int, people: int, linked: int}
+     */
+    public function totals(CarbonInterface $now): array
+    {
+        $statuses = [];
+        $late = 0;
+        $working = 0;
+        foreach ($this->employees as $e) {
+            foreach ($this->dates() as $date) {
+                $day = $this->day($e, $date, $now);
+                if (! $day || $day['status'] === null) {
+                    continue;
+                }
+                $statuses[$day['status']] = ($statuses[$day['status']] ?? 0) + 1;
+                $late += $day['late'] > 0 ? 1 : 0;
+                $working += $day['working_day'] && $day['status'] !== 'Not linked' ? 1 : 0;
+            }
+        }
+
+        return ['statuses' => $statuses, 'late' => $late, 'working_days' => $working, 'people' => $this->employees->count(),
+            'linked' => $this->employees->filter(fn ($e) => $e->attendance_machine_id || $e->hr_portal_id)->count()];
+    }
+
     /** @return list<string> every date from..to */
     public function dates(): array
     {

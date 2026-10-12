@@ -14,7 +14,9 @@ use App\Http\Controllers\ExportController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\OffboardingController;
 use App\Http\Controllers\OnboardingController;
+use App\Http\Controllers\OverviewController;
 use App\Http\Controllers\ProbationPlanController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\Settings\ChecklistItemController;
 use App\Http\Controllers\Settings\StructureController;
 use App\Http\Controllers\Settings\UserController;
@@ -37,6 +39,12 @@ Route::middleware('auth')->group(function () {
     Route::post('logout', [LoginController::class, 'destroy'])->name('logout');
     Route::redirect('/', '/dashboard');
     Route::get('dashboard', DashboardController::class)->name('dashboard');
+    Route::get('overview', OverviewController::class)->name('overview');
+
+    // Reports (app/Services/Reports/ReportCatalog.php). Private reports check edit-hr themselves.
+    Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
+    Route::get('reports/{report}/export', [ReportController::class, 'export'])->name('reports.export');
+    Route::get('reports/{report}', [ReportController::class, 'show'])->name('reports.show');
 
     // Employees
     Route::get('employees', [EmployeeController::class, 'index'])->name('employees.index');

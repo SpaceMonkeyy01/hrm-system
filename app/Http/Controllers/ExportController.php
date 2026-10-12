@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Employee;
 use App\Services\StatusBoard;
+use App\Support\Csv;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /** CSV downloads with the same numbers as the screens. Opens straight in Excel (UTF-8 BOM). */
@@ -24,27 +25,7 @@ class ExportController extends Controller
             'documents' => $this->documents($employees, $board),
         };
 
-        return response()->streamDownload(function () use ($header, $rows) {
-            $out = fopen('php://output', 'w');
-            fwrite($out, "\xEF\xBB\xBF");
-            fputcsv($out, $header, escape: '');
-            foreach ($rows as $row) {
-                fputcsv($out, array_map($this->safeCell(...), $row), escape: '');
-            }
-            fclose($out);
-        }, "$type-".now()->format('Y-m-d').'.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
-    }
-
-    /**
-     * Stop spreadsheet formula injection: a text cell starting with = + - @ tab or CR is run as a
-     * formula by Excel, so prefix it with ' (Excel shows the text as typed, e.g. "+92 300..." or "-5").
-     * Real numbers (ints/floats) are left alone.
-     */
-    private function safeCell(mixed $value): mixed
-    {
-        return is_string($value) && $value !== '' && in_array($value[0], ['=', '+', '-', '@', "\t", "\r"], true)
-            ? "'".$value
-            : $value;
+        return Csv::download("$type-".now()->format('Y-m-d').'.csv', $header, $rows);
     }
 
     private function base(Employee $e): array
