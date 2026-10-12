@@ -1,8 +1,9 @@
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
 /**
- * Initials in a soft circle. The tint is picked from the name, so the same person always gets the same one;
- * it only helps the eye find a row, the name next to it is what identifies the person.
+ * A person's photo, or their initials in a soft circle. The tint is picked from the name, so the same person
+ * always gets the same one; it only helps the eye find a row, the name next to it is what identifies them.
  */
 const TINTS = [
     'bg-[#dcebf2] text-[#00435c]',
@@ -25,7 +26,11 @@ function tint(name: string): string {
     return TINTS[h % TINTS.length];
 }
 
-export function Avatar({ name, className }: { name: string; className?: string }) {
+export function Avatar({ name, photo, className }: { name: string; photo?: string | null; className?: string }) {
+    const [broken, setBroken] = useState(false);
+    if (photo && !broken) {
+        return <img src={photo} alt="" loading="lazy" onError={() => setBroken(true)} className={cn('size-8 shrink-0 rounded-full object-cover', className)} />;
+    }
     return (
         <span aria-hidden className={cn('inline-flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold select-none', tint(name), className)}>
             {initials(name)}

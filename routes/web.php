@@ -16,11 +16,13 @@ use App\Http\Controllers\EmployeeFileController;
 use App\Http\Controllers\EmploymentHistoryController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\LeaveController;
+use App\Http\Controllers\LetterController;
 use App\Http\Controllers\MeController;
 use App\Http\Controllers\OffboardingController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\OrgChartController;
 use App\Http\Controllers\OverviewController;
+use App\Http\Controllers\PhotoController;
 use App\Http\Controllers\ProbationPlanController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ReviewController;
@@ -63,11 +65,15 @@ Route::middleware('auth')->group(function () {
     Route::get('account', [AccountController::class, 'edit'])->name('account.edit');
     Route::put('account', [AccountController::class, 'update'])->name('account.update');
 
+    // Profile photo: HR-side logins see everyone's, an employee login only their own (PhotoController::show).
+    Route::get('employees/{employee}/photo', [PhotoController::class, 'show'])->whereNumber('employee')->name('photo.show');
+
     // My page: any login linked to an employee sees and updates only their own record.
     // The page itself opens for every login (it explains when the login isn't linked yet); writes need the link.
     Route::get('me', [MeController::class, 'show'])->name('me.show');
     Route::middleware('can:self-service')->group(function () {
         Route::put('me/contact', [MeController::class, 'updateContact'])->name('me.contact');
+        Route::post('me/photo', [PhotoController::class, 'updateMine'])->name('me.photo');
         Route::post('me/requests', [MeController::class, 'storeRequest'])->name('me.requests.store');
         Route::delete('me/requests/{correction}', [MeController::class, 'cancelRequest'])->name('me.requests.cancel');
         Route::put('me/reviews/{review}', [MeController::class, 'saveSelfReview'])->name('me.reviews.save');
@@ -99,6 +105,15 @@ Route::middleware('auth')->group(function () {
             Route::get('employees/{employee}/edit', [EmployeeController::class, 'edit'])->name('employees.edit');
             Route::put('employees/{employee}', [EmployeeController::class, 'update'])->name('employees.update');
             Route::post('employees/{employee}/history', [EmploymentHistoryController::class, 'store'])->name('history.store');
+            Route::post('employees/{employee}/photo', [PhotoController::class, 'update'])->name('photo.update');
+            // Letters (LetterController): draft, issue, print. HR and admin only: letters carry CNIC numbers.
+            Route::get('employees/{employee}/letters/new', [LetterController::class, 'draft'])->name('letters.draft');
+            Route::post('employees/{employee}/letters', [LetterController::class, 'issue'])->name('letters.issue');
+            Route::get('letters/templates', [LetterController::class, 'templates'])->name('letters.templates');
+            Route::post('letters/templates', [LetterController::class, 'storeTemplate'])->name('letters.templates.store');
+            Route::put('letters/templates/{template}', [LetterController::class, 'updateTemplate'])->name('letters.templates.update');
+            Route::get('letters/{letter}', [LetterController::class, 'show'])->whereNumber('letter')->name('letters.show');
+            Route::delete('employees/{employee}/photo', [PhotoController::class, 'destroy'])->name('photo.destroy');
             // Scanned documents: reading them is HR-only too (CNIC copies, contracts).
             Route::post('employees/{employee}/files', [EmployeeFileController::class, 'store'])->name('files.store');
             Route::get('employees/{employee}/files/{file}', [EmployeeFileController::class, 'show'])->name('files.show');
@@ -106,6 +121,7 @@ Route::middleware('auth')->group(function () {
         });
         Route::delete('employees/{employee}', [EmployeeController::class, 'destroy'])->middleware('can:admin')->name('employees.destroy');
         Route::delete('employees/{employee}/history/{history}', [EmploymentHistoryController::class, 'destroy'])->middleware('can:admin')->name('history.destroy');
+        Route::delete('letters/{letter}', [LetterController::class, 'destroy'])->whereNumber('letter')->middleware('can:admin')->name('letters.destroy');
         Route::get('employees/{employee}', [EmployeeController::class, 'show'])->name('employees.show');
 
         // Onboarding tracker + document checklist (grids)

@@ -24,7 +24,7 @@ RUN composer dump-autoload --optimize --no-dev
 
 FROM serversideup/php:8.3-fpm-nginx AS app
 USER root
-RUN install-php-extensions intl pdo_pgsql
+RUN install-php-extensions intl pdo_pgsql gd
 USER www-data
 WORKDIR /var/www/html
 COPY --chown=www-data:www-data --from=vendor /app /var/www/html

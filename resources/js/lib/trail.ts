@@ -18,7 +18,7 @@ const RESTORE = 'hrm.trail.restore';
 const ROOTS = new Set([
     'dashboard', 'overview', 'reports/index', 'employees/index', 'org-chart', 'onboarding/index', 'documents/index',
     'reviews/index', 'offboarding/index', 'attendance/index', 'attendance/schedules', 'leave/index', 'assets/index',
-    'controlled-documents/index', 'settings/users', 'settings/structure', 'settings/checklists', 'me/show', 'account',
+    'controlled-documents/index', 'settings/users', 'settings/structure', 'settings/checklists', 'letters/templates', 'me/show', 'account',
 ]);
 
 function read<T>(key: string, fallback: T): T {

@@ -23,8 +23,8 @@ class OrgChartController extends Controller
             ->with(['company:id,name', 'department:id,name', 'team:id,name'])
             ->when($f['company'] ?? null, fn ($q, $v) => $q->where('company_id', $v))
             ->orderBy('full_name')
-            ->get(['id', 'employee_code', 'full_name', 'role_title', 'company_id', 'department_id', 'team_id', 'manager_id', 'status']);
-        $node = fn (Employee $e) => ['id' => $e->id, 'name' => $e->full_name, 'code' => $e->employee_code, 'role' => $e->role_title,
+            ->get(['id', 'employee_code', 'full_name', 'role_title', 'company_id', 'department_id', 'team_id', 'manager_id', 'status', 'photo_path']);
+        $node = fn (Employee $e) => ['id' => $e->id, 'name' => $e->full_name, 'code' => $e->employee_code, 'role' => $e->role_title, 'photo' => $e->photoUrl(),
             'department' => $e->department?->name, 'leaving' => $e->status === 'offboarding'];
 
         // ---------------------------------------------------------------- structure

@@ -56,6 +56,7 @@ class MeController extends Controller
                 'date_of_birth' => $employee->date_of_birth?->toDateString(),
                 'cnic_expiry' => $employee->cnic_expiry?->toDateString(),
                 // Only the last four digits: enough to recognise the account.
+                'photo' => $employee->photoUrl(),
                 'bank_account_last4' => $employee->bank_account_number ? substr(preg_replace('/\D/', '', $employee->bank_account_number), -4) : null,
                 'company' => $employee->company?->name,
                 'department' => $employee->department?->name,
@@ -66,6 +67,7 @@ class MeController extends Controller
                 'label' => $i->label, 'status' => $docs[$i->key] ?? null, 'done' => HrRules::isDone($docs[$i->key] ?? null, 'document'),
             ])->values(),
             'attendance' => EmployeeRecords::attendanceMonth($employee, $request->input('month')),
+            'attendanceYear' => fn () => EmployeeRecords::attendanceYear($employee),
             'leave' => EmployeeRecords::leaveYear($employee),
             'assets' => AssetAssignment::rowsFor($employee->id, withReturned: false),
             // Reviews in cycles HR has opened; HR's side only once it's finished (ReviewController::reviewProps).

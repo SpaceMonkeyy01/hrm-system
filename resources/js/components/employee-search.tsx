@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import type { SharedProps } from '@/types';
 
 /** app/Http/Controllers/SearchController.php */
-type Hit = { id: number; name: string; code: string; department: string | null; status: string };
+type Hit = { id: number; name: string; code: string; department: string | null; status: string; photo: string | null };
 
 const Ctx = createContext<{ open: () => void }>({ open: () => {} });
 
@@ -99,7 +99,7 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
                         <li key={h.id} id={`hit-${h.id}`} role="option" aria-selected={i === index}>
                             <button type="button" onMouseEnter={() => setIndex(i)} onClick={() => go(h)}
                                 className={cn('flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-left text-sm', i === index && 'bg-accent')}>
-                                <Avatar name={h.name} />
+                                <Avatar name={h.name} photo={h.photo} />
                                 <span className="min-w-0 flex-1">
                                     <span className="block truncate font-semibold">{h.name}</span>
                                     <span className="block truncate text-xs text-muted-foreground">{[h.code, h.department].filter(Boolean).join(', ')}</span>

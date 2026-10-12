@@ -6,7 +6,7 @@ import { plural } from '@/lib/format';
 import { useSessionState } from '@/lib/use-session-state';
 import { cn } from '@/lib/utils';
 
-export type OrgPerson = { id: number; name: string; code?: string; role?: string | null; leaving?: boolean };
+export type OrgPerson = { id: number; name: string; code?: string; role?: string | null; leaving?: boolean; photo?: string | null };
 
 /**
  * One box in the chart. Groups (company, department, team) have children and/or people; a person box
@@ -50,7 +50,7 @@ function PeopleStack({ people, highlight }: { people: OrgPerson[]; highlight: (p
                     <Link href={`/employees/${p.id}`} title={[p.code, p.role].filter(Boolean).join(', ') || undefined}
                         className={cn('flex w-48 items-center gap-2 rounded-md border bg-background px-2 py-1.5 text-left text-xs hover:border-cascade/50 hover:bg-accent',
                             highlight(p) && 'border-cascade ring-2 ring-cascade/20')}>
-                        <Avatar name={p.name} className="size-6 text-[10px]" />
+                        <Avatar name={p.name} photo={p.photo} className="size-6 text-[10px]" />
                         <span className="min-w-0 flex-1 truncate font-semibold">{p.name}</span>
                         {p.leaving && <span className="text-[10px] text-pending">leaving</span>}
                     </Link>
@@ -77,7 +77,7 @@ function Branch({ node, open, toggle, highlight, fill, nested }: {
     const hit = node.person ? highlight(node.person) : false;
     const inner = (
         <>
-            {node.person && <Avatar name={node.person.name} className="size-7 text-[10px]" />}
+            {node.person && <Avatar name={node.person.name} photo={node.person.photo} className="size-7 text-[10px]" />}
             <span className="min-w-0 flex-1 text-left">
                 <span className="line-clamp-2 block text-sm leading-tight font-semibold break-words" title={node.title}>{node.title}</span>
                 {node.subtitle && <span className={cn('block truncate text-[11px]', node.kind === 'root' ? 'text-white/80' : 'text-muted-foreground')}>{node.subtitle}</span>}

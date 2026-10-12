@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { formatDate, plural } from '@/lib/format';
 import type { SharedProps, Tone } from '@/types';
 
-type Row = AttendanceDay & { employee: { id: number; code: string; name: string; department: string | null; linked: boolean } };
+type Row = AttendanceDay & { employee: { id: number; code: string; name: string; department: string | null; linked: boolean; photo: string | null } };
 type Company = { id: number; name: string; departments: { id: number; name: string }[] };
 type Props = {
     date: string; today: string; rows: Row[]; counts: Record<string, number>;
@@ -111,7 +111,7 @@ export default function AttendanceIndex(props: Props) {
                                     <tr key={r.employee.id} className="hover:bg-accent/50">
                                         <td className="px-3 py-2">
                                             <span className="flex items-center gap-2.5">
-                                                <Avatar name={r.employee.name} />
+                                                <Avatar name={r.employee.name} photo={r.employee.photo} />
                                                 <span>
                                                     <Link href={`/employees/${r.employee.id}#attendance`} className="font-semibold hover:text-cascade hover:underline">{r.employee.name}</Link>
                                                     <span className="block text-xs text-muted-foreground">{[r.employee.code, r.employee.department].filter(Boolean).join(', ')}</span>

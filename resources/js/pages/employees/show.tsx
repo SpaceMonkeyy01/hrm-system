@@ -1,8 +1,11 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Download, ExternalLink, FileText, FolderOpen, Pencil, Trash2, Upload } from 'lucide-react';
+import { Download, ExternalLink, FileText, FolderOpen, Mail, Pencil, Trash2, Upload } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
+import { AttendanceHeatmap } from '@/components/attendance-heatmap';
+import type { AttendanceYear } from '@/components/attendance-heatmap';
 import { Avatar } from '@/components/avatar';
+import { PhotoEditor } from '@/components/photo-editor';
 import { EmptyState } from '@/components/empty-state';
 import { Detail, Field } from '@/components/field';
 import { NativeSelect, toOptions } from '@/components/native-select';
@@ -23,7 +26,7 @@ import { leaveDates } from '@/components/leave';
 import type { LeaveRecordRow } from '@/components/leave';
 
 type Employee = {
-    id: number; system_id: string; employee_code: string; full_name: string; first_name: string | null; last_name: string | null; cnic: string | null;
+    id: number; system_id: string; employee_code: string; full_name: string; photo: string | null; first_name: string | null; last_name: string | null; cnic: string | null;
     email: string | null; phone: string | null; role_title: string | null; employment_type: string | null; status: string;
     hr_portal_id: string | null; attendance_machine: string | null; attendance_machine_id: string | null; drive_folder_url: string | null;
     notes: string | null; needs_review: boolean; review_note: string | null; source_ref: string | null;
@@ -59,8 +62,11 @@ type Props = {
     offboardings: { id: number; type: string; status: string; last_working_day: string | null }[];
     employmentHistory: HistoryEntry[];
     attendance: AttendanceMonth;
+    attendanceYear: AttendanceYear;
     leave: { year: number; records: LeaveRecordRow[]; totals: Record<string, number> };
     assets: AssetRow[];
+    /** HR and admin only. */
+    letters: { id: number; reference: string; subject: string | null; issued_on: string; issued_by: string | null }[] | null;
     /** HR and admin only. */
     completeness: { done: number; total: number; missing: string[] } | null;
     /** Null for viewer logins: they only get fileCount. */
@@ -378,7 +384,11 @@ export default function EmployeeShow(props: Props) {
             <Head title={e.full_name} />
             <PageHeader
                 back={{ href: '/employees', label: 'Employees' }}
-                title={<span className="flex items-center gap-3"><Avatar name={e.full_name} className="size-10 text-sm" />{e.full_name}</span>}
+                title={<span className="flex items-center gap-3">
+                    {can ? <PhotoEditor name={e.full_name} photo={e.photo} uploadUrl={`/employees/${e.id}/photo`} removeUrl={`/employees/${e.id}/photo`} className="size-10 text-sm" />
+                        : <Avatar name={e.full_name} photo={e.photo} className="size-10 text-sm" />}
+                    {e.full_name}
+                </span>}
                 description={
                     <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
                         <span className="font-semibold text-ink tabular-nums">{e.employee_code}</span>
@@ -398,6 +408,7 @@ export default function EmployeeShow(props: Props) {
                         ) : can && (
                             <Button variant="outline" onClick={() => router.post(`/employees/${e.id}/plan`)}>Start 90-day plan</Button>
                         )}
+                        {can && <Button variant="outline" asChild><Link href={`/employees/${e.id}/letters/new`}><Mail /> Issue a letter</Link></Button>}
                         {can && <Button asChild><Link href={`/employees/${e.id}/edit`}><Pencil /> Edit</Link></Button>}
                         {auth.can.admin && (
                             <Button variant="ghost" aria-label="Delete employee" onClick={() => {
@@ -596,10 +607,33 @@ export default function EmployeeShow(props: Props) {
                         {can && <Link href={`/assets?q=${encodeURIComponent(e.employee_code)}`} className="text-sm font-semibold text-cascade hover:underline">Give or take back on the Assets page</Link>}
                     </div>
                     </section>
+                    {props.letters && (
+                        <section className="mt-10 grid max-w-3xl gap-3">
+                            <h2 className="font-bold">Letters issued</h2>
+                            {props.letters.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">No letters yet. Use Issue a letter at the top of the page.</p>
+                            ) : (
+                                <ul className="divide-y rounded-lg border">
+                                    {props.letters.map((l) => (
+                                        <li key={l.id}>
+                                            <Link href={`/letters/${l.id}`} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 px-3 py-2.5 text-sm hover:bg-muted/50">
+                                                <span className="font-semibold">{l.subject ?? 'Letter'} <span className="font-normal text-muted-foreground tabular-nums">{l.reference}</span></span>
+                                                <span className="text-xs text-muted-foreground">{formatDate(l.issued_on)}{l.issued_by ? `, by ${l.issued_by}` : ''}</span>
+                                            </Link>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </section>
+                    )}
                 </TabsContent>
 
 
                 <TabsContent value="time" className="grid gap-10">
+                    <section className="grid gap-3">
+                        <h2 className="font-bold">Last 12 months</h2>
+                        <AttendanceHeatmap year={props.attendanceYear} />
+                    </section>
                     <section className="grid gap-3">
                         <h2 className="font-bold">Attendance</h2>
                     <AttendanceTab e={e} a={props.attendance} canEdit={can} />

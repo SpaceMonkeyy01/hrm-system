@@ -28,8 +28,8 @@ type Props = {
     };
     documents: { population: number; compliant: number; items: DocItem[] };
     attendance: { date: string; statuses: Record<string, number>; late: number; working_days: number; people: number; linked: number } | null;
-    away: { id: number; name: string; type: string; from: string; to: string; part: 'full' | 'first_half' | 'second_half' }[];
-    newPeople: { id: number; name: string; role: string | null; start: string }[];
+    away: { id: number; name: string; photo: string | null; type: string; from: string; to: string; part: 'full' | 'first_half' | 'second_half' }[];
+    newPeople: { id: number; name: string; photo: string | null; role: string | null; start: string }[];
     celebrations: { id: number; name: string; date: string; kind: 'anniversary' | 'birthday'; years: number | null }[];
     holidays: { date: string; name: string; company: string | null }[];
     activity: ActivityItem[];
@@ -299,7 +299,7 @@ export default function Dashboard(props: Props) {
                         <SmallList items={props.away} empty="Nobody has leave recorded this week." render={(l) => (
                             <li key={`${l.id}-${l.from}`} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
                                 <span className="flex min-w-0 items-center gap-2.5">
-                                    <Avatar name={l.name} className="size-7 text-[10px]" />
+                                    <Avatar name={l.name} photo={l.photo} className="size-7 text-[10px]" />
                                     <Link href={`/employees/${l.id}`} className="min-w-0 truncate font-semibold hover:text-cascade hover:underline">{l.name}</Link>
                                 </span>
                                 <span className="shrink-0 text-right text-xs text-muted-foreground">
@@ -314,7 +314,7 @@ export default function Dashboard(props: Props) {
                         <SmallList items={props.newPeople} empty="Nobody new in the last 30 days." render={(p) => (
                             <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
                                 <span className="flex min-w-0 items-center gap-2.5">
-                                    <Avatar name={p.name} className="size-7 text-[10px]" />
+                                    <Avatar name={p.name} photo={p.photo} className="size-7 text-[10px]" />
                                     <span className="min-w-0">
                                         <Link href={`/employees/${p.id}`} className="block truncate font-semibold hover:text-cascade hover:underline">{p.name}</Link>
                                         {p.role && <span className="block truncate text-xs text-muted-foreground">{p.role}</span>}

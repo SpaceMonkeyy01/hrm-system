@@ -2,8 +2,11 @@ import { Head, router, useForm } from '@inertiajs/react';
 import { CheckCircle2, CircleDashed, Send } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { DayStatus, duration, TimeCell } from '@/components/attendance';
+import { AttendanceHeatmap } from '@/components/attendance-heatmap';
+import type { AttendanceYear } from '@/components/attendance-heatmap';
 import type { AttendanceDay } from '@/components/attendance';
 import { EmptyState } from '@/components/empty-state';
+import { PhotoEditor } from '@/components/photo-editor';
 import { Detail, Field } from '@/components/field';
 import { AssetList } from '@/components/assets';
 import type { AssetRow } from '@/components/assets';
@@ -22,6 +25,7 @@ import { formatDate, formatDateTime } from '@/lib/format';
 import type { Tone } from '@/types';
 
 type Me = {
+    photo: string | null;
     system_id: string; employee_code: string; full_name: string; email: string | null; role_title: string | null; employment_type: string | null;
     work_mode: string | null; work_location: string | null; cnic: string | null; father_name: string | null; gender: string | null;
     marital_status: string | null; blood_group: string | null; bank_name: string | null; bank_account_title: string | null; bank_account_last4: string | null;
@@ -43,6 +47,7 @@ type Props = {
     employee: Me | null;
     documents?: { label: string; status: string | null; done: boolean }[];
     attendance?: AttendanceMonth;
+    attendanceYear?: AttendanceYear;
     leave?: { year: number; records: LeaveRecordRow[]; totals: Record<string, number> };
     requests?: FixRequest[];
     assets?: AssetRow[];
@@ -162,7 +167,7 @@ export default function MyPage(props: Props) {
         <>
             <Head title="My page" />
             <PageHeader
-                title={me.full_name}
+                title={<span className="flex items-center gap-3"><PhotoEditor name={me.full_name} photo={me.photo} uploadUrl="/me/photo" className="size-10 text-sm" />{me.full_name}</span>}
                 description={[me.role_title, me.department, me.company].filter(Boolean).join(', ') || 'Your own record, attendance and leave.'}
                 actions={<Button onClick={() => setAsking({ day: null, date: today })}><Send /> Ask HR to fix a day</Button>}
             />
@@ -178,6 +183,12 @@ export default function MyPage(props: Props) {
 
                 <TabsContent value="attendance">
                     <div className="grid max-w-4xl gap-4">
+                        {props.attendanceYear && (
+                            <section className="grid gap-3 rounded-lg border p-4">
+                                <h2 className="font-bold">Your last 12 months</h2>
+                                <AttendanceHeatmap year={props.attendanceYear} />
+                            </section>
+                        )}
                         <div className="flex flex-wrap items-end justify-between gap-3">
                             <div className="text-sm">
                                 <p><span className="text-muted-foreground">Work schedule:</span> {a.schedule ? <><span className="font-semibold">{a.schedule.name}</span> ({a.schedule.summary})</> : 'None'}</p>

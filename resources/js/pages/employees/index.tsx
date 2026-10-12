@@ -15,7 +15,7 @@ import { query } from '@/lib/utils';
 import type { CompanyOption, Paginated, SharedProps } from '@/types';
 
 type Row = {
-    id: number; code: string; name: string; company: string | null; department: string | null; team: string | null;
+    id: number; code: string; name: string; photo: string | null; company: string | null; department: string | null; team: string | null;
     role_title: string | null; employment_type: string | null; start_date: string | null; status: string; needs_review: boolean;
 };
 type Filters = { q?: string; company?: number; department?: number; status: string; review?: boolean; unassigned?: boolean; sort?: string };
@@ -105,7 +105,7 @@ export default function EmployeesIndex({ employees, filters, companies }: { empl
                             {employees.data.map((e) => (
                                 <li key={e.id}>
                                     <Link href={`/employees/${e.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-accent/50">
-                                        <Avatar name={e.name} className="size-9" />
+                                        <Avatar name={e.name} photo={e.photo} className="size-9" />
                                         <span className="min-w-0 flex-1">
                                             <span className="block truncate font-semibold">{e.name}</span>
                                             <span className="block truncate text-xs text-muted-foreground">{[e.code, e.department].filter(Boolean).join(', ')}</span>
@@ -141,7 +141,7 @@ export default function EmployeesIndex({ employees, filters, companies }: { empl
                                         <tr key={e.id} className="hover:bg-[#f7f9fc]">
                                             <td className="py-2 pr-3">
                                                 <span className="flex items-center gap-2.5">
-                                                    <Avatar name={e.name} />
+                                                    <Avatar name={e.name} photo={e.photo} />
                                                     <span>
                                                         <Link href={`/employees/${e.id}`} className="font-semibold hover:text-cascade hover:underline">{e.name}</Link>
                                                         {e.needs_review && <span className="ml-2 text-xs font-semibold text-pending">Check record</span>}

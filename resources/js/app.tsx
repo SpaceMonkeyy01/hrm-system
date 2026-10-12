@@ -6,6 +6,7 @@ import { FlashToaster } from '@/components/flash-toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import AuthLayout from '@/layouts/auth-layout';
+import PrintLayout from '@/layouts/print-layout';
 
 const appName = import.meta.env.VITE_APP_NAME || 'HRM System';
 
@@ -22,7 +23,7 @@ void createInertiaApp({
         }
         return page;
     },
-    layout: (name) => (name.startsWith('auth/') ? AuthLayout : AppLayout),
+    layout: (name) => (name.startsWith('auth/') ? AuthLayout : name.startsWith('print/') ? PrintLayout : AppLayout),
     strictMode: true,
     withApp(app) {
         return (

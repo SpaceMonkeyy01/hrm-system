@@ -4,7 +4,7 @@ import { Avatar } from '@/components/avatar';
 import { plural } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-type Person = { id: number; name: string; code: string; role: string | null; leaving: boolean };
+type Person = { id: number; name: string; code: string; role: string | null; leaving: boolean; photo?: string | null };
 type Department = { id: number | null; name: string; count: number; teams: { name: string | null; people: Person[] }[] };
 
 const SHOWN = 6;
@@ -26,7 +26,7 @@ function TeamCard({ name, people, needle }: { name: string | null; people: Perso
                         <li key={p.id}>
                             <Link href={`/employees/${p.id}`} title={[p.code, p.role].filter(Boolean).join(', ')}
                                 className={cn('flex items-center gap-2 rounded-md px-1.5 py-1 text-xs hover:bg-accent', hit && 'bg-accent font-semibold ring-1 ring-cascade/40')}>
-                                <Avatar name={p.name} className="size-6 text-[10px]" />
+                                <Avatar name={p.name} photo={p.photo} className="size-6 text-[10px]" />
                                 <span className="min-w-0 flex-1 truncate">{p.name}</span>
                                 {p.leaving && <span className="text-[10px] text-pending">leaving</span>}
                             </Link>

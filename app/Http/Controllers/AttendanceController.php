@@ -29,7 +29,7 @@ use Inertia\Response;
 class AttendanceController extends Controller
 {
     private const EMPLOYEE_COLUMNS = ['id', 'employee_code', 'full_name', 'department_id', 'company_id', 'start_date', 'exit_date',
-        'status', 'attendance_machine_id', 'hr_portal_id'];
+        'status', 'attendance_machine_id', 'hr_portal_id', 'photo_path'];
 
     public function index(Request $request): Response
     {
@@ -58,7 +58,7 @@ class AttendanceController extends Controller
                 continue;
             }
             $rows[] = [
-                'employee' => ['id' => $e->id, 'code' => $e->employee_code, 'name' => $e->full_name, 'department' => $e->department?->name,
+                'employee' => ['id' => $e->id, 'code' => $e->employee_code, 'name' => $e->full_name, 'department' => $e->department?->name, 'photo' => $e->photoUrl(),
                     'linked' => (bool) ($e->attendance_machine_id || $e->hr_portal_id)],
                 'schedule' => $day['schedule_id'] ? $board->schedules->get($day['schedule_id'])?->name : null,
                 'punchTimes' => array_map(fn ($t) => substr($t, 0, 5), $board->punchesOn($e->id, $date)),

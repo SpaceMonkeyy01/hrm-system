@@ -56,7 +56,7 @@ class EmployeeController extends Controller
         };
 
         $page = $q->paginate(50)->withQueryString()->through(fn (Employee $e) => [
-            'id' => $e->id, 'code' => $e->employee_code, 'name' => $e->full_name,
+            'id' => $e->id, 'code' => $e->employee_code, 'name' => $e->full_name, 'photo' => $e->photoUrl(),
             'company' => $e->company?->name, 'department' => $e->department?->name, 'team' => $e->team?->name,
             'role_title' => $e->role_title, 'employment_type' => $e->employment_type,
             'start_date' => $e->start_date?->toDateString(), 'status' => $e->status, 'needs_review' => $e->needs_review,
@@ -121,6 +121,7 @@ class EmployeeController extends Controller
                 // Viewer logins get null for private fields, not just a hidden section.
                 ...collect(Employee::PRIVATE_FIELDS)->mapWithKeys(fn ($f) => [$f => $private ? $this->propValue($employee, $f) : null])->all(),
                 'private_hidden' => ! $private,
+                'photo' => $employee->photoUrl(),
                 'start_date' => $employee->start_date?->toDateString(),
                 'confirmation_date' => $employee->confirmation_date?->toDateString(),
                 'exit_date' => $employee->exit_date?->toDateString(),
@@ -151,8 +152,12 @@ class EmployeeController extends Controller
             'fileCount' => $employee->files()->count(),
             'uploads' => ['extensions' => config('hrm.uploads.extensions'), 'max_kb' => config('hrm.uploads.max_kb'), 'enabled' => (bool) config('hrm.uploads.enabled')],
             'attendance' => EmployeeRecords::attendanceMonth($employee, request()->input('month')),
+            // A closure: skipped when only the month changes (partial reload of 'attendance').
+            'attendanceYear' => fn () => EmployeeRecords::attendanceYear($employee),
             'leave' => EmployeeRecords::leaveYear($employee),
             'assets' => AssetAssignment::rowsFor($employee->id),
+            // Letters carry CNIC numbers: HR and admin only.
+            'letters' => $private ? LetterController::letterRows($employee->id) : null,
             'employmentHistory' => $employee->employmentHistory->map(fn (EmploymentHistory $h) => [
                 'id' => $h->id, 'effective_date' => $h->effective_date->toDateString(), 'change_type' => $h->change_type,
                 'changes' => $h->changes ?? [], 'note' => $h->note, 'by' => $h->author?->name,

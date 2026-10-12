@@ -14,7 +14,7 @@ import { plural } from '@/lib/format';
 import { useSessionState } from '@/lib/use-session-state';
 import { cn } from '@/lib/utils';
 
-type Person = { id: number; name: string; code: string; role: string | null; department: string | null; leaving: boolean };
+type Person = { id: number; name: string; code: string; role: string | null; department: string | null; leaving: boolean; photo: string | null };
 type Node = Person & { reports: Node[]; total: number };
 type Department = { id: number | null; name: string; count: number; teams: { name: string | null; people: Person[] }[] };
 type Props = {

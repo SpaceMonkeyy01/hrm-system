@@ -14,10 +14,10 @@ class SearchController extends Controller
         $q = $request->validate(['q' => ['required', 'string', 'max:100']])['q'];
         $hits = Employee::query()->with('department:id,name')->search($q)
             ->orderByRaw("case when status = 'exited' then 1 else 0 end")->orderBy('full_name')
-            ->limit(8)->get(['id', 'full_name', 'employee_code', 'department_id', 'status']);
+            ->limit(8)->get(['id', 'full_name', 'employee_code', 'department_id', 'status', 'photo_path']);
 
         return response()->json($hits->map(fn (Employee $e) => [
-            'id' => $e->id, 'name' => $e->full_name, 'code' => $e->employee_code, 'department' => $e->department?->name, 'status' => $e->status,
+            'id' => $e->id, 'name' => $e->full_name, 'code' => $e->employee_code, 'department' => $e->department?->name, 'status' => $e->status, 'photo' => $e->photoUrl(),
         ]));
     }
 }

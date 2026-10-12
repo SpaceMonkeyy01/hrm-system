@@ -33,7 +33,7 @@ class DashboardController extends Controller
         $private = request()->user()->can('edit-hr');
         $current = Employee::query()->whereIn('status', ['active', 'offboarding'])
             ->get(['id', 'employee_code', 'full_name', 'company_id', 'department_id', 'start_date', 'exit_date', 'status',
-                'attendance_machine_id', 'hr_portal_id', 'date_of_birth', 'role_title']);
+                'attendance_machine_id', 'hr_portal_id', 'date_of_birth', 'role_title', 'photo_path']);
         $snapshot = HrSnapshot::build($current->pluck('id')->all(), $today);
 
         $activity = ActivityLog::query()->with('user:id,name', 'employee:id,employee_code,full_name')
@@ -86,11 +86,11 @@ class DashboardController extends Controller
     /** On leave from today through the next week. */
     private function away(CarbonImmutable $today): array
     {
-        return LeaveRecord::query()->with('employee:id,full_name', 'type:id,name')
+        return LeaveRecord::query()->with('employee:id,full_name,photo_path', 'type:id,name')
             ->where('start_date', '<=', $today->addDays(self::AHEAD_DAYS)->toDateString())->where('end_date', '>=', $today->toDateString())
             ->whereHas('employee', fn ($q) => $q->whereIn('status', ['active', 'offboarding']))
             ->orderBy('start_date')->limit(12)->get()
-            ->map(fn ($l) => ['id' => $l->employee->id, 'name' => $l->employee->full_name, 'type' => $l->type?->name ?? 'Leave',
+            ->map(fn ($l) => ['id' => $l->employee->id, 'name' => $l->employee->full_name, 'photo' => $l->employee->photoUrl(), 'type' => $l->type?->name ?? 'Leave',
                 'from' => $l->start_date->toDateString(), 'to' => $l->end_date->toDateString(), 'part' => $l->part])
             ->values()->all();
     }
@@ -103,7 +103,7 @@ class DashboardController extends Controller
 
         return $current->filter(fn ($e) => $e->start_date && $e->start_date->toDateString() >= $from && $e->start_date->toDateString() <= $to)
             ->sortByDesc(fn ($e) => $e->start_date->toDateString())->take(8)
-            ->map(fn ($e) => ['id' => $e->id, 'name' => $e->full_name, 'role' => $e->role_title, 'start' => $e->start_date->toDateString()])
+            ->map(fn ($e) => ['id' => $e->id, 'name' => $e->full_name, 'photo' => $e->photoUrl(), 'role' => $e->role_title, 'start' => $e->start_date->toDateString()])
             ->values()->all();
     }
 

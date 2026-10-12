@@ -39,6 +39,48 @@ class EmployeeRecords
         ];
     }
 
+    /** Heatmap codes: one letter per day keeps a year of days small. */
+    public const YEAR_CODES = [
+        'Present' => 'P', 'In office' => 'P', 'Late' => 'L', 'Half day' => 'H', 'Absent' => 'A', 'Missing punch' => 'M',
+        'On leave' => 'V', 'Holiday' => 'O', 'Day off' => 'O', 'Worked day off' => 'W', 'Not in yet' => 'N', 'No data' => 'N',
+        'Not linked' => 'N', 'No punches' => 'N',
+    ];
+
+    /**
+     * The last 12 months (or since the start date) of attendance, one code per day, for the profile's heatmap.
+     * Same rules as everywhere else (AttendanceBoard); "Late" is Present with late minutes.
+     *
+     * @return array{from: string, to: string, days: array<string, string>, late: array<string, int>, counts: array<string, int>}
+     */
+    public static function attendanceYear(Employee $employee): array
+    {
+        $now = CarbonImmutable::now();
+        $to = $now->toDateString();
+        $from = $now->subDays(364)->toDateString();
+        if ($employee->start_date && $employee->start_date->toDateString() > $from) {
+            $from = $employee->start_date->toDateString();
+        }
+        if ($from > $to) {
+            return ['from' => $to, 'to' => $to, 'days' => [], 'late' => [], 'counts' => []];
+        }
+        $board = new AttendanceBoard(collect([$employee]), $from, $to);
+        $days = [];
+        $late = [];
+        foreach ($board->dates() as $date) {
+            $day = $board->day($employee, $date, $now);
+            if (! $day || $day['status'] === null) {
+                continue;
+            }
+            $status = $day['status'] === 'Present' && $day['late'] > 0 ? 'Late' : $day['status'];
+            $days[$date] = self::YEAR_CODES[$status] ?? 'N';
+            if ($day['late'] > 0) {
+                $late[$date] = $day['late'];
+            }
+        }
+
+        return ['from' => $from, 'to' => $to, 'days' => $days, 'late' => $late, 'counts' => array_count_values($days)];
+    }
+
     /** This year's leave, newest first, with days per type. */
     public static function leaveYear(Employee $employee): array
     {

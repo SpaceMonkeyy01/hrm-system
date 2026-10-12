@@ -22,7 +22,7 @@ class Employee extends Model
         'bank_name', 'bank_account_title', 'bank_account_number', 'work_mode', 'work_location', 'confirmation_date',
         'department_id', 'team_id', 'role_title', 'manager_id', 'employment_type', 'start_date',
         'status', 'exit_date', 'hr_portal_id', 'attendance_machine', 'attendance_machine_id',
-        'drive_folder_url', 'notes', 'needs_review', 'review_note', 'source_ref',
+        'drive_folder_url', 'notes', 'needs_review', 'review_note', 'source_ref', 'photo_path',
     ];
 
     /**
@@ -41,6 +41,18 @@ class Employee extends Model
         'company_id' => 'Company', 'department_id' => 'Department', 'team_id' => 'Team', 'role_title' => 'Role',
         'employment_type' => 'Employment type', 'manager_id' => 'Manager', 'work_mode' => 'Work mode',
     ];
+
+    /** URL of the profile photo (changes with every new photo, so browsers can cache it), or null. */
+    public function photoUrl(): ?string
+    {
+        return $this->photo_path ? "/employees/{$this->id}/photo?v=".substr(md5($this->photo_path), 0, 8) : null;
+    }
+
+    /** Photo URL from a row that selected only id and photo_path (lists). */
+    public static function photoUrlFor(int $id, ?string $path): ?string
+    {
+        return $path ? "/employees/{$id}/photo?v=".substr(md5($path), 0, 8) : null;
+    }
 
     /** Details a complete record has (label => filled?), for the profile's completeness bar. HR and admin only. */
     public function completeness(): array

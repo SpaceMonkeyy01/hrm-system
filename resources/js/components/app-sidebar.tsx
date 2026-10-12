@@ -22,6 +22,7 @@ import {
     UserRound,
     Users,
     Workflow,
+    Mail,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Avatar } from '@/components/avatar';
@@ -88,6 +89,7 @@ const groups: Group[] = [
         items: [
             { title: 'Assets', href: '/assets', icon: Laptop },
             { title: 'Controlled documents', href: '/controlled-documents', icon: ScrollText },
+            { title: 'Letter templates', href: '/letters/templates', icon: Mail, edit: true },
         ],
     },
 ];
