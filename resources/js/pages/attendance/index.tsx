@@ -34,7 +34,7 @@ export default function AttendanceIndex(props: Props) {
     const go = (changes: Record<string, unknown>) =>
         router.get('/attendance', { ...props.filters, date: props.date, ...changes }, { preserveState: true, preserveScroll: true, replace: true });
 
-    const chips = ['Present', 'Late', 'Half day', 'Missing punch', 'Absent', 'In office', 'Not in yet', 'On leave', 'Holiday', 'Worked day off', 'Day off', 'No punches', 'Not linked']
+    const chips = ['Present', 'Late', 'Half day', 'Missing punch', 'Absent', 'In office', 'Not in yet', 'On leave', 'Holiday', 'Worked day off', 'Day off', 'No punches', 'No data', 'Not linked']
         .filter((s) => props.counts[s]);
     const departments = props.companies.flatMap((c) => c.departments.map((d) => ({ value: d.id, label: props.companies.length > 1 ? `${d.name} (${c.name})` : d.name })));
 

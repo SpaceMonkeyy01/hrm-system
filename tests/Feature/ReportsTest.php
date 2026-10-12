@@ -46,6 +46,12 @@ class ReportsTest extends TestCase
         foreach (['2026-05-18 09:30:00', '2026-05-18 17:05:00'] as $at) {   // Monday: in 30 minutes late
             AttendancePunch::create(['source' => 'machine', 'device_user_id' => '1', 'device_name' => 'Fake Linked', 'punched_at' => $at, 'work_date' => '2026-05-18']);
         }
+        // A machine number nobody is linked to punched every day from 1 to 19 May, so the machine files cover
+        // those days and a missing punch from Fake Linked is an absence, not "No data".
+        for ($d = 1; $d <= 19; $d++) {
+            $date = sprintf('2026-05-%02d', $d);
+            AttendancePunch::create(['source' => 'machine', 'device_user_id' => '99', 'device_name' => 'Fake Unlinked', 'punched_at' => "$date 10:00:00", 'work_date' => $date]);
+        }
     }
 
     private function props(string $url, string $role = 'hr'): array
@@ -97,6 +103,15 @@ class ReportsTest extends TestCase
         $this->assertSame('', $linked['d25']['code'], 'future');
         $this->assertSame('', $this->row($props, 'Fake Joiner')['d01']['code'], 'before the start date');
         $this->assertNull($this->row($props, 'Fake Leaver'), 'left in April');
+    }
+
+    public function test_days_without_any_file_are_no_data_not_absent(): void
+    {
+        $sheet = $this->row($this->props('/reports/attendance-sheet?month=2026-04'), 'Fake Linked');
+        $this->assertSame('-', $sheet['d01']['code'], 'nobody punched in April: no file covers it');
+        $this->assertSame('No data', $sheet['d01']['title']);
+        $april = $this->row($this->props('/reports/attendance-monthly?month=2026-04'), 'Fake Linked');
+        $this->assertSame([0, 0], [$april['absent'], $april['working_days']]);
     }
 
     public function test_late_and_absence_lists(): void
@@ -176,7 +191,7 @@ class ReportsTest extends TestCase
         $this->assertSame(1, $o['attendance']['late']);
 
         $home = $this->props('/dashboard', 'viewer');
-        $this->assertSame('2026-05-18', $home['attendance']['date'], 'the last day punches were loaded for');
+        $this->assertSame('2026-05-19', $home['attendance']['date'], 'the last day punches were loaded for');
         $this->assertSame(['Fake Joiner'], array_column($home['newPeople'], 'name'));
         $this->assertSame([['Fake Linked', 'anniversary', 1]], array_map(fn ($c) => [$c['name'], $c['kind'], $c['years']], $home['celebrations']));
     }

@@ -145,6 +145,7 @@ return [
             'Holiday' => 'neutral',
             'No punches' => 'neutral',
             'Not linked' => 'neutral',   // no machine or HR.my number, so no punches can arrive
+            'No data' => 'neutral',      // no attendance file covers that day yet (AttendanceBoard)
         ],
     ],
 

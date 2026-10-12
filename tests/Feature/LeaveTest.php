@@ -59,6 +59,8 @@ class LeaveTest extends TestCase
         $e = $this->employee($this->company, ['attendance_machine_id' => '1']);
         Holiday::create(['date' => '2026-05-13', 'name' => 'Fake holiday']);
         LeaveRecord::create(['employee_id' => $e->id, 'leave_type_id' => $this->type('Sick')->id, 'start_date' => '2026-05-12', 'end_date' => '2026-05-12', 'part' => 'full', 'days' => 1]);
+        // Someone else punched on the 11th, so the machine file covers that day: no punch from this person is an absence.
+        \App\Models\AttendancePunch::create(['source' => 'machine', 'device_user_id' => '99', 'punched_at' => '2026-05-11 09:00:00', 'work_date' => '2026-05-11']);
 
         $this->actingAs($this->user('hr'))->get("/employees/{$e->id}?month=2026-05")->assertInertia(fn (AssertableInertia $p) => $p
             ->where('attendance.days', function ($days) {

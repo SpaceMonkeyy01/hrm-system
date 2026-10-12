@@ -19,6 +19,10 @@ use Illuminate\Support\Collection;
  * Each day goes through AttendanceRules::day().
  *
  * People count from their start date up to their exit date; days outside that are left out.
+ *
+ * "No data": attendance arrives as uploaded files, so a day nobody's file covers can't be called absent.
+ * A day counts as covered for a person when anyone at all punched that day in a source the person uses
+ * (machine and/or HR.my). Otherwise Absent and Not in yet read "No data".
  */
 class AttendanceBoard
 {
@@ -41,6 +45,9 @@ class AttendanceBoard
 
     /** @var array<int, list<array{from: string, to: string, type: string, part: string}>> employee id => leave */
     private array $leave = [];
+
+    /** @var array<string, array<string, true>> source => date => anyone punched that day */
+    private array $covered = ['machine' => [], 'hrmy' => []];
 
     /**
      * @param  Collection<int, Employee>  $employees  with id, start_date, exit_date, attendance_machine_id, hr_portal_id
@@ -80,6 +87,10 @@ class AttendanceBoard
                 $hours = (int) $at->format('H') + 24 * (int) CarbonImmutable::parse($day)->diffInDays($at->startOfDay());
                 $this->punches[$employeeId][$day][] = sprintf('%02d', $hours).$at->format(':i:s');
             }
+        }
+
+        foreach (AttendancePunch::query()->whereBetween('work_date', [$from, $to])->distinct()->toBase()->get(['source', 'work_date']) as $c) {
+            $this->covered[$c->source][substr((string) $c->work_date, 0, 10)] = true;
         }
 
         foreach (AttendanceAdjustment::query()->whereIn('employee_id', $ids)->whereBetween('date', [$from, $to])
@@ -142,6 +153,9 @@ class AttendanceBoard
         // No machine or HR.my number: there can't be punches, so "absent" would be a guess.
         if (! $e->attendance_machine_id && ! $e->hr_portal_id && in_array($day['status'], ['Absent', 'Not in yet', 'No punches'], true)) {
             $day['status'] = 'Not linked';
+        } elseif (in_array($day['status'], ['Absent', 'Not in yet'], true) && ! $this->isCovered($e, $date)) {
+            // No file loaded for that day yet: nobody knows whether they came in.
+            $day['status'] = 'No data';
         }
 
         return $day + ['schedule_id' => $schedule?->id];
@@ -166,12 +180,19 @@ class AttendanceBoard
                 }
                 $statuses[$day['status']] = ($statuses[$day['status']] ?? 0) + 1;
                 $late += $day['late'] > 0 ? 1 : 0;
-                $working += $day['working_day'] && $day['status'] !== 'Not linked' ? 1 : 0;
+                $working += $day['working_day'] && ! in_array($day['status'], ['Not linked', 'No data'], true) ? 1 : 0;
             }
         }
 
         return ['statuses' => $statuses, 'late' => $late, 'working_days' => $working, 'people' => $this->employees->count(),
             'linked' => $this->employees->filter(fn ($e) => $e->attendance_machine_id || $e->hr_portal_id)->count()];
+    }
+
+    /** Anyone punched on $date in a source this person uses. */
+    public function isCovered(Employee $e, string $date): bool
+    {
+        return ($e->attendance_machine_id && isset($this->covered['machine'][$date]))
+            || ($e->hr_portal_id && isset($this->covered['hrmy'][$date]));
     }
 
     /** @return list<string> every date from..to */
