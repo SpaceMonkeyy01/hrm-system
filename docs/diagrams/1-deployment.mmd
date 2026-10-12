@@ -1,0 +1,22 @@
+flowchart TB
+    subgraph CLIENT["«device» HR staff computer or phone"]
+        BROWSER["«artifact» React 19 + Inertia 3 pages<br/>public/build (built once with npm run build)"]
+    end
+
+    subgraph VPS["«node» Company VPS: GoDaddy, AlmaLinux 9, cPanel/WHM"]
+        subgraph WEB["«execution environment» Apache + PHP-FPM 8.3 (EasyApache / MultiPHP)"]
+            APP["«artifact» Laravel 13 app<br/>document root = hrm/public<br/>subdomain e.g. hrm.yourdomain.com"]
+        end
+        DB[("«database» MySQL<br/>cpaneluser_hrm")]
+        FILES[["«file system» storage/<br/>logs, import reports, sessions"]]
+        CRON["«cron» php artisan schedule:run<br/>every minute (required: daily reminder email)"]
+    end
+
+    XLSX[/"HR_Onboarding.xlsx<br/>one-time import"/]
+
+    BROWSER -- "HTTPS (cPanel AutoSSL, free)<br/>Inertia requests: JSON page props" --> APP
+    APP -- "PDO / Eloquent" --> DB
+    APP --> FILES
+    CRON -- "hr:send-reminders daily 08:00" --> APP
+    APP -. "SMTP: reminder email to HR and admin" .-> MAIL[("«service» Mail server<br/>cPanel email account")]
+    XLSX -- "php artisan hr:import --fresh" --> APP

@@ -1,0 +1,126 @@
+classDiagram
+    direction LR
+    class Company {
+        +id
+        +name  BCC | Emerge
+        +code
+        +employee_code_prefix  BCC- | Emerge-
+        +employee_code_digits
+    }
+    class Department {
+        +id
+        +company_id
+        +name
+    }
+    class Team {
+        +id
+        +department_id
+        +name
+    }
+    class Employee {
+        +id
+        +employee_code  UNIQUE
+        +full_name
+        +first_name / last_name
+        +cnic
+        +email / phone
+        +company_id / department_id / team_id
+        +manager_id
+        +role_title / employment_type
+        +start_date
+        +status  active | offboarding | exited
+        +exit_date
+        +hr_portal_id / attendance_machine_id
+        +drive_folder_url
+        +needs_review / review_note
+        +deleted_at  soft delete
+    }
+    class ChecklistItem {
+        +id
+        +list  onboarding | document | offboarding
+        +key  e.g. nda_signed
+        +label
+        +option_set  yes_no | session | document | clearance
+        +sort_order / is_active
+    }
+    class ChecklistEntry {
+        +id
+        +employee_id
+        +checklist_item_id
+        +status  value from option_set
+        +updated_by
+    }
+    class Onboarding {
+        +id
+        +employee_id  UNIQUE
+        +cohort  Group A/B/C
+        +probation_end_date
+        +probation_result  Pending | Pass | Extend | Fail
+        +notes
+    }
+    class ProbationPlan {
+        +id
+        +employee_id  UNIQUE
+        +final_performance / behaviour / reliability
+        +overall_fit
+        +manager_recommendation / hr_comments
+        +employee / manager / hr signed name + date
+    }
+    class ProbationPlanItem {
+        +id
+        +section  goal | behaviour | attendance | deliverable
+        +title / detail / due_date
+        +status / evaluation
+        +manager_notes / employee_notes
+    }
+    class ProbationCheckin {
+        +id
+        +kind  day30 | day60 | day90 | extra
+        +held_on / next_follow_up
+        +manager_summary / employee_summary
+        +action_items / initials
+    }
+    class Offboarding {
+        +id
+        +employee_id
+        +type  Resignation | Termination | ...
+        +notice_date / last_working_day
+        +status  in_progress | completed | cancelled
+        +reason / exit_interview_notes
+    }
+    class ControlledDocument {
+        +id
+        +doc_number  BCC-0001 UNIQUE
+        +doc_type / name / status
+        +issued_on / obsolete_on
+        +link_url
+    }
+    class User {
+        +id
+        +email
+        +role  admin | hr | viewer
+        +is_active
+    }
+    class ActivityLog {
+        +id
+        +user_id / employee_id
+        +subject_type / subject_id
+        +event
+        +changes  JSON field: [old, new]
+        +created_at
+    }
+    Company "1" --> "*" Department : has
+    Department "1" --> "*" Team : has
+    Company "1" --> "*" Employee : employs
+    Department "1" --> "*" Employee : in
+    Team "1" --> "*" Employee : in
+    Employee "0..1" --> "*" Employee : manages
+    Employee "1" --> "*" ChecklistEntry : one value per item
+    ChecklistItem "1" --> "*" ChecklistEntry : defines the column
+    Employee "1" --> "0..1" Onboarding : tracker row
+    Employee "1" --> "0..1" ProbationPlan : 90-day plan
+    ProbationPlan "1" *-- "*" ProbationPlanItem : rows
+    ProbationPlan "1" *-- "*" ProbationCheckin : log
+    Employee "1" --> "*" Offboarding : cases
+    Employee "1" --> "*" ActivityLog : history
+    User "1" --> "*" ActivityLog : made the change

@@ -1,0 +1,21 @@
+sequenceDiagram
+    actor HR as HR user
+    participant UI as StatusPicker (React)
+    participant RT as routes/web.php
+    participant C as ChecklistEntryController
+    participant M as ChecklistEntry model
+    participant LOG as LogsActivity trait
+    participant DB as MySQL
+
+    HR->>UI: click a cell, or focus it and type Y / N / D
+    UI->>UI: show the new value at once (optimistic)
+    UI->>RT: PUT /checklist/{employee}/{item} {status}
+    RT->>RT: auth, then can:edit-hr (viewer gets 403)
+    RT->>C: update(employee, item)
+    C->>C: validate status is in the item's option set
+    C->>M: firstOrNew, skip if unchanged, save
+    M->>DB: INSERT or UPDATE checklist_entries
+    M->>LOG: updated event
+    LOG->>DB: INSERT activity_log (user, employee, field, old, new)
+    C-->>UI: redirect back, Inertia partial reload (only rows)
+    UI->>UI: server value replaces the optimistic one, statuses recomputed by StatusBoard

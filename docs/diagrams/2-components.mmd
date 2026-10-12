@@ -1,0 +1,26 @@
+flowchart LR
+    subgraph FE["Browser: resources/js"]
+        PAGES["pages/*.tsx<br/>dashboard, employees, onboarding,<br/>documents, plan, offboarding,<br/>controlled-documents, settings, account"]
+        GRID["ChecklistGrid<br/>StatusPicker (optimistic save)"]
+        PAGES --> GRID
+    end
+
+    subgraph BE["Laravel: app/"]
+        ROUTES["routes/web.php<br/>auth / can:edit-hr / can:admin"]
+        MW["Middleware<br/>HandleInertiaRequests<br/>EnsureUserIsActive"]
+        CTRL["Http/Controllers<br/>Dashboard, Employee, Onboarding,<br/>DocumentChecklist, ChecklistEntry,<br/>ProbationPlan, Offboarding,<br/>ControlledDocument, Export, Settings/*"]
+        SVC["Services<br/>HrRules = sheet formulas<br/>StatusBoard = statuses for many people<br/>Reminders = what is due today"]
+        CFG["config/hrm.php<br/>status values, done rules,<br/>probation days, dropdown lists"]
+        MODELS["Models<br/>+ LogsActivity trait"]
+        IMPORT["Import (hr:import)<br/>XlsxReader > NameMatcher ><br/>HrWorkbookImporter"]
+    end
+
+    DB[("MySQL / SQLite")]
+
+    PAGES -- "Inertia visit, router.put / post" --> ROUTES
+    ROUTES --> MW --> CTRL
+    CTRL --> SVC --> CFG
+    CTRL --> MODELS --> DB
+    IMPORT --> MODELS
+    IMPORT --> SVC
+    CTRL -- "Inertia::render(page, props)" --> PAGES

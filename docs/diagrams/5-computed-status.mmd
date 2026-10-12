@@ -1,0 +1,16 @@
+flowchart TB
+    subgraph ORI["Orientation (sheet column U)"]
+        O1{"Sessions 1, 2, 3 all Done?"} -- yes --> OC["Complete"]
+        O1 -- no --> O2{"Any session Done?"}
+        O2 -- yes --> OP["In Progress"]
+        O2 -- no --> ON["Not Started"]
+    end
+    subgraph DOC["Documents (sheet column W)"]
+        D1{"Every active document is Yes, Not Required,<br/>Old employee or not available?"} -- yes --> DC["Complete"]
+        D1 -- "no: any No, Pending or blank" --> DP["Pending"]
+    end
+    subgraph ONB["Onboarding status (sheet column AE)"]
+        N1{"Orientation Complete<br/>AND NDA, NCA, Policy done<br/>AND 30, 60, 90-day = Yes<br/>AND probation = Pass?"} -- yes --> NC["Onboarding Complete"]
+        N1 -- no --> NP["Onboarding In Progress"]
+    end
+    OC -.-> N1

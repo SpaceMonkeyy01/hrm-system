@@ -1,0 +1,19 @@
+stateDiagram-v2
+    direction LR
+    state "Employee.status" as EMP {
+        [*] --> active : Add employee or import
+        active --> offboarding : Start offboarding
+        offboarding --> active : Cancel offboarding
+        offboarding --> exited : Mark as exited [every clearance item Done or Not Required]
+        exited --> [*]
+    }
+    state "Onboarding.probation_result" as PROB {
+        [*] --> NotTracked : imported blank
+        [*] --> Pending : new hire, end = start + 90 days
+        Pending --> Pass
+        Pending --> Extend : move the end date
+        Extend --> Pass
+        Extend --> Fail
+        Pending --> Fail
+        note right of Pending : "Overdue" flag when today > end date and still Pending
+    }

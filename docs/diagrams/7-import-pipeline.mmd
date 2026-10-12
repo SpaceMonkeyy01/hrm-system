@@ -1,0 +1,23 @@
+flowchart TD
+    X["HR_Onboarding.xlsx"] --> R["XlsxReader<br/>unzip + read XML, cached formula values, dates"]
+    R --> C["BCC + Emerge department sheets<br/>companies, departments, teams,<br/>employees with codes BCC-001 / Emerge-001"]
+    C --> IDX["NameMatcher index"]
+    R --> T["Onboarding_Tracker rows"]
+    R --> D["Onboarding_Document_Checklist rows"]
+    T --> MATCH{"Match the typed name"}
+    D --> MATCH
+    IDX --> MATCH
+    MATCH -- "exact / normalized / spelling<br/>or aliases.csv" --> LINK["Link row to employee"]
+    MATCH -- "fuzzy / subset / bracket hint" --> FLAG["Link + needs_review flag"]
+    MATCH -- "two or more candidates" --> SKIP["Row skipped, reported as ambiguous"]
+    MATCH -- "no candidate" --> NEW["Create UNASSIGNED-### + needs_review"]
+    LINK --> VALS["Onboarding row + checklist values<br/>values mapped case-insensitively"]
+    FLAG --> VALS
+    NEW --> VALS
+    VALS --> TWICE{"Fact typed in both sheets?<br/>NDA, NCA, Policy, CNIC, Appointment letter"}
+    TWICE -- "checklist has a value" --> KEEP["Keep checklist value<br/>report conflict if done / not done differs"]
+    TWICE -- "checklist blank" --> FILL["Fill from tracker"]
+    KEEP --> SAVE[("Upsert checklist_entries<br/>one transaction")]
+    FILL --> SAVE
+    SAVE --> DOCS["Controlled documents + Templates sheet"]
+    DOCS --> REP["import-report-*.csv<br/>one row per decision"]

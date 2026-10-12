@@ -1,0 +1,88 @@
+import { Head, router, usePage } from '@inertiajs/react';
+import { Download, FolderOpen, Search } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ChecklistGrid } from '@/components/checklist-grid';
+import type { ExtraColumn, GridRow } from '@/components/checklist-grid';
+import { EmptyState } from '@/components/empty-state';
+import { NativeSelect } from '@/components/native-select';
+import { PageHeader } from '@/components/page-header';
+import { computedTone, StatusPill } from '@/components/status-pill';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { query } from '@/lib/utils';
+import type { ChecklistColumn, CompanyOption, OptionSets, SharedProps } from '@/types';
+
+type Row = GridRow & { company: string | null; department: string | null; drive_folder_url: string | null; status: string };
+type Filters = Partial<Record<'q' | 'company' | 'department' | 'status' | 'missing' | 'scope', string>>;
+
+export default function DocumentsIndex({ rows, columns, owed, optionSets, filters, companies }: {
+    rows: Row[]; columns: ChecklistColumn[]; owed: Record<string, number>; optionSets: OptionSets; filters: Filters; companies: CompanyOption[];
+}) {
+    const { auth } = usePage<SharedProps>().props;
+    const [q, setQ] = useState(filters.q ?? '');
+    const apply = (patch: Filters) => router.get('/documents', query({ ...filters, ...patch }), { preserveState: true, preserveScroll: true, replace: true });
+
+    useEffect(() => {
+        if ((filters.q ?? '') === q) return;
+        const t = setTimeout(() => apply({ q }), 300);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [q]);
+
+    const company = companies.find((c) => String(c.id) === String(filters.company));
+    const departments = company ? company.departments : companies.flatMap((c) => c.departments.map((d) => ({ ...d, name: `${d.name} (${c.name})` })));
+    const missing = columns.find((c) => c.key === filters.missing);
+
+    const before: ExtraColumn<Row>[] = [
+        { key: 'department', header: 'Department', className: 'min-w-44 max-w-52', cell: (r) => <span className="line-clamp-2 text-xs">{r.department ?? <span className="text-muted-foreground">-</span>}</span> },
+    ];
+    const after: ExtraColumn<Row>[] = [
+        { key: 'status', header: 'Status', className: 'w-24', cell: (r) => <StatusPill value={r.status} tone={computedTone(r.status)} /> },
+        {
+            key: 'drive', header: 'Folder', className: 'w-16 text-center',
+            cell: (r) => r.drive_folder_url ? (
+                <a href={r.drive_folder_url} target="_blank" rel="noreferrer" aria-label={`Drive folder for ${r.name}`} className="inline-flex text-cascade hover:text-ink"><FolderOpen className="size-4" /></a>
+            ) : <span className="text-xs text-muted-foreground">None</span>,
+        },
+    ];
+
+    return (
+        <>
+            <Head title="Documents" />
+            <PageHeader
+                title="Document checklist"
+                description={missing ? `People who still owe: ${missing.label}.` : 'The documents HR holds for every current employee. A person is Complete when every document is Yes, Not Required, Old employee or not available.'}
+                actions={<Button variant="outline" asChild><a href="/export/documents"><Download /> Export CSV</a></Button>}
+            >
+                <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative w-full sm:w-60">
+                        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or code" className="pl-8" aria-label="Search" />
+                    </div>
+                    <NativeSelect aria-label="Company" className="w-40" value={filters.company ?? ''} placeholder="All companies"
+                        onChange={(e) => apply({ company: e.target.value || undefined, department: undefined })} options={companies.map((c) => ({ value: c.id, label: c.name }))} />
+                    <NativeSelect aria-label="Department" className="w-52" value={filters.department ?? ''} placeholder="All departments"
+                        onChange={(e) => apply({ department: e.target.value || undefined })} options={departments.map((d) => ({ value: d.id, label: d.name }))} />
+                    <NativeSelect aria-label="Status" className="w-36" value={filters.status ?? ''} placeholder="Any status"
+                        onChange={(e) => apply({ status: e.target.value || undefined })} options={[{ value: 'Pending', label: 'Pending' }, { value: 'Complete', label: 'Complete' }]} />
+                    <NativeSelect aria-label="Still owes" className="w-52" value={filters.missing ?? ''} placeholder="Owes any document"
+                        onChange={(e) => apply({ missing: e.target.value || undefined })} options={columns.map((c) => ({ value: c.key, label: `Owes ${c.label}` }))} />
+                    <NativeSelect aria-label="Who" className="w-56" value={filters.scope ?? 'all'}
+                        onChange={(e) => apply({ scope: e.target.value === 'all' ? undefined : e.target.value })}
+                        options={[{ value: 'all', label: 'All current employees' }, { value: 'onboarding', label: 'Only people in onboarding' }]} />
+                </div>
+            </PageHeader>
+            <ChecklistGrid
+                rows={rows}
+                columns={columns}
+                optionSets={optionSets}
+                canEdit={auth.can.edit}
+                before={before}
+                after={after}
+                reload={['rows', 'owed']}
+                headerBadge={(c) => (owed[c.key] ? <span className="mt-1 block text-[11px] font-normal text-muted-foreground">{owed[c.key]} owed</span> : <span className="mt-1 block text-[11px] font-normal text-done">All on file</span>)}
+                empty={<EmptyState title="Nobody matches these filters.">Clear a filter to see more people.</EmptyState>}
+            />
+        </>
+    );
+}

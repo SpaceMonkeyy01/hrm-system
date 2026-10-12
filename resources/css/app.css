@@ -1,0 +1,210 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@source '../views';
+
+/*
+ * HRM design tokens
+ * Chrome is ink on paper; colour is reserved for status, plus Blue Cascade navy for actions.
+ * Brand (from the Blue Cascade logo): navy #00435C, sky #85B4C9. Sky is too light for text
+ * on white (about 2.2:1), so it only appears as soft tints.
+ *   paper   #EEF3F6  sidebar / app background
+ *   sheet   #FFFFFF  content surface
+ *   ink     #1D2B3A  text
+ *   slate   #5F6E82  secondary text
+ *   rule    #DCE1E8  borders
+ *   cascade #00435C  actions, links, focus (brand navy, 10.7:1 with white)
+ * Status tones (text on soft background, all >= 4.5:1):
+ *   done #1E7F4F/#E3F4EA  missing #B3261E/#FBE5E3  pending #8F5400/#FDF0D9
+ *   neutral #5D6B7A/#EEF1F5  info #3E5C7E/#E4EDF7  muted #6B4FA0/#EFEAF8
+ */
+
+@theme {
+    --font-sans: 'Atkinson Hyperlegible Next Variable', ui-sans-serif, system-ui, sans-serif;
+    /* Page titles only, echoing the geometric headings on bluecascade.org. Body and tables stay in --font-sans. */
+    --font-display: 'Jost Variable', 'Atkinson Hyperlegible Next Variable', ui-sans-serif, system-ui, sans-serif;
+
+    --radius-lg: var(--radius);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-sm: calc(var(--radius) - 4px);
+
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+
+    --color-sidebar: var(--sidebar);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-ring: var(--sidebar-ring);
+
+    --color-ink: #1d2b3a;
+    --color-paper: #eef3f6;
+    --color-rule: #dce1e8;
+    --color-cascade: #00435c;
+    --color-brand-navy: #00435c;
+    --color-brand-sky: #85b4c9;
+
+    --color-done: #1e7f4f;
+    --color-done-soft: #e3f4ea;
+    --color-missing: #b3261e;
+    --color-missing-soft: #fbe5e3;
+    --color-pending: #8f5400;
+    --color-pending-soft: #fdf0d9;
+    --color-neutral: #5d6b7a;
+    --color-neutral-soft: #eef1f5;
+    --color-info: #3e5c7e;
+    --color-info-soft: #e4edf7;
+    --color-muted-tone: #6b4fa0;
+    --color-muted-tone-soft: #efeaf8;
+}
+
+:root {
+    --background: #ffffff;
+    --foreground: #1d2b3a;
+    --card: #ffffff;
+    --card-foreground: #1d2b3a;
+    --popover: #ffffff;
+    --popover-foreground: #1d2b3a;
+    --primary: #00435c;
+    --primary-foreground: #ffffff;
+    --secondary: #eef1f5;
+    --secondary-foreground: #1d2b3a;
+    --muted: #f3f5f8;
+    --muted-foreground: #5f6e82;
+    --accent: #e7f0f5;
+    --accent-foreground: #1d2b3a;
+    --destructive: #b3261e;
+    --destructive-foreground: #ffffff;
+    --border: #dce1e8;
+    --input: #cbd3dd;
+    --ring: #00435c;
+    --radius: 0.4rem;
+
+    --sidebar: #eef3f6;
+    --sidebar-foreground: #1d2b3a;
+    --sidebar-primary: #00435c;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #d9e8ef;
+    --sidebar-accent-foreground: #1d2b3a;
+    --sidebar-border: #dce1e8;
+    --sidebar-ring: #00435c;
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+
+    html {
+        background: var(--sidebar);
+    }
+
+    body {
+        @apply bg-sidebar text-foreground;
+        font-feature-settings: 'tnum' 1;
+    }
+
+    :focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+            animation-duration: 0.01ms !important;
+            transition-duration: 0.01ms !important;
+        }
+    }
+}
+
+@layer components {
+    /* Spreadsheet-style grid: sticky header row and sticky first column */
+    .hr-grid {
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    .hr-grid th,
+    .hr-grid td {
+        border-bottom: 1px solid var(--border);
+    }
+    .hr-grid thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: #f6f8fa;
+    }
+    .hr-grid .sticky-col {
+        position: sticky;
+        left: 0;
+        z-index: 1;
+        background: #ffffff;
+        box-shadow: 1px 0 0 var(--border);
+    }
+    .hr-grid thead .sticky-col {
+        z-index: 3;
+        background: #f6f8fa;
+    }
+    .hr-grid tbody tr:hover td,
+    .hr-grid tbody tr:hover .sticky-col {
+        background: #f4f8fa;
+    }
+    .hr-grid tbody tr[data-selected='true'] td,
+    .hr-grid tbody tr[data-selected='true'] .sticky-col {
+        background: #e7f0f5;
+    }
+}
+
+@layer components {
+    /* Two-row grid header: group names on top, item names below */
+    .hr-grid thead tr.groups th {
+        height: 1.75rem;
+    }
+    .hr-grid thead tr.sub th {
+        top: 1.75rem;
+    }
+}
+
+/*
+ * Brand backgrounds, after the wireframe hero on bluecascade.org. Decorative only, never behind data:
+ *   .bg-blueprint  login screen: perspective wireframe (public/images/blueprint.svg)
+ *   .bg-grid-faint page header band: a faint square grid that fades out to the right
+ */
+@layer components {
+    .bg-blueprint {
+        background-color: var(--color-paper);
+        background-image: url('/images/blueprint.svg');
+        background-size: cover;
+        background-position: center;
+    }
+
+    .bg-grid-faint {
+        background-image:
+            linear-gradient(to right, rgb(0 67 92 / 0.05) 1px, transparent 1px),
+            linear-gradient(to bottom, rgb(0 67 92 / 0.05) 1px, transparent 1px);
+        background-size: 24px 24px;
+        background-position: -1px -1px;
+        mask-image: linear-gradient(to right, black, transparent 70%);
+    }
+}
