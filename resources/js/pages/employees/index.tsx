@@ -3,6 +3,7 @@ import { Download, Plus, Search, SearchX, TableProperties } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Avatar } from '@/components/avatar';
 import { EmptyState } from '@/components/empty-state';
+import { FilterBar } from '@/components/filter-bar';
 import { NativeSelect } from '@/components/native-select';
 import { PageHeader } from '@/components/page-header';
 import { Pagination } from '@/components/pagination';
@@ -65,11 +66,12 @@ export default function EmployeesIndex({ employees, filters, companies }: { empl
                     </>
                 }
             >
-                <div className="flex flex-wrap items-center gap-2">
-                    <div className="relative w-full sm:w-72">
-                        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, code, ID or CNIC" className="pl-8" aria-label="Search employees" />
-                    </div>
+                <FilterBar active={[filters.company, filters.department, filters.status !== 'current' ? filters.status : null, filters.review, filters.unassigned].filter(Boolean).length} search={
+                        <div className="relative w-full md:w-72">
+                            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, code, ID or CNIC" className="pl-8" aria-label="Search employees" />
+                        </div>
+                }>
                     <NativeSelect aria-label="Company" className="w-40" value={filters.company ?? ''} placeholder="All companies"
                         onChange={(e) => apply({ company: e.target.value ? Number(e.target.value) : undefined, department: undefined })}
                         options={companies.map((c) => ({ value: c.id, label: c.name }))} />
@@ -90,7 +92,7 @@ export default function EmployeesIndex({ employees, filters, companies }: { empl
                         <input type="checkbox" className="size-4 accent-cascade" checked={!!filters.unassigned} onChange={(e) => apply({ unassigned: e.target.checked || undefined })} />
                         No company yet
                     </label>
-                </div>
+                </FilterBar>
             </PageHeader>
 
             <div className="px-4 md:px-6">

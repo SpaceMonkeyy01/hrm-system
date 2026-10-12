@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { ChecklistGrid } from '@/components/checklist-grid';
 import type { ExtraColumn, GridRow } from '@/components/checklist-grid';
 import { EmptyState } from '@/components/empty-state';
+import { FilterBar } from '@/components/filter-bar';
 import { NativeSelect, toOptions } from '@/components/native-select';
 import { PageHeader } from '@/components/page-header';
 import { computedTone, StatusPill } from '@/components/status-pill';
@@ -127,11 +128,12 @@ export default function OnboardingIndex({ rows, columns, optionSets, filters, co
                 description="One row per person in onboarding. Click a status to change it, or focus it and type the first letter (Y, N, D). Tick rows to update many at once."
                 actions={<Button variant="outline" asChild><a href="/export/onboarding"><Download /> Export CSV</a></Button>}
             >
-                <div className="flex flex-wrap items-center gap-2">
-                    <div className="relative w-full sm:w-60">
-                        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or code" className="pl-8" aria-label="Search" />
-                    </div>
+                <FilterBar active={[filters.company, filters.department, filters.cohort, filters.status, filters.orientation, filters.probation, filters.legal, filters.docs].filter(Boolean).length} search={
+                        <div className="relative w-full md:w-60">
+                            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or code" className="pl-8" aria-label="Search" />
+                        </div>
+                }>
                     <NativeSelect aria-label="Company" className="w-40" value={filters.company ?? ''} placeholder="All companies"
                         onChange={(e) => apply({ company: e.target.value || undefined, department: undefined })} options={companies.map((c) => ({ value: c.id, label: c.name }))} />
                     <NativeSelect aria-label="Department" className="w-52" value={filters.department ?? ''} placeholder="All departments"
@@ -150,7 +152,7 @@ export default function OnboardingIndex({ rows, columns, optionSets, filters, co
                         Legal documents missing
                     </label>
                     {active && <Button variant="ghost" size="sm" onClick={() => router.get('/onboarding', query({ q: filters.q }))}>Clear filters</Button>}
-                </div>
+                </FilterBar>
                 {notInOnboarding > 0 && (
                     <p className="mt-3 text-xs text-muted-foreground">
                         {notInOnboarding} current employees aren't in onboarding (they weren't on either onboarding sheet). Start it from their profile.
