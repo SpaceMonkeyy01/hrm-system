@@ -1,12 +1,13 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Minus, Plus, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { OrgBoard } from '@/components/org-board';
 import { OrgTree } from '@/components/org-tree';
-import type { OrgNode } from '@/components/org-tree';
+import type { OrgNode, TreeCommand } from '@/components/org-tree';
 import { NativeSelect } from '@/components/native-select';
 import { PageHeader } from '@/components/page-header';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { plural } from '@/lib/format';
@@ -120,6 +121,11 @@ export default function OrgChart(props: Props) {
         .map((c) => ({ ...c, departments: c.departments.filter((d) => d.teams.some((t) => t.people.some((p) => p.name.toLowerCase().includes(needle)))) }))
         .filter((c) => c.departments.length), [props.structure, needle]);
 
+    const [view, setView] = useState('chart');
+    // Phones start zoomed out so a box and its neighbours fit.
+    const [zoom, setZoom] = useState(() => (typeof window !== 'undefined' && window.innerWidth < 640 ? 0.7 : 1));
+    const [command, setCommand] = useState<TreeCommand>(null);
+    const chartView = view === 'chart' || (view === 'managers' && props.managers.roots.length > 0);
     const chart = useMemo(() => structureTree(props.structure), [props.structure]);
     const reporting = useMemo(() => managerTree(props.managers.roots, props.managers.inTree), [props.managers]);
 
@@ -129,26 +135,47 @@ export default function OrgChart(props: Props) {
             <PageHeader
                 title="Org chart"
                 description={`${plural(props.total, 'current employee')}: a chart and a board by department and team, a plain list, and who reports to whom.`}
-                actions={props.companies.length > 1 && (
-                    <NativeSelect className="w-44" aria-label="Company" value={props.filters.company ?? ''} placeholder="All companies"
-                        options={props.companies.map((c) => ({ value: c.id, label: c.name }))}
-                        onChange={(e) => router.get('/org-chart', e.target.value ? { company: e.target.value } : {}, { preserveState: true, replace: true })} />
-                )}
             />
-            <Tabs defaultValue="chart" className="px-4 py-6 md:px-6">
-                <div className="flex flex-wrap items-end justify-between gap-3">
-                    <TabsList className="w-auto">
+            <Tabs value={view} onValueChange={setView} className="gap-0 px-4 pb-6 md:px-6">
+                {/* View bar: from tablet width up it stays at the top while the chart or board scrolls underneath
+                    (on a phone it would cover too much of the screen). */}
+                <div className="z-20 -mx-4 md:sticky md:top-0 mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-b bg-background/95 px-4 py-2 backdrop-blur md:-mx-6 md:px-6">
+                    <TabsList className="w-auto border-b-0">
                         <TabsTrigger value="chart">Chart</TabsTrigger>
                         <TabsTrigger value="board">Board</TabsTrigger>
                         <TabsTrigger value="structure">List</TabsTrigger>
                         <TabsTrigger value="managers">Reporting lines</TabsTrigger>
                     </TabsList>
-                    <Input className="w-64" placeholder="Find a person" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Find a person" />
+                    <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
+                        {props.companies.length > 1 && (
+                            <NativeSelect className="w-40" aria-label="Company" value={props.filters.company ?? ''} placeholder="All companies"
+                                options={props.companies.map((c) => ({ value: c.id, label: c.name }))}
+                                onChange={(e) => router.get('/org-chart', e.target.value ? { company: e.target.value } : {}, { preserveState: true, replace: true })} />
+                        )}
+                        <div className="relative w-full sm:w-56">
+                            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input className="pl-8" placeholder="Find a person" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Find a person" />
+                        </div>
+                        {chartView && (
+                            <>
+                                <span className="hidden h-6 w-px bg-border sm:block" aria-hidden />
+                                <Button variant="outline" size="sm" onClick={() => setCommand((c) => ({ kind: 'open', n: (c?.n ?? 0) + 1 }))}>Open all</Button>
+                                <Button variant="outline" size="sm" onClick={() => setCommand((c) => ({ kind: 'close', n: (c?.n ?? 0) + 1 }))}>Close all</Button>
+                                <div className="flex items-center gap-1" role="group" aria-label="Zoom">
+                                    <Button variant="outline" size="icon" className="size-8" aria-label="Zoom out" disabled={zoom <= 0.5} onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(1)))}><Minus /></Button>
+                                    <button type="button" className="w-12 text-center text-xs font-semibold tabular-nums text-muted-foreground hover:text-foreground" onClick={() => setZoom(1)} title="Back to 100%">
+                                        {Math.round(zoom * 100)}%
+                                    </button>
+                                    <Button variant="outline" size="icon" className="size-8" aria-label="Zoom in" disabled={zoom >= 1.3} onClick={() => setZoom((z) => Math.min(1.3, +(z + 0.1).toFixed(1)))}><Plus /></Button>
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </div>
 
                 <TabsContent value="chart">
                     {props.structure.length === 0 ? <EmptyState title="No current employees." /> : (
-                        <OrgTree key={props.filters.company ?? 'all'} root={chart} needle={needle}
+                        <OrgTree key={props.filters.company ?? 'all'} root={chart} needle={needle} zoom={zoom} command={command}
                             startOpen={chart.kind === 'root' ? [chart.key, ...(chart.children ?? []).map((c) => c.key)] : [chart.key]} />
                     )}
                 </TabsContent>
@@ -182,7 +209,7 @@ export default function OrgChart(props: Props) {
                             <p className="text-sm text-muted-foreground">
                                 {props.managers.inTree} people are in a reporting line. {props.managers.withoutManager > 0 && `${plural(props.managers.withoutManager, 'person', 'people')} have no manager set and nobody reporting to them.`}
                             </p>
-                            <OrgTree root={reporting} needle={needle} startOpen={[reporting.key, ...(reporting.children ?? []).map((c) => c.key)]} />
+                            <OrgTree root={reporting} needle={needle} zoom={zoom} command={command} startOpen={[reporting.key, ...(reporting.children ?? []).map((c) => c.key)]} />
                             <details className="text-sm">
                                 <summary className="cursor-pointer font-semibold text-cascade">Show as an indented list</summary>
                                 <ul className="mt-2 rounded-lg border p-3">

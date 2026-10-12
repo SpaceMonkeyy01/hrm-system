@@ -1,8 +1,7 @@
 import { Link } from '@inertiajs/react';
-import { ChevronDown, ChevronRight, Minus, Plus } from 'lucide-react';
-import { useState } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { Avatar } from '@/components/avatar';
-import { Button } from '@/components/ui/button';
 import { plural } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -131,10 +130,25 @@ function pathsTo(n: OrgNode, match: (p: OrgPerson) => boolean): string[] {
     return own || below.length ? [n.key, ...below] : [];
 }
 
-/** Top-down flow chart with zoom. `startOpen` = boxes open at first (e.g. the root and companies). */
-export function OrgTree({ root, startOpen, needle }: { root: OrgNode; startOpen: string[]; needle: string }) {
+/** "Open all" / "Close all" from the page's bar; `n` changes on every press so pressing twice works. */
+export type TreeCommand = { kind: 'open' | 'close'; n: number } | null;
+
+/**
+ * Top-down flow chart. `startOpen` = boxes open at first (e.g. the root and companies). Zoom and the
+ * open/close-all buttons live in the page's sticky bar (pages/org-chart.tsx) and arrive as props.
+ */
+export function OrgTree({ root, startOpen, needle, zoom, command }: { root: OrgNode; startOpen: string[]; needle: string; zoom: number; command: TreeCommand }) {
     const [open, setOpen] = useState<Set<string>>(() => new Set(startOpen));
-    const [zoom, setZoom] = useState(1);
+    // Start with the top box in view: a wide chart would otherwise open scrolled to its left edge.
+    const scroller = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        const el = scroller.current;
+        if (el) el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+    }, []);
+    useEffect(() => {
+        if (command) setOpen(new Set(command.kind === 'open' ? allKeys(root) : startOpen));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [command]);
     const highlight = (p: OrgPerson) => !!needle && p.name.toLowerCase().includes(needle);
     const searching = needle ? new Set(pathsTo(root, highlight)) : null;
     const effective = searching && searching.size ? new Set([...open, ...searching]) : open;
@@ -147,20 +161,8 @@ export function OrgTree({ root, startOpen, needle }: { root: OrgNode; startOpen:
 
     return (
         <div className="grid gap-2">
-            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                <div className="flex items-center gap-1">
-                    <Button variant="outline" size="sm" onClick={() => setOpen(new Set(allKeys(root)))}>Open all</Button>
-                    <Button variant="outline" size="sm" onClick={() => setOpen(new Set(startOpen))}>Close all</Button>
-                </div>
-                <div className="flex items-center gap-1" role="group" aria-label="Zoom">
-                    <Button variant="outline" size="icon" className="size-8" aria-label="Zoom out" disabled={zoom <= 0.5} onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(1)))}><Minus /></Button>
-                    <button type="button" className="w-14 text-center text-xs font-semibold tabular-nums text-muted-foreground hover:text-foreground" onClick={() => setZoom(1)} title="Back to 100%">
-                        {Math.round(zoom * 100)}%
-                    </button>
-                    <Button variant="outline" size="icon" className="size-8" aria-label="Zoom in" disabled={zoom >= 1.3} onClick={() => setZoom((z) => Math.min(1.3, +(z + 0.1).toFixed(1)))}><Plus /></Button>
-                </div>
-            </div>
-            <div className="overflow-auto rounded-lg border bg-[#fbfcfd] p-6" style={{ maxHeight: 'calc(100svh - 16rem)' }}>
+            {/* Scrolls sideways when wide; up and down with the page, under the sticky bar. */}
+            <div ref={scroller} className="overflow-x-auto rounded-lg border bg-[#fbfcfd] p-6">
                 <div className="org-tree mx-auto w-max" style={{ zoom }}>
                     <ul><Branch node={root} open={effective} toggle={toggle} highlight={highlight} /></ul>
                 </div>
