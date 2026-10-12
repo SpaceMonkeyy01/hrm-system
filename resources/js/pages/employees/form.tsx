@@ -201,7 +201,7 @@ export default function EmployeeForm({ employee, companies, managers, employment
 
                 <fieldset className="grid gap-4 sm:grid-cols-2">
                     <legend className="mb-3 font-bold">Systems</legend>
-                    {text('hr_portal_id', 'HR portal ID')}
+                    {text('hr_portal_id', 'HR.my ID')}
                     {text('drive_folder_url', 'Drive folder link', { type: 'url', placeholder: 'https://drive.google.com/...' })}
                     {text('attendance_machine', 'Attendance machine')}
                     {text('attendance_machine_id', 'Attendance machine ID')}

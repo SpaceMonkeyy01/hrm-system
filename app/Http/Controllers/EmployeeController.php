@@ -113,7 +113,7 @@ class EmployeeController extends Controller
 
         return Inertia::render('employees/show', [
             'employee' => [
-                ...$employee->only(['id', 'employee_code', 'full_name', 'first_name', 'last_name', 'email', 'phone',
+                ...$employee->only(['id', 'system_id', 'employee_code', 'full_name', 'first_name', 'last_name', 'email', 'phone',
                     'gender', 'personal_email', 'city', 'work_mode', 'work_location',
                     'role_title', 'employment_type', 'status', 'hr_portal_id', 'attendance_machine', 'attendance_machine_id',
                     'drive_folder_url', 'notes', 'needs_review', 'review_note', 'source_ref']),

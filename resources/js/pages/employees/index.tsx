@@ -42,7 +42,7 @@ export default function EmployeesIndex({ employees, filters, companies }: { empl
             <Head title="Employees" />
             <PageHeader
                 title="Employees"
-                description="Everyone in BCC and Emerge, with one unique code each. Every other HR record links to this code."
+                description="Everyone in BCC and Emerge, with one unique code each and a permanent system ID that never changes."
                 actions={
                     <>
                         <Button variant="outline" asChild>
@@ -59,7 +59,7 @@ export default function EmployeesIndex({ employees, filters, companies }: { empl
                 <div className="flex flex-wrap items-center gap-2">
                     <div className="relative w-full sm:w-72">
                         <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, code or CNIC" className="pl-8" aria-label="Search employees" />
+                        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, code, ID or CNIC" className="pl-8" aria-label="Search employees" />
                     </div>
                     <NativeSelect aria-label="Company" className="w-40" value={filters.company ?? ''} placeholder="All companies"
                         onChange={(e) => apply({ company: e.target.value ? Number(e.target.value) : undefined, department: undefined })}

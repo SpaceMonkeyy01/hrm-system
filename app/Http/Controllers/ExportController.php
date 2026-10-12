@@ -56,10 +56,10 @@ class ExportController extends Controller
     {
         return [
             ['Code', 'Name', 'Company', 'Department', 'Team', 'Role', 'Employment type', 'Start date', 'Status',
-                'Exit date', 'CNIC', 'Email', 'Phone', 'HR portal ID', 'Attendance machine ID', 'Drive folder', 'Needs review'],
+                'Exit date', 'CNIC', 'Email', 'Phone', 'HR.my ID', 'Attendance machine ID', 'Drive folder', 'Needs review', 'System ID'],
             $employees->map(fn ($e) => [...$this->base($e), $e->team?->name, $e->role_title, $e->employment_type,
                 $e->start_date?->toDateString(), $e->status, $e->exit_date?->toDateString(), $e->cnic, $e->email, $e->phone,
-                $e->hr_portal_id, $e->attendance_machine_id, $e->drive_folder_url, $e->needs_review ? 'Yes' : ''])->all(),
+                $e->hr_portal_id, $e->attendance_machine_id, $e->drive_folder_url, $e->needs_review ? 'Yes' : '', $e->system_id])->all(),
         ];
     }
 

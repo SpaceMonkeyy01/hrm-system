@@ -62,6 +62,23 @@ class WorkflowTest extends TestCase
         $this->assertFalse($e->needs_review);
     }
 
+    public function test_system_id_is_set_once_and_survives_a_code_change(): void
+    {
+        [$company] = $this->baseData();
+        $e = Employee::create(['employee_code' => 'UNASSIGNED-001', 'full_name' => 'Imported Person', 'status' => 'active']);
+        $systemId = Employee::systemIdFor($e->id);
+        $this->assertSame($systemId, $e->fresh()->system_id);
+
+        $this->actingAs($this->user('hr'))->put("/employees/{$e->id}", ['company_id' => $company->id, 'full_name' => 'Imported Person', 'system_id' => 'HRM-99999'])
+            ->assertRedirect();
+        $e->refresh();
+        $this->assertSame('BCC-001', $e->employee_code);
+        $this->assertSame($systemId, $e->system_id, 'not typed, not changed by a code change');
+
+        $this->actingAs($this->user('viewer'))->get('/employees?q='.$systemId)
+            ->assertInertia(fn (AssertableInertia $p) => $p->where('employees.data.0.id', $e->id)->where('employees.total', 1));
+    }
+
     public function test_changing_start_date_moves_the_computed_probation_end(): void
     {
         [$company] = $this->baseData();

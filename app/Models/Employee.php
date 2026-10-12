@@ -45,6 +45,22 @@ class Employee extends Model
     /** Same defaults as the migration, so a just-created model has them in memory too. */
     protected $attributes = ['status' => 'active', 'needs_review' => false];
 
+    /** This app's permanent ID, from the row id: never typed, never reused, unchanged when the code changes. */
+    public static function systemIdFor(int $id): string
+    {
+        return 'HRM-'.str_pad((string) $id, 5, '0', STR_PAD_LEFT);
+    }
+
+    protected static function booted(): void
+    {
+        static::created(function (Employee $e) {
+            if (! $e->system_id) {
+                $e->system_id = self::systemIdFor($e->id);
+                $e->saveQuietly();
+            }
+        });
+    }
+
     protected function casts(): array
     {
         return [
@@ -117,7 +133,7 @@ class Employee extends Model
         return $this->hasMany(ActivityLog::class)->latest('id');
     }
 
-    /** Name, code or CNIC contains $term. */
+    /** Name, code, system ID, HR.my ID or CNIC contains $term. */
     public function scopeSearch(Builder $q, ?string $term): Builder
     {
         if (! $term) {
@@ -127,6 +143,8 @@ class Employee extends Model
 
         return $q->where(fn ($w) => $w->where('full_name', 'like', $like)
             ->orWhere('employee_code', 'like', $like)
+            ->orWhere('system_id', 'like', $like)
+            ->orWhere('hr_portal_id', 'like', $like)
             ->orWhere('cnic', 'like', $like));
     }
 

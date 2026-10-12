@@ -20,7 +20,7 @@ import { leaveDates } from '@/components/leave';
 import type { LeaveRecordRow } from '@/components/leave';
 
 type Employee = {
-    id: number; employee_code: string; full_name: string; first_name: string | null; last_name: string | null; cnic: string | null;
+    id: number; system_id: string; employee_code: string; full_name: string; first_name: string | null; last_name: string | null; cnic: string | null;
     email: string | null; phone: string | null; role_title: string | null; employment_type: string | null; status: string;
     hr_portal_id: string | null; attendance_machine: string | null; attendance_machine_id: string | null; drive_folder_url: string | null;
     notes: string | null; needs_review: boolean; review_note: string | null; source_ref: string | null;
@@ -417,6 +417,7 @@ export default function EmployeeShow(props: Props) {
                         <dl className="grid content-start gap-4">
                             <h2 className="font-bold">Identity</h2>
                             <Detail label="Employee code">{e.employee_code}</Detail>
+                            <Detail label="System ID">{e.system_id}</Detail>
                             <Detail label="Full name">{e.full_name}</Detail>
                             <Detail label="First and last name">{[e.first_name, e.last_name].filter(Boolean).join(' ')}</Detail>
                             <Detail label="Gender">{e.gender}</Detail>
@@ -438,7 +439,7 @@ export default function EmployeeShow(props: Props) {
                         </dl>
                         <dl className="grid content-start gap-4">
                             <h2 className="font-bold">Systems</h2>
-                            <Detail label="HR portal ID">{e.hr_portal_id}</Detail>
+                            <Detail label="HR.my ID">{e.hr_portal_id}</Detail>
                             <Detail label="Attendance machine">{[e.attendance_machine, e.attendance_machine_id && `ID ${e.attendance_machine_id}`].filter(Boolean).join(', ')}</Detail>
                             <Detail label="Drive folder">{e.drive_folder_url && <a className="inline-flex items-center gap-1 text-cascade hover:underline" href={e.drive_folder_url} target="_blank" rel="noreferrer">Open folder <ExternalLink className="size-3.5" /></a>}</Detail>
                             <Detail label="Notes">{e.notes && <span className="whitespace-pre-line">{e.notes}</span>}</Detail>
