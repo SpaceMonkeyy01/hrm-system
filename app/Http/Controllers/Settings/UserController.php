@@ -24,6 +24,7 @@ class UserController extends Controller
                     'employee' => $u->employee ? "{$u->employee->full_name} ({$u->employee->employee_code})" : null,
                     'created_at' => $u->created_at?->toIso8601String()]),
             'roles' => config('hrm.roles'),
+            'staffLogins' => (fn ($c) => ['ready' => $c['ready']->count(), 'noEmail' => $c['noEmail'], 'emailTaken' => $c['emailTaken']])(StaffLoginController::candidates()),
             // Current staff, for linking a login to its own employee record (My page).
             'employees' => Employee::query()->whereIn('status', ['active', 'offboarding'])->orderBy('full_name')->get(['id', 'full_name', 'employee_code'])
                 ->map(fn ($e) => ['value' => $e->id, 'label' => "{$e->full_name} ({$e->employee_code})"]),

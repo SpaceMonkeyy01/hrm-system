@@ -1,5 +1,5 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Download, Plus, Search } from 'lucide-react';
+import { Download, Plus, Search, TableProperties } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { NativeSelect } from '@/components/native-select';
@@ -49,9 +49,14 @@ export default function EmployeesIndex({ employees, filters, companies }: { empl
                             <a href="/export/employees"><Download /> Export CSV</a>
                         </Button>
                         {auth.can.edit && (
-                            <Button asChild>
-                                <Link href="/employees/create"><Plus /> Add employee</Link>
-                            </Button>
+                            <>
+                                <Button variant="outline" asChild>
+                                    <Link href="/imports/details"><TableProperties /> Fill in details</Link>
+                                </Button>
+                                <Button asChild>
+                                    <Link href="/employees/create"><Plus /> Add employee</Link>
+                                </Button>
+                            </>
                         )}
                     </>
                 }

@@ -109,6 +109,27 @@ class PeopleReports
         return $r;
     }
 
+    /** Our code next to the HR.my ID (linked by name) and the machine number, so HR can see where the numbering differs. */
+    public function codes(ReportFilters $f): ReportResult
+    {
+        $people = $f->current()->with('department:id,name')->orderBy('employee_code')
+            ->get(['id', 'system_id', 'employee_code', 'full_name', 'department_id', 'hr_portal_id', 'attendance_machine_id']);
+        $tones = ['Same' => 'done', 'Different' => 'pending', 'Not linked' => 'neutral'];
+        $r = (new ReportResult)->column('employee', 'Employee', 'employee')->column('department', 'Department')->column('system_id', 'System ID')
+            ->column('hrmy', 'HR.my ID')->column('match', 'HR.my vs our code', 'status', ['tones' => $tones])->column('machine', 'Machine no.');
+        foreach ($people as $e) {
+            $match = ! $e->hr_portal_id ? 'Not linked' : (strcasecmp($e->hr_portal_id, $e->employee_code) === 0 ? 'Same' : 'Different');
+            $r->rows[] = ['employee' => ReportResult::person($e), 'department' => $e->department?->name, 'system_id' => $e->system_id,
+                'hrmy' => $e->hr_portal_id, 'match' => $match, 'machine' => $e->attendance_machine_id];
+        }
+        $count = array_count_values(array_column($r->rows, 'match'));
+        $r->stat('Same code', $count['Same'] ?? 0, 'done')->stat('Different code', $count['Different'] ?? 0, ($count['Different'] ?? 0) ? 'pending' : null)
+            ->stat('No HR.my ID', $count['Not linked'] ?? 0)->stat('No machine no.', count(array_filter($r->rows, fn ($x) => ! $x['machine'])));
+        $r->note('HR.my IDs were linked by name, because HR.my numbers people differently from the department lists. Decide which numbering is official; the System ID never changes either way.');
+
+        return $r;
+    }
+
     public function probation(ReportFilters $f): ReportResult
     {
         $tones = ['Pending' => 'pending', 'Pass' => 'done', 'Extend' => 'info', 'Fail' => 'missing'];

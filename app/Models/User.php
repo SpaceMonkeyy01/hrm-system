@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\LogsActivity;
+use App\Notifications\SetPasswordNotification;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -58,6 +59,12 @@ class User extends Authenticatable
     public function homeUrl(): string
     {
         return $this->canViewHr() ? route('dashboard') : route('me.show');
+    }
+
+    /** "Forgot your password?" email, in the app's own words. */
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new SetPasswordNotification($token));
     }
 
     /** admin and hr can change HR records; viewer is read-only. */

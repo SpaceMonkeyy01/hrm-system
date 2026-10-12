@@ -5,6 +5,7 @@ use App\Http\Controllers\AssetController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\AttendanceRequestController;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\ChecklistEntryController;
 use App\Http\Controllers\ControlledDocumentController;
 use App\Http\Controllers\DashboardController;
@@ -22,7 +23,9 @@ use App\Http\Controllers\OverviewController;
 use App\Http\Controllers\ProbationPlanController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ReviewController;
+use App\Http\Controllers\SpreadsheetImportController;
 use App\Http\Controllers\Settings\ChecklistItemController;
+use App\Http\Controllers\Settings\StaffLoginController;
 use App\Http\Controllers\Settings\StructureController;
 use App\Http\Controllers\Settings\UserController;
 use App\Http\Controllers\WorkScheduleController;
@@ -41,6 +44,10 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('guest')->group(function () {
     Route::get('login', [LoginController::class, 'create'])->name('login');
     Route::post('login', [LoginController::class, 'store'])->name('login.store');
+    Route::get('forgot-password', [PasswordController::class, 'request'])->name('password.request');
+    Route::post('forgot-password', [PasswordController::class, 'email'])->middleware('throttle:5,1')->name('password.email');
+    Route::get('reset-password/{token}', [PasswordController::class, 'edit'])->name('password.reset');
+    Route::post('reset-password', [PasswordController::class, 'update'])->middleware('throttle:10,1')->name('password.update');
 });
 
 Route::middleware('auth')->group(function () {
@@ -76,6 +83,12 @@ Route::middleware('auth')->group(function () {
         Route::get('employees', [EmployeeController::class, 'index'])->name('employees.index');
         Route::middleware('can:edit-hr')->group(function () {
             Route::get('employees/create', [EmployeeController::class, 'create'])->name('employees.create');
+            // Spreadsheet imports: download, fill in Excel, upload, preview, save (SpreadsheetImportController::KINDS)
+            Route::get('imports/{kind}', [SpreadsheetImportController::class, 'show'])->whereIn('kind', ['details', 'assets'])->name('imports.show');
+            Route::get('imports/{kind}/template', [SpreadsheetImportController::class, 'template'])->whereIn('kind', ['details', 'assets'])->name('imports.template');
+            Route::post('imports/{kind}', [SpreadsheetImportController::class, 'upload'])->whereIn('kind', ['details', 'assets'])->name('imports.upload');
+            Route::post('imports/{kind}/apply', [SpreadsheetImportController::class, 'apply'])->whereIn('kind', ['details', 'assets'])->name('imports.apply');
+            Route::delete('imports/{kind}', [SpreadsheetImportController::class, 'discard'])->whereIn('kind', ['details', 'assets'])->name('imports.discard');
             Route::post('employees', [EmployeeController::class, 'store'])->name('employees.store');
             Route::get('employees/{employee}/edit', [EmployeeController::class, 'edit'])->name('employees.edit');
             Route::put('employees/{employee}', [EmployeeController::class, 'update'])->name('employees.update');
@@ -189,6 +202,7 @@ Route::middleware('auth')->group(function () {
             Route::get('users', [UserController::class, 'index'])->name('users.index');
             Route::post('users', [UserController::class, 'store'])->name('users.store');
             Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
+        Route::post('users/staff-logins', [StaffLoginController::class, 'store'])->name('users.staff-logins');
 
             Route::get('structure', [StructureController::class, 'index'])->name('structure.index');
             Route::post('departments', [StructureController::class, 'storeDepartment'])->name('departments.store');

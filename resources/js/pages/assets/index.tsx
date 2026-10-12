@@ -1,5 +1,5 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { ChevronDown, ChevronRight, Pencil, Plus, Undo2, UserPlus } from 'lucide-react';
+import { ChevronDown, ChevronRight, Pencil, Plus, Undo2, Upload, UserPlus } from 'lucide-react';
 import { type FormEvent, Fragment, useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { Field } from '@/components/field';
@@ -169,7 +169,12 @@ export default function Assets(props: Props) {
             <PageHeader
                 title="Assets"
                 description="Company property and who has it. Offboarding can't be completed while someone still has something on this list."
-                actions={can && <Button onClick={() => setDialog({ kind: 'form', asset: null })}><Plus /> Add asset</Button>}
+                actions={can && (
+                    <>
+                        <Button variant="outline" asChild><Link href="/imports/assets"><Upload /> Upload a list</Link></Button>
+                        <Button onClick={() => setDialog({ kind: 'form', asset: null })}><Plus /> Add asset</Button>
+                    </>
+                )}
             >
                 <div className="flex flex-wrap items-center gap-2">
                     <Button size="sm" variant={!props.filters.status ? 'default' : 'outline'} onClick={() => go({ status: undefined })}>All {total}</Button>

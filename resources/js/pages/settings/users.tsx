@@ -1,5 +1,5 @@
-import { Head, useForm, usePage } from '@inertiajs/react';
-import { Plus } from 'lucide-react';
+import { Head, router, useForm, usePage } from '@inertiajs/react';
+import { MailPlus, Plus } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Field } from '@/components/field';
@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { plural } from '@/lib/format';
 import type { SharedProps } from '@/types';
 
 type User = { id: number; name: string; email: string; role: string; is_active: boolean; employee_id: number | null; employee: string | null; created_at: string | null };
@@ -56,7 +57,7 @@ function UserRow({ user, roles, isMe, employees }: { user: User; roles: Record<s
     );
 }
 
-export default function Users({ users, roles, employees }: { users: User[]; roles: Record<string, string>; employees: Option[] }) {
+export default function Users({ users, roles, employees, staffLogins }: { users: User[]; roles: Record<string, string>; employees: Option[]; staffLogins: { ready: number; noEmail: number; emailTaken: number } }) {
     const { auth } = usePage<SharedProps>().props;
     const [open, setOpen] = useState(false);
     const form = useForm({ name: '', email: '', role: 'hr', password: '', employee_id: '' });
@@ -74,6 +75,22 @@ export default function Users({ users, roles, employees }: { users: User[]; role
                     {Object.entries(roles).map(([k, v]) => <li key={k}>{v}</li>)}
                 </ul>
             </PageHeader>
+            <div className="mx-4 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 md:mx-6">
+                <p className="max-w-3xl text-sm">
+                    <span className="font-semibold">Staff logins for My page. </span>
+                    {staffLogins.ready
+                        ? `${plural(staffLogins.ready, 'current employee has', 'current employees have')} a work email and no login yet.`
+                        : staffLogins.noEmail ? '' : 'Everyone with a work email already has a login.'}
+                    {staffLogins.noEmail > 0 && ` ${plural(staffLogins.noEmail, 'person has', 'people have')} no work email on file: add it on their profile or with Employees, Fill in details.`}
+                    {staffLogins.emailTaken > 0 && ` ${staffLogins.emailTaken} share an email with an existing login.`}
+                    {' '}Each new login gets an email with a link to choose their own password.
+                </p>
+                <Button disabled={!staffLogins.ready}
+                    onClick={() => confirm(`Create ${plural(staffLogins.ready, 'login')} and email each person a link to choose their password?`)
+                        && router.post('/settings/users/staff-logins', { send: true }, { preserveScroll: true })}>
+                    <MailPlus /> Create {plural(staffLogins.ready, 'staff login')}
+                </Button>
+            </div>
             <div className="overflow-x-auto px-4 py-4 md:px-6">
                 <table className="w-full min-w-[1080px] text-sm">
                     <thead>

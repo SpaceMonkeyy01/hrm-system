@@ -1,4 +1,4 @@
-import { Head, useForm } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import type { FormEvent } from 'react';
 import { Field } from '@/components/field';
 import { Button } from '@/components/ui/button';
@@ -34,6 +34,7 @@ export default function Login() {
                 <Button type="submit" disabled={form.processing} className="mt-2">
                     {form.processing ? 'Logging in' : 'Log in'}
                 </Button>
+                <Link href="/forgot-password" className="text-center text-sm text-cascade hover:underline">Forgot your password?</Link>
             </form>
         </>
     );

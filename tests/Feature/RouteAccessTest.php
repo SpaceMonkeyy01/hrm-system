@@ -32,6 +32,8 @@ class RouteAccessTest extends TestCase
     private const OPEN_WRITE_ROUTES = [
         'POST login',
         'POST logout',
+        'POST forgot-password',
+        'POST reset-password',
         'PUT account',
     ];
 
@@ -80,7 +82,7 @@ class RouteAccessTest extends TestCase
                 $open[] = $route->uri();
             }
         }
-        $expected = ['/', 'account', 'login', 'logout', 'me', 'me/contact', 'me/requests', 'me/requests/{correction}',
+        $expected = ['/', 'account', 'login', 'logout', 'forgot-password', 'reset-password', 'reset-password/{token}', 'me', 'me/contact', 'me/requests', 'me/requests/{correction}',
             'me/reviews/{review}', 'me/reviews/{review}/acknowledge', 'storage/{path}', 'up'];
         $this->assertSame([], array_values(array_diff(array_unique($open), $expected)));
     }
@@ -143,6 +145,7 @@ class RouteAccessTest extends TestCase
             'history' => EmploymentHistory::create(['employee_id' => $e->id, 'effective_date' => '2026-01-01', 'change_type' => 'Other'])->id,
             'correction' => AttendanceRequest::create(['employee_id' => $e->id, 'date' => '2026-05-13', 'check_in' => '09:00', 'reason' => 'Test'])->id,
             'report' => 'headcount',
+            'kind' => 'details',
             'asset' => Asset::create(['asset_tag' => 'T-1', 'type' => 'Laptop', 'name' => 'Test laptop'])->id,
             'cycle' => $cycle = ReviewCycle::create(['name' => 'Test cycle', 'period_start' => '2026-01-01', 'period_end' => '2026-06-30', 'criteria' => config('hrm.reviews.default_criteria')])->id,
             'review' => Review::create(['review_cycle_id' => $cycle, 'employee_id' => $e->id])->id,

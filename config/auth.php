@@ -99,6 +99,14 @@ return [
             'expire' => 60,
             'throttle' => 60,
         ],
+
+        // New staff logins (Settings > Users > Create staff logins): the link to choose a password lasts 3 days.
+        'invites' => [
+            'provider' => 'users',
+            'table' => env('AUTH_PASSWORD_RESET_TOKEN_TABLE', 'password_reset_tokens'),
+            'expire' => 4320,
+            'throttle' => 0,
+        ],
     ],
 
     /*
