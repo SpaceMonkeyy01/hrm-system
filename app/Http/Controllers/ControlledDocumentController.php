@@ -21,7 +21,7 @@ class ControlledDocumentController extends Controller
         ]);
 
         $docs = ControlledDocument::query()
-            ->when($f['q'] ?? null, fn ($q, $t) => $q->where(fn ($w) => $w->where('name', 'like', "%$t%")->orWhere('doc_number', 'like', "%$t%")))
+            ->when($f['q'] ?? null, fn ($q, $t) => $q->where(fn ($w) => $w->whereLike('name', "%$t%")->orWhereLike('doc_number', "%$t%")))
             ->when($f['type'] ?? null, fn ($q, $v) => $q->where('doc_type', $v))
             ->when($f['status'] ?? null, fn ($q, $v) => $q->where('status', $v))
             ->orderBy('doc_number')->get()

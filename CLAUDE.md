@@ -3,7 +3,7 @@
 Laravel 13 + Inertia 3 + React 19 (TypeScript) + Tailwind 4. Read `docs/ARCHITECTURE.md` first.
 
 ## Commands
-- Tests: `php vendor/bin/phpunit` (all must pass)
+- Tests: `php vendor/bin/phpunit` (all must pass). On Postgres too: `php vendor/bin/phpunit -c phpunit.pgsql.xml` (a local Postgres on port 55432, database `hrm_test`)
 - Types: `npx tsc --noEmit` (must be clean)
 - Build: `npm run build`
 

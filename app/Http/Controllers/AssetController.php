@@ -31,8 +31,8 @@ class AssetController extends Controller
         $like = isset($f['q']) ? '%'.str_replace(['%', '_'], ['\%', '\_'], $f['q']).'%' : null;
         $assets = Asset::query()
             ->with(['current.employee:id,full_name,employee_code,status', 'assignments' => fn ($q) => $q->limit(500), 'assignments.employee:id,full_name,employee_code'])
-            ->when($like, fn ($q) => $q->where(fn ($w) => $w->where('asset_tag', 'like', $like)->orWhere('name', 'like', $like)->orWhere('serial_number', 'like', $like)
-                ->orWhereHas('current.employee', fn ($e) => $e->where('full_name', 'like', $like)->orWhere('employee_code', 'like', $like))))
+            ->when($like, fn ($q) => $q->where(fn ($w) => $w->whereLike('asset_tag', $like)->orWhereLike('name', $like)->orWhereLike('serial_number', $like)
+                ->orWhereHas('current.employee', fn ($e) => $e->whereLike('full_name', $like)->orWhereLike('employee_code', $like))))
             ->when($f['type'] ?? null, fn ($q, $v) => $q->where('type', $v))
             ->when($f['status'] ?? null, fn ($q, $v) => $q->where('status', $v))
             ->orderBy('asset_tag')->get();

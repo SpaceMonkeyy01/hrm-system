@@ -99,6 +99,17 @@ return [
             'sslmode' => env('DB_SSLMODE', 'prefer'),
         ],
 
+        // Only for php artisan hr:copy-data: the database the local data is copied into (e.g. the live Postgres).
+        'copy_target' => [
+            'driver' => 'pgsql',
+            'url' => env('COPY_TARGET_URL'),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => env('COPY_TARGET_SSLMODE', 'require'),
+        ],
+
         'sqlsrv' => [
             'driver' => 'sqlsrv',
             'url' => env('DB_URL'),

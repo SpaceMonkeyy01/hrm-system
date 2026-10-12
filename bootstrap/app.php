@@ -17,6 +17,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['sidebar_state']);
+        // Behind Render's (or any) HTTPS proxy: read the real scheme and client IP from its headers.
+        $middleware->trustProxies(at: env('TRUSTED_PROXIES', '*'));
         $middleware->web(append: [
             HandleInertiaRequests::class,
             EnsureUserIsActive::class,

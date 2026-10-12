@@ -63,7 +63,7 @@ type Props = {
     /** Null for viewer logins: they only get fileCount. */
     files: EmployeeFile[] | null;
     fileCount: number;
-    uploads: { extensions: string[]; max_kb: number };
+    uploads: { extensions: string[]; max_kb: number; enabled: boolean };
     activity: ActivityItem[];
     options: { probationResults: string[]; cohorts: string[]; historyTypes: string[] };
 };
@@ -224,6 +224,9 @@ function DocumentFiles({ e, files, columns, uploads }: { e: Employee; files: Emp
     return (
         <div className="grid content-start gap-4">
             <h2 className="font-bold">Scanned files</h2>
+            {!uploads.enabled ? (
+                <p className="rounded-lg border bg-pending-soft px-4 py-3 text-sm">Uploads are switched off on this site until a file store is set up. Keep scans in the Drive folder for now.</p>
+            ) : (
             <form onSubmit={upload} className="grid gap-3 rounded-lg border p-4">
                 <Field label="File" htmlFor="upload-file" error={errors.file} hint={`PDF, JPG or PNG, up to ${maxMb} MB.`}>
                     <Input key={inputKey} id="upload-file" type="file" accept={accept} required onChange={(ev) => setFile(ev.target.files?.[0] ?? null)} />
@@ -243,6 +246,7 @@ function DocumentFiles({ e, files, columns, uploads }: { e: Employee; files: Emp
                 </div>
                 <p className="text-xs text-muted-foreground">Uploading doesn't change the checklist. Set the document to Yes on the left once you've checked the file.</p>
             </form>
+            )}
 
             {groups.length === 0 ? (
                 <p className="rounded-lg border px-3 py-4 text-sm text-muted-foreground">No files uploaded yet.</p>

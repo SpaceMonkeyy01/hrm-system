@@ -49,6 +49,10 @@ return [
         'recommendations' => ['No change', 'Pay increase', 'Promotion', 'Training', 'Improvement plan', 'Confirm employment'],
     ],
 
+    // Secret for /cron/reminders/{token}, opened by an outside cron service on hosts without a scheduler (Render free).
+    // Empty = the URL doesn't exist. Make it long and random: anyone with it can trigger the daily email.
+    'cron_token' => env('CRON_TOKEN', ''),
+
     // Self-service (My page)
     'self_service' => [
         // How far back someone can ask HR to fix a day.
@@ -115,6 +119,12 @@ return [
     'uploads' => [
         'extensions' => ['pdf', 'jpg', 'jpeg', 'png'],
         'max_kb' => 10240,   // 10 MB
+        // Where scanned documents are kept: "local" (storage/app/private) or "s3" for a bucket on hosts
+        // without a lasting disk (Render free). See docs/DEPLOY-Render.md.
+        'disk' => env('HRM_FILES_DISK', 'local'),
+        // Off on hosts where the local disk is wiped on restart and no bucket is set up yet (Render free):
+        // an upload that vanishes later is worse than no upload. Viewing and removing existing files still works.
+        'enabled' => (bool) env('HRM_FILES_ENABLED', true),
     ],
 
     // Attendance (app/Services/AttendanceRules.php). Office timings are Work schedules, set up in the app.

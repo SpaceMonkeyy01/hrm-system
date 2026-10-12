@@ -148,7 +148,7 @@ class EmployeeController extends Controller
                 'uploaded_by' => $f->uploader?->name, 'uploaded_at' => $f->created_at?->toIso8601String(),
             ])->values() : null,
             'fileCount' => $employee->files()->count(),
-            'uploads' => ['extensions' => config('hrm.uploads.extensions'), 'max_kb' => config('hrm.uploads.max_kb')],
+            'uploads' => ['extensions' => config('hrm.uploads.extensions'), 'max_kb' => config('hrm.uploads.max_kb'), 'enabled' => (bool) config('hrm.uploads.enabled')],
             'attendance' => EmployeeRecords::attendanceMonth($employee, request()->input('month')),
             'leave' => EmployeeRecords::leaveYear($employee),
             'assets' => AssetAssignment::rowsFor($employee->id),
@@ -287,7 +287,7 @@ class EmployeeController extends Controller
         ];
         if ($employee) {
             $rules['needs_review'] = ['boolean'];
-            $rules['review_note'] = ['nullable', 'string', 'max:255'];
+            $rules['review_note'] = ['nullable', 'string', 'max:1000'];
         }
 
         $validator = validator($request->all(), $rules, [

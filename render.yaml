@@ -1,0 +1,73 @@
+# Render Blueprint for the HRM System. Step by step: docs/DEPLOY-Render.md.
+# "sync: false" values are secrets: Render asks for them when the Blueprint is first applied and never stores
+# them in this file.
+services:
+  - type: web
+    name: hrm-system
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /up
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: APP_NAME
+        value: HRM System
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_KEY            # php artisan key:generate --show
+        sync: false
+      - key: APP_URL            # e.g. https://hrm-system.onrender.com
+        sync: false
+      - key: APP_TIMEZONE
+        value: Asia/Karachi
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: LOG_LEVEL
+        value: info
+
+      # Database: a free Postgres that doesn't expire (Neon or Supabase). Paste its connection string.
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_URL             # postgresql://user:password@host/dbname?sslmode=require
+        sync: false
+      - key: DB_SSLMODE
+        value: require
+
+      - key: SESSION_DRIVER
+        value: database
+      - key: SESSION_SECURE_COOKIE
+        value: "true"
+      - key: CACHE_STORE
+        value: database
+      - key: QUEUE_CONNECTION
+        value: sync
+
+      # Uploaded scans: off until a bucket is set up (the free instance has no lasting disk).
+      - key: HRM_FILES_ENABLED
+        value: "false"
+      - key: HRM_FILES_DISK
+        value: local
+
+      # Email (reminders, staff login invites, forgotten passwords)
+      - key: MAIL_MAILER
+        value: smtp
+      - key: MAIL_HOST
+        sync: false
+      - key: MAIL_PORT
+        value: "587"
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM_ADDRESS
+        sync: false
+      - key: MAIL_FROM_NAME
+        value: HRM System
+
+      # Secret for the daily reminder URL that cron-job.org opens: /cron/reminders/<CRON_TOKEN>
+      - key: CRON_TOKEN
+        generateValue: true

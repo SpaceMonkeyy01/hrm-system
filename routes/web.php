@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\ChecklistEntryController;
 use App\Http\Controllers\ControlledDocumentController;
+use App\Http\Controllers\CronController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentChecklistController;
 use App\Http\Controllers\EmployeeController;
@@ -40,6 +41,9 @@ use Illuminate\Support\Facades\Route;
 |   can:edit-hr   admin + hr can change HR records
 |   can:admin     admin only: users, departments/teams, checklist items, deleting employees
 */
+
+// Daily reminder email for hosts without a scheduler (CronController). 404 unless CRON_TOKEN is set and matches.
+Route::get('cron/reminders/{token}', [CronController::class, 'reminders'])->middleware('throttle:10,1')->name('cron.reminders');
 
 Route::middleware('guest')->group(function () {
     Route::get('login', [LoginController::class, 'create'])->name('login');

@@ -146,11 +146,11 @@ class Employee extends Model
         }
         $like = '%'.str_replace(['%', '_'], ['\%', '\_'], $term).'%';
 
-        return $q->where(fn ($w) => $w->where('full_name', 'like', $like)
-            ->orWhere('employee_code', 'like', $like)
-            ->orWhere('system_id', 'like', $like)
-            ->orWhere('hr_portal_id', 'like', $like)
-            ->orWhere('cnic', 'like', $like));
+        return $q->where(fn ($w) => $w->whereLike('full_name', $like)
+            ->orWhereLike('employee_code', $like)
+            ->orWhereLike('system_id', $like)
+            ->orWhereLike('hr_portal_id', $like)
+            ->orWhereLike('cnic', $like));
     }
 
     public function activityEmployeeId(): ?int

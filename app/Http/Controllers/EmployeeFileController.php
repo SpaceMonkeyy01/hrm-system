@@ -10,17 +10,22 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * Upload, open and remove an employee's scanned documents. Files live on the private "local" disk
- * (storage/app/private), never under public/, so the only way to them is through these routes (can:edit-hr).
+ * Upload, open and remove an employee's scanned documents. Files live on a private disk (config hrm.uploads.disk:
+ * "local" = storage/app/private, or a private S3-compatible bucket), never under public/, so the only way to them
+ * is through these routes (can:edit-hr).
  */
 class EmployeeFileController extends Controller
 {
     public function store(Request $request, Employee $employee): RedirectResponse
     {
         $cfg = config('hrm.uploads');
+        if (! $cfg['enabled']) {
+            throw ValidationException::withMessages(['file' => 'Uploads are switched off on this site until a file store is set up. Keep the file in the Drive folder for now.']);
+        }
         $data = $request->validate([
             'file' => ['required', 'file', 'mimes:'.implode(',', $cfg['extensions']), 'max:'.$cfg['max_kb']],
             'checklist_item_id' => ['nullable', 'integer', Rule::exists('checklist_items', 'id')->where('list', 'document')],
@@ -34,7 +39,7 @@ class EmployeeFileController extends Controller
         $file = $data['file'];
         // Random name with the extension worked out from the content, not the client's file name.
         $ext = strtolower($file->guessExtension() ?: $file->getClientOriginalExtension());
-        $path = $file->storeAs("employee-files/{$employee->id}", Str::random(40).'.'.$ext, 'local');
+        $path = $file->storeAs("employee-files/{$employee->id}", Str::random(40).'.'.$ext, config('hrm.uploads.disk'));
 
         try {
             EmployeeFile::create([
@@ -48,7 +53,7 @@ class EmployeeFileController extends Controller
                 'uploaded_by' => $request->user()->id,
             ]);
         } catch (\Throwable $e) {
-            Storage::disk('local')->delete($path);   // no orphan file without a row
+            Storage::disk(config('hrm.uploads.disk'))->delete($path);   // no orphan file without a row
             throw $e;
         }
 
@@ -59,11 +64,11 @@ class EmployeeFileController extends Controller
     public function show(Request $request, Employee $employee, EmployeeFile $file): StreamedResponse
     {
         abort_unless($file->employee_id === $employee->id, 404);
-        abort_unless(Storage::disk('local')->exists($file->path), 404, 'The file is missing from storage.');
+        abort_unless(Storage::disk(config('hrm.uploads.disk'))->exists($file->path), 404, 'The file is missing from storage.');
 
         $disposition = $request->boolean('download') ? 'attachment' : 'inline';
 
-        return Storage::disk('local')->response($file->path, $file->original_name, [
+        return Storage::disk(config('hrm.uploads.disk'))->response($file->path, $file->original_name, [
             'Content-Type' => $file->mime,
             'X-Content-Type-Options' => 'nosniff',
             'Cache-Control' => 'private, no-store',
@@ -75,7 +80,7 @@ class EmployeeFileController extends Controller
         abort_unless($file->employee_id === $employee->id, 404);
 
         DB::transaction(fn () => $file->delete());
-        Storage::disk('local')->delete($file->path);
+        Storage::disk(config('hrm.uploads.disk'))->delete($file->path);
 
         return back()->with('success', "Removed {$file->original_name}.");
     }
