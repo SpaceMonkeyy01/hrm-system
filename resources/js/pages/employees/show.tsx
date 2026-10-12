@@ -354,6 +354,13 @@ function describe(a: ActivityItem): string {
     return `${a.description ?? 'Record'} ${a.event}${parts.length ? `. ${parts.join('; ')}` : ''}`;
 }
 
+/** Tab for the page's #hash. Older links (#attendance, #leave, #assets, #job, #offboarding) open the tab that holds them now. */
+const TAB_ALIASES: Record<string, string> = { attendance: 'time', leave: 'time', assets: 'documents', job: 'history', offboarding: 'history' };
+function tabFromHash(): string {
+    const hash = typeof window !== 'undefined' ? window.location.hash.slice(1) : '';
+    return TAB_ALIASES[hash] ?? (['overview', 'onboarding', 'documents', 'time', 'history'].includes(hash) ? hash : 'overview');
+}
+
 export default function EmployeeShow(props: Props) {
     const { employee: e, onboarding: o, lists, optionSets } = props;
     const { auth } = usePage<SharedProps>().props;
@@ -422,18 +429,14 @@ export default function EmployeeShow(props: Props) {
                 </div>
             )}
 
-            <Tabs defaultValue={typeof window !== 'undefined' && window.location.hash ? window.location.hash.slice(1) : 'overview'} className="px-4 pt-4 pb-10 md:px-6"
+            <Tabs defaultValue={tabFromHash()} className="px-4 pt-4 pb-10 md:px-6"
                 onValueChange={(v) => history.replaceState(history.state, '', `#${v}`)}>
                 <TabsList>
                     <TabsTrigger value="overview">Details</TabsTrigger>
                     <TabsTrigger value="onboarding">Onboarding {o && <StatusPill value={o.status === 'Onboarding Complete' ? 'Complete' : 'In progress'} tone={computedTone(o.status)} />}</TabsTrigger>
-                    <TabsTrigger value="documents">Documents <StatusPill value={props.documentStatus} tone={computedTone(props.documentStatus)} /></TabsTrigger>
-                    <TabsTrigger value="attendance">Attendance</TabsTrigger>
-                    <TabsTrigger value="leave">Leave</TabsTrigger>
-                    <TabsTrigger value="assets">Assets{props.assets.some((x) => !x.returned_on) ? ` (${props.assets.filter((x) => !x.returned_on).length})` : ''}</TabsTrigger>
-                    <TabsTrigger value="offboarding">Offboarding</TabsTrigger>
-                    <TabsTrigger value="job">Job history</TabsTrigger>
-                    <TabsTrigger value="history">Change log</TabsTrigger>
+                    <TabsTrigger value="documents">Documents and assets <StatusPill value={props.documentStatus} tone={computedTone(props.documentStatus)} /></TabsTrigger>
+                    <TabsTrigger value="time">Attendance and leave</TabsTrigger>
+                    <TabsTrigger value="history">History</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="overview">
@@ -502,25 +505,9 @@ export default function EmployeeShow(props: Props) {
                     )}
                 </TabsContent>
 
-                <TabsContent value="attendance">
-                    <AttendanceTab e={e} a={props.attendance} canEdit={can} />
-                </TabsContent>
 
-                <TabsContent value="leave">
-                    <LeaveTab leave={props.leave} />
-                </TabsContent>
 
-                <TabsContent value="assets">
-                    <div className="grid max-w-3xl gap-3">
-                        <p className="text-sm text-muted-foreground">Company property given to {e.full_name}. Still with them first, then returned.</p>
-                        <AssetList rows={props.assets} empty="Nothing from the asset register has been given to them." />
-                        {can && <Link href={`/assets?q=${encodeURIComponent(e.employee_code)}`} className="text-sm font-semibold text-cascade hover:underline">Give or take back on the Assets page</Link>}
-                    </div>
-                </TabsContent>
 
-                <TabsContent value="job">
-                    <JobHistory e={e} entries={props.employmentHistory} types={props.options.historyTypes} canEdit={can} canDelete={auth.can.admin} />
-                </TabsContent>
 
                 <TabsContent value="onboarding">
                     {!o ? (
@@ -601,9 +588,35 @@ export default function EmployeeShow(props: Props) {
                             </p>
                         )}
                     </div>
+                    <section className="grid gap-3 mt-10">
+                        <h2 className="font-bold">Company assets</h2>
+                    <div className="grid max-w-3xl gap-3">
+                        <p className="text-sm text-muted-foreground">Company property given to {e.full_name}. Still with them first, then returned.</p>
+                        <AssetList rows={props.assets} empty="Nothing from the asset register has been given to them." />
+                        {can && <Link href={`/assets?q=${encodeURIComponent(e.employee_code)}`} className="text-sm font-semibold text-cascade hover:underline">Give or take back on the Assets page</Link>}
+                    </div>
+                    </section>
                 </TabsContent>
 
-                <TabsContent value="offboarding">
+
+                <TabsContent value="time" className="grid gap-10">
+                    <section className="grid gap-3">
+                        <h2 className="font-bold">Attendance</h2>
+                    <AttendanceTab e={e} a={props.attendance} canEdit={can} />
+                    </section>
+                    <section className="grid gap-3">
+                        <h2 className="font-bold">Leave</h2>
+                    <LeaveTab leave={props.leave} />
+                    </section>
+                </TabsContent>
+
+                <TabsContent value="history" className="grid gap-10">
+                    <section className="grid gap-3">
+                        <h2 className="font-bold">Job history</h2>
+                    <JobHistory e={e} entries={props.employmentHistory} types={props.options.historyTypes} canEdit={can} canDelete={auth.can.admin} />
+                    </section>
+                    <section className="grid gap-3">
+                        <h2 className="font-bold">Offboarding</h2>
                     {props.offboardings.length === 0 ? (
                         <EmptyState title="No offboarding on record.">
                             {can && e.status === 'active' && (
@@ -621,9 +634,9 @@ export default function EmployeeShow(props: Props) {
                             ))}
                         </ul>
                     )}
-                </TabsContent>
-
-                <TabsContent value="history">
+                    </section>
+                    <section className="grid gap-3">
+                        <h2 className="font-bold">Change log</h2>
                     {props.activity.length === 0 ? <EmptyState title="No changes recorded yet." /> : (
                         <ol className="max-w-3xl divide-y rounded-lg border">
                             {props.activity.map((a) => (
@@ -635,6 +648,7 @@ export default function EmployeeShow(props: Props) {
                             ))}
                         </ol>
                     )}
+                    </section>
                 </TabsContent>
             </Tabs>
         </>

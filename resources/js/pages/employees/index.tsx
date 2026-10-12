@@ -98,7 +98,23 @@ export default function EmployeesIndex({ employees, filters, companies }: { empl
                     <div className="py-6"><EmptyState icon={SearchX} title="No employees match these filters.">Clear a filter or search for a different name.</EmptyState></div>
                 ) : (
                     <>
-                        <div className="overflow-x-auto">
+                        {/* Phones: one card per person. */}
+                        <ul className="-mx-4 divide-y border-y md:hidden">
+                            {employees.data.map((e) => (
+                                <li key={e.id}>
+                                    <Link href={`/employees/${e.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-accent/50">
+                                        <Avatar name={e.name} className="size-9" />
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block truncate font-semibold">{e.name}</span>
+                                            <span className="block truncate text-xs text-muted-foreground">{[e.code, e.department].filter(Boolean).join(', ')}</span>
+                                            {e.needs_review && <span className="text-xs font-semibold text-pending">Check record</span>}
+                                        </span>
+                                        {e.status !== 'active' && <StatusPill value={statusLabel[e.status] ?? e.status} tone={statusTone[e.status as keyof typeof statusTone] ?? 'neutral'} />}
+                                    </Link>
+                                </li>
+                            ))}
+                        </ul>
+                        <div className="hidden overflow-x-auto md:block">
                             <table className="w-full min-w-[860px] text-sm">
                                 <thead>
                                     <tr className="border-b text-left text-xs text-muted-foreground">

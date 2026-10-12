@@ -165,6 +165,7 @@ export default function OnboardingIndex({ rows, columns, optionSets, filters, co
                 before={before}
                 after={after}
                 reload={['rows']}
+                profileTab="onboarding"
                 empty={<EmptyState icon={SearchX} title="Nobody matches these filters.">Clear a filter to see more people.</EmptyState>}
             />
         </>

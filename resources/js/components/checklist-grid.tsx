@@ -26,7 +26,20 @@ export type ExtraColumn<R> = {
  * The spreadsheet replacement: one row per employee, one column per checklist item.
  * Header row and name column stay put while scrolling. Each cell saves on its own
  * (optimistically), and selected rows can be updated in bulk.
+ *
+ * Compact (remembered per browser) shows short codes in narrow columns, so far more fit on screen.
+ * Each name shows how many of its items are done; each column how many people have it done.
+ * Phones get one card per person instead of the grid, linking to the profile tab where it can be edited.
  */
+const COMPACT_KEY = 'hrm.grid.compact';
+
+function readCompact(): boolean {
+    try {
+        return localStorage.getItem(COMPACT_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
 export function ChecklistGrid<R extends GridRow>({
     rows,
     columns,
@@ -37,6 +50,7 @@ export function ChecklistGrid<R extends GridRow>({
     headerBadge,
     reload,
     empty,
+    profileTab,
 }: {
     rows: R[];
     columns: ChecklistColumn[];
@@ -47,7 +61,18 @@ export function ChecklistGrid<R extends GridRow>({
     headerBadge?: (col: ChecklistColumn) => ReactNode;
     reload: string[];
     empty: ReactNode;
+    /** Profile tab a phone card opens (#onboarding, #documents). */
+    profileTab?: string;
 }) {
+    const [compact, setCompact] = useState(readCompact);
+    const toggleCompact = () => setCompact((c) => {
+        try {
+            localStorage.setItem(COMPACT_KEY, c ? '0' : '1');
+        } catch {
+            // private window: the choice just isn't remembered
+        }
+        return !c;
+    });
     const [optimistic, setOptimistic] = useState<Record<string, string | null>>({});
     const [selected, setSelected] = useState<Set<number>>(new Set());
     const [bulkItem, setBulkItem] = useState<string>('');
@@ -93,6 +118,13 @@ export function ChecklistGrid<R extends GridRow>({
             return next;
         });
     const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
+    const valueOf = (row: R, c: ChecklistColumn) => {
+        const k = `${row.id}:${c.key}`;
+        return k in optimistic ? optimistic[k] : (row.values[c.key] ?? null);
+    };
+    const isDone = (c: ChecklistColumn, v: string | null) => !!v && !!optionSets[c.option_set]?.find((o) => o.value === v)?.done;
+    const doneIn = (row: R) => columns.filter((c) => isDone(c, valueOf(row, c))).length;
+    const columnDone = (c: ChecklistColumn) => rows.filter((r) => isDone(c, valueOf(r, c))).length;
     const bulkColumn = columns.find((c) => String(c.id) === bulkItem);
 
     const applyBulk = () => {
@@ -119,7 +151,7 @@ export function ChecklistGrid<R extends GridRow>({
     return (
         <div className="flex min-h-0 flex-1 flex-col">
             {canEdit && selected.size > 0 && (
-                <div className="flex flex-wrap items-center gap-2 border-b bg-accent px-4 py-2 text-sm md:px-6" role="region" aria-label="Bulk update">
+                <div className="hidden flex-wrap items-center gap-2 border-b bg-accent px-4 py-2 text-sm md:flex md:px-6" role="region" aria-label="Bulk update">
                     <span className="font-semibold">{selected.size} selected.</span>
                     <span>Set</span>
                     <NativeSelect
@@ -152,7 +184,38 @@ export function ChecklistGrid<R extends GridRow>({
                 </div>
             )}
 
-            <div className="min-h-0 flex-1 overflow-auto" style={{ maxHeight: 'calc(100svh - 13rem)' }}>
+            <div className="hidden items-center justify-end gap-3 border-b px-4 py-1.5 text-xs text-muted-foreground md:flex md:px-6">
+                {compact && <span>Short codes: hover a cell for the full value.</span>}
+                <label className="flex cursor-pointer items-center gap-1.5 font-semibold text-foreground">
+                    <input type="checkbox" className="size-3.5 accent-cascade" checked={compact} onChange={toggleCompact} />
+                    Compact
+                </label>
+            </div>
+
+            {/* Phones: one card per person; changes are made on the profile. */}
+            <ul className="divide-y md:hidden">
+                {rows.map((row) => {
+                    const done = doneIn(row);
+                    return (
+                        <li key={row.id}>
+                            <Link href={`/employees/${row.id}${profileTab ? `#${profileTab}` : ''}`} className="grid gap-1.5 px-4 py-3 hover:bg-accent/50">
+                                <span className="flex items-center justify-between gap-3">
+                                    <span className="min-w-0">
+                                        <span className="block truncate font-semibold">{row.name}</span>
+                                        <span className="text-xs text-muted-foreground">{row.code}{row.needs_review && <span className="ml-1.5 font-semibold text-pending">Check record</span>}</span>
+                                    </span>
+                                    <span className="shrink-0 text-xs font-semibold tabular-nums">{done} of {columns.length}</span>
+                                </span>
+                                <span className="flex h-1.5 overflow-hidden rounded-full bg-muted">
+                                    <span className="bg-done" style={{ width: `${(done / Math.max(columns.length, 1)) * 100}%` }} />
+                                </span>
+                            </Link>
+                        </li>
+                    );
+                })}
+            </ul>
+
+            <div className="hidden min-h-0 flex-1 overflow-auto md:block" style={{ maxHeight: 'calc(100svh - 15rem)' }}>
                 <table className="hr-grid w-max min-w-full text-sm">
                     <thead>
                         <tr className="groups">
@@ -193,10 +256,12 @@ export function ChecklistGrid<R extends GridRow>({
                                     <th
                                         key={c.id}
                                         title={c.description ? `${c.label} - ${c.description}` : c.label}
-                                        className={`w-28 min-w-28 px-2 pb-2 text-center align-bottom text-xs font-semibold ${firstOfGroup ? 'border-l' : ''}`}
+                                        className={`${compact ? 'w-20 min-w-20 text-[11px]' : 'w-28 min-w-28 text-xs'} px-2 pb-2 text-center align-bottom font-semibold ${firstOfGroup ? 'border-l' : ''}`}
                                     >
                                         <span className="line-clamp-2">{c.label}</span>
-                                        {headerBadge?.(c)}
+                                        {headerBadge ? headerBadge(c) : (
+                                            <span className="mt-1 block text-[11px] font-normal text-muted-foreground tabular-nums">{columnDone(c)} of {rows.length} done</span>
+                                        )}
                                     </th>
                                 );
                             })}
@@ -225,6 +290,12 @@ export function ChecklistGrid<R extends GridRow>({
                                                 {row.needs_review && <span className="ml-1.5 font-semibold text-pending">Check record</span>}
                                             </span>
                                         </div>
+                                        <span className="ml-auto grid shrink-0 justify-items-end gap-0.5 pl-2" title={`${doneIn(row)} of ${columns.length} done`}>
+                                            <span className="text-[11px] font-semibold text-muted-foreground tabular-nums">{doneIn(row)}/{columns.length}</span>
+                                            <span className="flex h-1 w-10 overflow-hidden rounded-full bg-muted">
+                                                <span className="bg-done" style={{ width: `${(doneIn(row) / Math.max(columns.length, 1)) * 100}%` }} />
+                                            </span>
+                                        </span>
                                     </div>
                                 </td>
                                 {before.map((c) => (
@@ -233,8 +304,7 @@ export function ChecklistGrid<R extends GridRow>({
                                     </td>
                                 ))}
                                 {columns.map((c, i) => {
-                                    const k = `${row.id}:${c.key}`;
-                                    const value = k in optimistic ? optimistic[k] : (row.values[c.key] ?? null);
+                                    const value = valueOf(row, c);
                                     const firstOfGroup = i === 0 || (columns[i - 1].group ?? '') !== (c.group ?? '');
                                     return (
                                         <td key={c.id} className={`px-1 py-1.5 text-center ${firstOfGroup ? 'border-l' : ''}`}>
@@ -244,6 +314,7 @@ export function ChecklistGrid<R extends GridRow>({
                                                 optionSets={optionSets}
                                                 disabled={!canEdit}
                                                 label={`${c.label} for ${row.name}`}
+                                                compact={compact}
                                                 onChange={(v) => save(row, c, v)}
                                             />
                                         </td>

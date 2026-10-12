@@ -80,6 +80,7 @@ export default function DocumentsIndex({ rows, columns, owed, optionSets, filter
                 before={before}
                 after={after}
                 reload={['rows', 'owed']}
+                profileTab="documents"
                 headerBadge={(c) => (owed[c.key] ? <span className="mt-1 block text-[11px] font-normal text-muted-foreground">{owed[c.key]} owed</span> : <span className="mt-1 block text-[11px] font-normal text-done">All on file</span>)}
                 empty={<EmptyState icon={SearchX} title="Nobody matches these filters.">Clear a filter to see more people.</EmptyState>}
             />

@@ -10,20 +10,21 @@ import type { OptionSets } from '@/types';
  * (Y = Yes, N = No, P = Pending, D = Done ...); typing it again cycles through values with that
  * letter. Delete clears the value.
  */
-export function StatusPicker({ value, set, optionSets, onChange, disabled, label }: {
+export function StatusPicker({ value, set, optionSets, onChange, disabled, label, compact }: {
     value: string | null;
     set: string;
     optionSets: OptionSets;
     onChange: (value: string | null) => void;
     disabled?: boolean;
     label: string;
+    compact?: boolean;
 }) {
     const [open, setOpen] = useState(false);
     const options = optionSets[set] ?? [];
     const tone = toneOf(value, set, optionSets);
 
     if (disabled) {
-        return <StatusPill value={value} tone={tone} />;
+        return <StatusPill value={value} tone={tone} compact={compact} />;
     }
 
     const choose = (v: string | null) => {
@@ -57,7 +58,7 @@ export function StatusPicker({ value, set, optionSets, onChange, disabled, label
                     aria-label={`${label}: ${value ?? 'not set'}. Press Enter to change.`}
                     className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
                 >
-                    <StatusPill value={value} tone={tone} className="cursor-pointer hover:brightness-95" />
+                    <StatusPill value={value} tone={tone} compact={compact} className="cursor-pointer hover:brightness-95" />
                 </button>
             </PopoverTrigger>
             <PopoverContent className="w-48">
