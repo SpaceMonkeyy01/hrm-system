@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\AttendanceRequest;
+use App\Models\Review;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -40,6 +42,11 @@ class HandleInertiaRequests extends Middleware
                     'id' => ($success || $error) ? substr(sha1($success.'|'.$error.'|'.microtime(true)), 0, 10) : null,
                 ];
             },
+            // Things waiting for HR, as sidebar badges. Two small counts, only for logins that can act on them.
+            'nav' => fn () => $user?->canEdit() ? [
+                'requests' => AttendanceRequest::where('status', 'pending')->whereHas('employee')->count(),
+                'reviews' => Review::where('status', 'manager_review')->whereHas('cycle', fn ($q) => $q->where('status', 'open'))->whereHas('employee')->count(),
+            ] : null,
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

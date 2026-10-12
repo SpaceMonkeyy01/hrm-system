@@ -11,6 +11,8 @@ export type SharedProps = {
     };
     flash: { success: string | null; error: string | null; id: string | null };
     sidebarOpen: boolean;
+    /** HR and admin only: counts shown as sidebar badges (HandleInertiaRequests). */
+    nav: { requests: number; reviews: number } | null;
 };
 
 export type Tone = 'done' | 'missing' | 'pending' | 'neutral' | 'info' | 'muted';

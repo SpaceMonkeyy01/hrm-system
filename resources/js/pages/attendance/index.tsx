@@ -1,8 +1,9 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { ChevronLeft, ChevronRight, Inbox, Pencil, Upload } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, Inbox, Pencil, SearchX, Upload } from 'lucide-react';
 import { useState } from 'react';
 import { AdjustDialog, DayStatus, duration, TimeCell } from '@/components/attendance';
 import type { AttendanceDay } from '@/components/attendance';
+import { Avatar } from '@/components/avatar';
 import { EmptyState } from '@/components/empty-state';
 import { NativeSelect } from '@/components/native-select';
 import { PageHeader } from '@/components/page-header';
@@ -87,7 +88,9 @@ export default function AttendanceIndex(props: Props) {
                 </div>
 
                 {props.rows.length === 0 ? (
-                    <EmptyState title={props.filters.status || props.filters.q || props.filters.department ? 'Nobody matches these filters.' : 'No attendance for this day.'} />
+                    <EmptyState icon={props.filters.status || props.filters.q || props.filters.department ? SearchX : Clock}
+                        title={props.filters.status || props.filters.q || props.filters.department ? 'Nobody matches these filters.' : 'No attendance for this day.'}
+                        action={can && !props.filters.status && !props.filters.q && <Button variant="outline" asChild><Link href="/attendance/imports"><Upload /> Upload attendance file</Link></Button>} />
                 ) : (
                     <div className="overflow-x-auto rounded-lg border">
                         <table className="w-full min-w-[56rem] text-sm">
@@ -107,8 +110,13 @@ export default function AttendanceIndex(props: Props) {
                                 {props.rows.map((r) => (
                                     <tr key={r.employee.id} className="hover:bg-accent/50">
                                         <td className="px-3 py-2">
-                                            <Link href={`/employees/${r.employee.id}#attendance`} className="font-semibold hover:text-cascade hover:underline">{r.employee.name}</Link>
-                                            <span className="block text-xs text-muted-foreground">{[r.employee.code, r.employee.department].filter(Boolean).join(', ')}</span>
+                                            <span className="flex items-center gap-2.5">
+                                                <Avatar name={r.employee.name} />
+                                                <span>
+                                                    <Link href={`/employees/${r.employee.id}#attendance`} className="font-semibold hover:text-cascade hover:underline">{r.employee.name}</Link>
+                                                    <span className="block text-xs text-muted-foreground">{[r.employee.code, r.employee.department].filter(Boolean).join(', ')}</span>
+                                                </span>
+                                            </span>
                                         </td>
                                         <td className="px-3 py-2 text-muted-foreground">{r.schedule ?? 'None'}</td>
                                         <td className="px-3 py-2"><TimeCell time={r.in} source={r.in_source} /></td>

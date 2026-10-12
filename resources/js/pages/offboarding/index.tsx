@@ -1,5 +1,5 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { Plus } from 'lucide-react';
+import { DoorOpen, Plus } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { EmptyState } from '@/components/empty-state';
@@ -52,7 +52,7 @@ export default function OffboardingIndex({ cases, filters, types, employees }: {
 
             <div className="px-4 py-4 md:px-6">
                 {cases.length === 0 ? (
-                    <EmptyState title={filters.status === 'in_progress' ? 'Nobody is leaving right now.' : 'No offboardings here.'}>
+                    <EmptyState icon={DoorOpen} title={filters.status === 'in_progress' ? 'Nobody is leaving right now.' : 'No offboardings here.'}>
                         {auth.can.edit && 'Start one when someone resigns, retires or their contract ends.'}
                     </EmptyState>
                 ) : (

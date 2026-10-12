@@ -1,5 +1,5 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Check, Plus, Trash2 } from 'lucide-react';
+import { CalendarDays, Check, Palmtree, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { toast } from 'sonner';
@@ -109,7 +109,7 @@ function Holidays({ holidays, companies, year, month, can }: { holidays: Holiday
                     <Button variant="ghost" size="sm" asChild><Link href={`/leave?month=${year + 1}-${month.slice(5)}#holidays`}>{year + 1}</Link></Button>
                 </span>
             </div>
-            {holidays.length === 0 ? <EmptyState title={`No holidays added for ${year}.`} /> : (
+            {holidays.length === 0 ? <EmptyState icon={CalendarDays} title={`No holidays added for ${year}.`}>Add Eid, Independence Day and the rest so attendance shows Holiday, not Absent.</EmptyState> : (
                 <ul className="divide-y rounded-lg border">
                     {holidays.map((h) => (
                         <li key={h.id} className="flex items-center gap-3 px-3 py-2 text-sm">
@@ -194,7 +194,12 @@ export default function LeaveIndex(props: Props) {
                             <Input className="w-56" placeholder="Search name or code" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search" />
                         </form>
                     </div>
-                    {props.records.length === 0 ? <EmptyState title="No leave recorded this month." /> : (
+                    {props.records.length === 0 ? (
+                        <EmptyState icon={Palmtree} title="No leave recorded this month."
+                            action={can && <Button variant="outline" onClick={() => setAdding(true)}><Plus /> Record leave</Button>}>
+                            Leave approved in HR.my shows here once it's recorded, and attendance then reads On leave instead of Absent.
+                        </EmptyState>
+                    ) : (
                         <div className="overflow-x-auto rounded-lg border">
                             <table className="w-full min-w-[48rem] text-sm">
                                 <thead className="bg-muted/50 text-left text-xs text-muted-foreground">

@@ -24,6 +24,7 @@ use App\Http\Controllers\OverviewController;
 use App\Http\Controllers\ProbationPlanController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ReviewController;
+use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SpreadsheetImportController;
 use App\Http\Controllers\Settings\ChecklistItemController;
 use App\Http\Controllers\Settings\StaffLoginController;
@@ -76,6 +77,7 @@ Route::middleware('auth')->group(function () {
     // Everything below is HR records: admin, hr and viewer logins only. Employee logins get 403.
     Route::middleware('can:view-hr')->group(function () {
         Route::get('dashboard', DashboardController::class)->name('dashboard');
+        Route::get('search/employees', [SearchController::class, 'employees'])->middleware('throttle:120,1')->name('search.employees');
         Route::get('overview', OverviewController::class)->name('overview');
 
         // Reports (app/Services/Reports/ReportCatalog.php). Private reports check edit-hr themselves.

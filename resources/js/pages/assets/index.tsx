@@ -1,5 +1,5 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { ChevronDown, ChevronRight, Pencil, Plus, Undo2, Upload, UserPlus } from 'lucide-react';
+import { ChevronDown, ChevronRight, Laptop, Pencil, Plus, SearchX, Undo2, Upload, UserPlus } from 'lucide-react';
 import { type FormEvent, Fragment, useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { Field } from '@/components/field';
@@ -190,7 +190,8 @@ export default function Assets(props: Props) {
 
             <div className="px-4 py-6 md:px-6">
                 {props.assets.length === 0 ? (
-                    <EmptyState title={total === 0 ? 'No assets yet.' : 'Nothing matches these filters.'}>
+                    <EmptyState icon={total === 0 ? Laptop : SearchX} title={total === 0 ? 'No assets yet.' : 'Nothing matches these filters.'}
+                        action={total === 0 && can && <Button variant="outline" asChild><Link href="/imports/assets"><Upload /> Upload a list</Link></Button>}>
                         {total === 0 && can && 'Add laptops, phones, SIM cards and ID cards so you can see who has what.'}
                     </EmptyState>
                 ) : (

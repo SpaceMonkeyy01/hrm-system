@@ -21,7 +21,7 @@ export function Detail({ label, children }: { label: string; children: ReactNode
     return (
         <div className="grid gap-0.5">
             <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd className="text-sm break-words">{children || <span className="text-muted-foreground">Not recorded</span>}</dd>
+            <dd className="text-sm break-words">{children || <span className="text-muted-foreground/70 italic">Not recorded</span>}</dd>
         </div>
     );
 }

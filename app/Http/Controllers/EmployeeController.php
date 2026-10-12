@@ -141,6 +141,7 @@ class EmployeeController extends Controller
                 'status' => $board->onboarding($employee->id, $o->probation_result),
             ] : null,
             'documentStatus' => $board->documents($employee->id),
+            'completeness' => $private ? $employee->completeness() : null,
             // Files: HR and admin get the list; viewers only learn how many there are.
             'files' => $private ? $employee->files()->with('uploader:id,name')->get()->map(fn ($f) => [
                 'id' => $f->id, 'checklist_item_id' => $f->checklist_item_id, 'label' => $f->label,

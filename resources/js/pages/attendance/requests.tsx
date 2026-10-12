@@ -1,5 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { Check, X } from 'lucide-react';
+import { Check, CheckCheck, Inbox, X } from 'lucide-react';
 import { useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { Field } from '@/components/field';
@@ -75,7 +75,7 @@ export default function AttendanceRequests(props: Props) {
 
             <div className="px-4 py-6 md:px-6">
                 {props.requests.length === 0 ? (
-                    <EmptyState title={pending ? 'Nothing waiting. Every request has an answer.' : 'No requests here.'} />
+                    <EmptyState icon={pending ? CheckCheck : Inbox} title={pending ? 'Nothing waiting. Every request has an answer.' : 'No requests here.'} />
                 ) : (
                     <div className="overflow-x-auto rounded-lg border">
                         <table className="w-full min-w-[56rem] text-sm">

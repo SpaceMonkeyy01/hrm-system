@@ -1,6 +1,7 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Download, Plus, Search, TableProperties } from 'lucide-react';
+import { Download, Plus, Search, SearchX, TableProperties } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Avatar } from '@/components/avatar';
 import { EmptyState } from '@/components/empty-state';
 import { NativeSelect } from '@/components/native-select';
 import { PageHeader } from '@/components/page-header';
@@ -36,6 +37,9 @@ export default function EmployeesIndex({ employees, filters, companies }: { empl
 
     const company = companies.find((c) => c.id === Number(filters.company));
     const departments = company ? company.departments : companies.flatMap((c) => c.departments.map((d) => ({ ...d, name: `${d.name} (${c.name})` })));
+
+    // A column of dashes is noise: Role shows once anyone on this page has one.
+    const showRole = employees.data.some((x) => x.role_title);
 
     return (
         <>
@@ -91,7 +95,7 @@ export default function EmployeesIndex({ employees, filters, companies }: { empl
 
             <div className="px-4 md:px-6">
                 {employees.data.length === 0 ? (
-                    <div className="py-6"><EmptyState title="No employees match these filters.">Clear a filter or search for a different name.</EmptyState></div>
+                    <div className="py-6"><EmptyState icon={SearchX} title="No employees match these filters.">Clear a filter or search for a different name.</EmptyState></div>
                 ) : (
                     <>
                         <div className="overflow-x-auto">
@@ -107,7 +111,7 @@ export default function EmployeesIndex({ employees, filters, companies }: { empl
                                         <th className="py-2.5 pr-3 font-semibold">
                                             <button className="hover:text-foreground" onClick={() => apply({ sort: 'department' })}>Department and team</button>
                                         </th>
-                                        <th className="py-2.5 pr-3 font-semibold">Role</th>
+                                        {showRole && <th className="py-2.5 pr-3 font-semibold">Role</th>}
                                         <th className="py-2.5 pr-3 font-semibold">
                                             <button className="hover:text-foreground" onClick={() => apply({ sort: 'start_date' })}>Start date</button>
                                         </th>
@@ -117,16 +121,21 @@ export default function EmployeesIndex({ employees, filters, companies }: { empl
                                 <tbody className="divide-y">
                                     {employees.data.map((e) => (
                                         <tr key={e.id} className="hover:bg-[#f7f9fc]">
-                                            <td className="py-2.5 pr-3">
-                                                <Link href={`/employees/${e.id}`} className="font-semibold hover:text-cascade hover:underline">{e.name}</Link>
-                                                {e.needs_review && <span className="ml-2 text-xs font-semibold text-pending">Check record</span>}
+                                            <td className="py-2 pr-3">
+                                                <span className="flex items-center gap-2.5">
+                                                    <Avatar name={e.name} />
+                                                    <span>
+                                                        <Link href={`/employees/${e.id}`} className="font-semibold hover:text-cascade hover:underline">{e.name}</Link>
+                                                        {e.needs_review && <span className="ml-2 text-xs font-semibold text-pending">Check record</span>}
+                                                    </span>
+                                                </span>
                                             </td>
                                             <td className="py-2.5 pr-3 tabular-nums text-muted-foreground">{e.code}</td>
                                             <td className="py-2.5 pr-3">
                                                 {e.department ?? <span className="text-muted-foreground">No department</span>}
                                                 {e.team && <span className="block text-xs text-muted-foreground">{e.team}{e.company ? `, ${e.company}` : ''}</span>}
                                             </td>
-                                            <td className="py-2.5 pr-3">{e.role_title ?? <span className="text-muted-foreground">-</span>}</td>
+                                            {showRole && <td className="py-2.5 pr-3">{e.role_title ?? <span className="text-muted-foreground">-</span>}</td>}
                                             <td className="py-2.5 pr-3 tabular-nums">{e.start_date ? formatDate(e.start_date) : <span className="text-muted-foreground">-</span>}</td>
                                             <td className="py-2.5"><StatusPill value={statusLabel[e.status] ?? e.status} tone={statusTone[e.status as keyof typeof statusTone] ?? 'neutral'} /></td>
                                         </tr>

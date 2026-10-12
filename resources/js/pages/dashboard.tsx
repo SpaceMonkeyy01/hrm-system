@@ -1,6 +1,7 @@
 import { Head, Link, usePage } from '@inertiajs/react';
 import { ArrowUpRight, Cake, CalendarDays, FileChartColumn, Palmtree, PartyPopper, Upload, UserPlus } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
+import { Avatar } from '@/components/avatar';
 import { PageHeader, Section } from '@/components/page-header';
 import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
@@ -297,7 +298,10 @@ export default function Dashboard(props: Props) {
                     <Section title="Away this week" description="Leave recorded from today to next week.">
                         <SmallList items={props.away} empty="Nobody has leave recorded this week." render={(l) => (
                             <li key={`${l.id}-${l.from}`} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                                <Link href={`/employees/${l.id}`} className="min-w-0 truncate font-semibold hover:text-cascade hover:underline">{l.name}</Link>
+                                <span className="flex min-w-0 items-center gap-2.5">
+                                    <Avatar name={l.name} className="size-7 text-[10px]" />
+                                    <Link href={`/employees/${l.id}`} className="min-w-0 truncate font-semibold hover:text-cascade hover:underline">{l.name}</Link>
+                                </span>
                                 <span className="shrink-0 text-right text-xs text-muted-foreground">
                                     {l.type}{l.part !== 'full' && ', half day'}
                                     <span className="block tabular-nums">{l.from === l.to ? formatDate(l.from) : `${formatDate(l.from)} to ${formatDate(l.to)}`}</span>
@@ -309,9 +313,12 @@ export default function Dashboard(props: Props) {
                     <Section title="New people" description="Started in the last 30 days or starting soon.">
                         <SmallList items={props.newPeople} empty="Nobody new in the last 30 days." render={(p) => (
                             <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                                <span className="min-w-0">
-                                    <Link href={`/employees/${p.id}`} className="block truncate font-semibold hover:text-cascade hover:underline">{p.name}</Link>
-                                    {p.role && <span className="block truncate text-xs text-muted-foreground">{p.role}</span>}
+                                <span className="flex min-w-0 items-center gap-2.5">
+                                    <Avatar name={p.name} className="size-7 text-[10px]" />
+                                    <span className="min-w-0">
+                                        <Link href={`/employees/${p.id}`} className="block truncate font-semibold hover:text-cascade hover:underline">{p.name}</Link>
+                                        {p.role && <span className="block truncate text-xs text-muted-foreground">{p.role}</span>}
+                                    </span>
                                 </span>
                                 <span className={cn('shrink-0 text-xs tabular-nums', p.start > props.today ? 'text-info' : 'text-muted-foreground')}>
                                     {p.start > props.today ? 'starts ' : 'started '}{relative(props.today, p.start)}

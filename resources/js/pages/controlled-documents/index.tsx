@@ -1,5 +1,5 @@
 import { Head, router, useForm, usePage } from '@inertiajs/react';
-import { ExternalLink, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ExternalLink, Pencil, Plus, SearchX, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { EmptyState } from '@/components/empty-state';
@@ -62,7 +62,7 @@ export default function ControlledDocuments({ documents, filters, types, statuse
             </PageHeader>
 
             <div className="px-4 py-4 md:px-6">
-                {documents.length === 0 ? <EmptyState title="No documents match.">Change the filters or add a document.</EmptyState> : (
+                {documents.length === 0 ? <EmptyState icon={SearchX} title="No documents match.">Change the filters or add a document.</EmptyState> : (
                     <div className="overflow-x-auto">
                         <table className="w-full min-w-[820px] text-sm">
                             <thead>

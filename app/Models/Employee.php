@@ -42,6 +42,22 @@ class Employee extends Model
         'employment_type' => 'Employment type', 'manager_id' => 'Manager', 'work_mode' => 'Work mode',
     ];
 
+    /** Details a complete record has (label => filled?), for the profile's completeness bar. HR and admin only. */
+    public function completeness(): array
+    {
+        $checks = [
+            'Work email' => $this->email, 'Phone' => $this->phone, 'CNIC' => $this->cnic, 'CNIC expiry' => $this->cnic_expiry,
+            'Date of birth' => $this->date_of_birth, 'Start date' => $this->start_date, 'Role' => $this->role_title,
+            'Manager' => $this->manager_id, 'Employment type' => $this->employment_type,
+            'Emergency contact' => $this->emergency_contact_name && $this->emergency_contact_phone,
+            'Bank account' => $this->bank_account_number,
+            'Attendance ID' => $this->attendance_machine_id || $this->hr_portal_id,
+        ];
+        $missing = array_keys(array_filter($checks, fn ($v) => ! $v));
+
+        return ['done' => count($checks) - count($missing), 'total' => count($checks), 'missing' => $missing];
+    }
+
     /** Same defaults as the migration, so a just-created model has them in memory too. */
     protected $attributes = ['status' => 'active', 'needs_review' => false];
 

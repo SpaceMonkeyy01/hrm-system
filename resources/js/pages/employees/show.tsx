@@ -2,6 +2,7 @@ import { Head, Link, router, usePage } from '@inertiajs/react';
 import { Download, ExternalLink, FileText, FolderOpen, Pencil, Trash2, Upload } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
+import { Avatar } from '@/components/avatar';
 import { EmptyState } from '@/components/empty-state';
 import { Detail, Field } from '@/components/field';
 import { NativeSelect, toOptions } from '@/components/native-select';
@@ -60,6 +61,8 @@ type Props = {
     attendance: AttendanceMonth;
     leave: { year: number; records: LeaveRecordRow[]; totals: Record<string, number> };
     assets: AssetRow[];
+    /** HR and admin only. */
+    completeness: { done: number; total: number; missing: string[] } | null;
     /** Null for viewer logins: they only get fileCount. */
     files: EmployeeFile[] | null;
     fileCount: number;
@@ -368,7 +371,7 @@ export default function EmployeeShow(props: Props) {
             <Head title={e.full_name} />
             <PageHeader
                 back={{ href: '/employees', label: 'Employees' }}
-                title={e.full_name}
+                title={<span className="flex items-center gap-3"><Avatar name={e.full_name} className="size-10 text-sm" />{e.full_name}</span>}
                 description={
                     <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
                         <span className="font-semibold text-ink tabular-nums">{e.employee_code}</span>
@@ -396,7 +399,20 @@ export default function EmployeeShow(props: Props) {
                         )}
                     </>
                 }
-            />
+            >
+                {props.completeness && props.completeness.done < props.completeness.total && (
+                    <div className="flex max-w-3xl flex-wrap items-center gap-x-4 gap-y-1.5">
+                        <div className="h-1.5 w-40 overflow-hidden rounded-full bg-muted" role="img"
+                            aria-label={`${props.completeness.done} of ${props.completeness.total} key details on file`}>
+                            <div className="h-full rounded-full bg-cascade" style={{ width: `${(props.completeness.done / props.completeness.total) * 100}%` }} />
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            <span className="font-semibold text-foreground">{props.completeness.done} of {props.completeness.total}</span> key details on file. Missing: {props.completeness.missing.join(', ')}.
+                            {can && <> <Link href={`/employees/${e.id}/edit`} className="font-semibold text-cascade hover:underline">Fill in</Link></>}
+                        </p>
+                    </div>
+                )}
+            </PageHeader>
 
             {e.needs_review && (
                 <div className="mx-4 mt-4 rounded-lg border border-[#ecd29c] bg-pending-soft px-4 py-3 text-sm md:mx-6">

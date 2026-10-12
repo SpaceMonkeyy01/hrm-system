@@ -1,5 +1,5 @@
 import { Head, router, usePage } from '@inertiajs/react';
-import { Download, FolderOpen, Search } from 'lucide-react';
+import { Download, FolderOpen, Search, SearchX } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { ChecklistGrid } from '@/components/checklist-grid';
 import type { ExtraColumn, GridRow } from '@/components/checklist-grid';
@@ -81,7 +81,7 @@ export default function DocumentsIndex({ rows, columns, owed, optionSets, filter
                 after={after}
                 reload={['rows', 'owed']}
                 headerBadge={(c) => (owed[c.key] ? <span className="mt-1 block text-[11px] font-normal text-muted-foreground">{owed[c.key]} owed</span> : <span className="mt-1 block text-[11px] font-normal text-done">All on file</span>)}
-                empty={<EmptyState title="Nobody matches these filters.">Clear a filter to see more people.</EmptyState>}
+                empty={<EmptyState icon={SearchX} title="Nobody matches these filters.">Clear a filter to see more people.</EmptyState>}
             />
         </>
     );

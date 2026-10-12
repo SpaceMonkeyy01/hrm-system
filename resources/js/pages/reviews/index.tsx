@@ -1,5 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
-import { Plus } from 'lucide-react';
+import { Plus, Star } from 'lucide-react';
 import { useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
@@ -21,7 +21,9 @@ export default function ReviewsIndex({ cycles, cycleStatuses }: Props) {
                 actions={<Button onClick={() => setCreating(true)}><Plus /> New review cycle</Button>} />
             <div className="px-4 py-6 md:px-6">
                 {cycles.length === 0 ? (
-                    <EmptyState title="No review cycles yet.">Create one for a period, for example "2026 mid-year review".</EmptyState>
+                    <EmptyState icon={Star} title="No review cycles yet." action={<Button onClick={() => setCreating(true)}><Plus /> New review cycle</Button>}>
+                        Create one for a period, for example "2026 mid-year review", then add people and open it.
+                    </EmptyState>
                 ) : (
                     <ul className="grid gap-3 lg:grid-cols-2">
                         {cycles.map((c) => {

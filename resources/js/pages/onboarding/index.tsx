@@ -1,5 +1,5 @@
 import { Head, router, usePage } from '@inertiajs/react';
-import { Download, Search } from 'lucide-react';
+import { Download, Search, SearchX } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { ChecklistGrid } from '@/components/checklist-grid';
@@ -165,7 +165,7 @@ export default function OnboardingIndex({ rows, columns, optionSets, filters, co
                 before={before}
                 after={after}
                 reload={['rows']}
-                empty={<EmptyState title="Nobody matches these filters.">Clear a filter to see more people.</EmptyState>}
+                empty={<EmptyState icon={SearchX} title="Nobody matches these filters.">Clear a filter to see more people.</EmptyState>}
             />
         </>
     );
