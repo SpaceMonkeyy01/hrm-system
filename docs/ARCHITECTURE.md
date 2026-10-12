@@ -319,16 +319,20 @@ flowchart TD
 
 ## Permissions
 
-| Action | Viewer | HR | Admin |
-|---|:-:|:-:|:-:|
-| See dashboard, employees, grids, plans, offboarding, documents | yes | yes | yes |
-| Export CSV | yes | yes | yes |
-| Add or edit employees, change checklist values, bulk update | | yes | yes |
-| 90-day plans, offboarding, controlled documents | | yes | yes |
-| Delete an employee (soft delete) or a controlled document | | | yes |
-| Users, departments and teams, checklist items | | | yes |
+| Action | Employee | Viewer | HR | Admin |
+|---|:-:|:-:|:-:|:-:|
+| My page: own record, attendance, leave; update own contact details; ask HR to fix a day | yes | if linked | if linked | if linked |
+| See Home, Overview, Reports, employees, grids, plans, offboarding, documents | | yes | yes | yes |
+| Export CSV | | yes | yes | yes |
+| Add or edit employees, change checklist values, bulk update, approve attendance requests | | | yes | yes |
+| 90-day plans, offboarding, controlled documents | | | yes | yes |
+| Delete an employee (soft delete) or a controlled document | | | | yes |
+| Users, departments and teams, checklist items | | | | yes |
 
-Enforced on the server by route middleware (`can:edit-hr`, `can:admin`, gates defined in `AppServiceProvider`). The React pages only hide buttons; a viewer calling the API directly gets 403 (covered by `tests/Feature/AccessTest.php`).
+"Linked" means the login has `users.employee_id` set (Settings > Users). An employee login must be linked; for other roles it is optional.
+`MeController` reads only `$request->user()->employee_id`, never an id from the URL.
+
+Enforced on the server by route middleware (`can:view-hr`, `can:self-service`, `can:edit-hr`, `can:admin`, gates defined in `AppServiceProvider`). `tests/Feature/RouteAccessTest.php` checks that every HR route sits behind `can:view-hr` and returns 403 to an employee login. The React pages only hide buttons; a viewer calling the API directly gets 403 (covered by `tests/Feature/AccessTest.php`).
 
 ## Security notes
 

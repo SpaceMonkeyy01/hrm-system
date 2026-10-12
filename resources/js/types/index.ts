@@ -1,12 +1,13 @@
 // Shapes of the props the Laravel controllers send. Keep in sync with app/Http/Controllers.
 
-export type Role = 'admin' | 'hr' | 'viewer';
+export type Role = 'admin' | 'hr' | 'viewer' | 'employee';
 
 export type SharedProps = {
     appName: string;
     auth: {
         user: { id: number; name: string; email: string; role: Role } | null;
-        can: { edit: boolean; admin: boolean };
+        /** edit: admin+hr; admin; view: sees HR records (not employee logins); self: login linked to an employee (My page) */
+        can: { edit: boolean; admin: boolean; view: boolean; self: boolean };
     };
     flash: { success: string | null; error: string | null; id: string | null };
     sidebarOpen: boolean;

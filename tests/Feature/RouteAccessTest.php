@@ -2,9 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\AttendanceRequest;
 use App\Models\ChecklistItem;
 use App\Models\ControlledDocument;
 use App\Models\EmployeeFile;
+use App\Models\Department;
+use App\Models\Employee;
 use App\Models\EmploymentHistory;
 use App\Models\Holiday;
 use App\Models\LeaveRecord;
@@ -38,7 +41,8 @@ class RouteAccessTest extends TestCase
                 continue;
             }
             $middleware = $route->gatherMiddleware();
-            if (in_array('can:edit-hr', $middleware, true) || in_array('can:admin', $middleware, true)) {
+            // can:self-service writes only ever touch the login's own employee (MeController).
+            if (array_intersect(['can:edit-hr', 'can:admin', 'can:self-service'], $middleware)) {
                 continue;
             }
             foreach (array_diff($route->methods(), ['GET', 'HEAD', 'OPTIONS', 'QUERY']) as $method) {
@@ -48,7 +52,33 @@ class RouteAccessTest extends TestCase
                 }
             }
         }
-        $this->assertSame([], $ungated, 'Write routes must sit in a can:edit-hr or can:admin group.');
+        $this->assertSame([], $ungated, 'Write routes must sit in a can:edit-hr, can:admin or can:self-service group.');
+    }
+
+    public function test_every_route_outside_my_page_is_closed_to_employee_logins(): void
+    {
+        $routes = $this->gatedRoutes('view-hr');
+        $employee = $this->user('employee', ['employee_id' => Employee::first()->id]);
+        $bad = [];
+        foreach ($routes as [$method, $uri]) {
+            $uri = preg_replace('#^/export/\d+$#', '/export/employees', $uri);   // {type} is a leave type id elsewhere
+            $status = $this->actingAs($employee)->call($method, $uri, [])->status();
+            if ($status !== 403) {
+                $bad[] = "$method $uri => $status";
+            }
+        }
+        $this->assertSame([], $bad);
+        $this->assertGreaterThan(60, count($routes), 'every HR route sits behind can:view-hr');
+
+        // The only routes without can:view-hr are login/logout, the home redirect, own account and My page.
+        $open = [];
+        foreach (Route::getRoutes() as $route) {
+            if (! in_array('can:view-hr', $route->gatherMiddleware(), true)) {
+                $open[] = $route->uri();
+            }
+        }
+        $expected = ['/', 'account', 'login', 'logout', 'me', 'me/contact', 'me/requests', 'me/requests/{correction}', 'storage/{path}', 'up'];
+        $this->assertSame([], array_values(array_diff(array_unique($open), $expected)));
     }
 
     public function test_viewer_gets_403_on_every_edit_hr_route(): void
@@ -86,8 +116,12 @@ class RouteAccessTest extends TestCase
     /** Every route behind can:$gate, with real ids bound. */
     private function gatedRoutes(string $gate): array
     {
-        [$company, $dept] = $this->baseData();
-        $e = $this->employee($company);
+        if (! Employee::exists()) {
+            [$company, $dept] = $this->baseData();
+            $this->employee($company);
+        }
+        $e = Employee::first();
+        $dept ??= Department::first();
         $ids = [
             'employee' => $e->id,
             'item' => ChecklistItem::where('is_active', true)->first()->id,
@@ -103,6 +137,8 @@ class RouteAccessTest extends TestCase
             'holiday' => Holiday::create(['date' => '2026-08-14', 'name' => 'Test holiday'])->id,
             'type' => LeaveType::first()->id,
             'history' => EmploymentHistory::create(['employee_id' => $e->id, 'effective_date' => '2026-01-01', 'change_type' => 'Other'])->id,
+            'correction' => AttendanceRequest::create(['employee_id' => $e->id, 'date' => '2026-05-13', 'check_in' => '09:00', 'reason' => 'Test'])->id,
+            'report' => 'headcount',
         ];
         $out = [];
         foreach (Route::getRoutes() as $route) {

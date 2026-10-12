@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { AppLogo } from '@/components/app-sidebar';
 import { useFlash } from '@/components/flash-toaster';
+import { APP_CREDIT } from '@/lib/app-info';
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
     useFlash();
@@ -15,6 +16,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
                     <AppLogo variant="full" />
                 </div>
                 <div className="rounded-lg border bg-white p-6 shadow-sm sm:p-8">{children}</div>
+                <p className="mt-4 text-center text-xs text-muted-foreground">{APP_CREDIT}</p>
             </div>
         </div>
     );

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AttendanceAdjustment;
 use App\Models\AttendanceImport;
+use App\Models\AttendanceRequest;
 use App\Models\AttendancePunch;
 use App\Models\Company;
 use App\Models\Employee;
@@ -81,6 +82,7 @@ class AttendanceController extends Controller
             'statuses' => config('hrm.attendance.statuses'),
             'hasSchedules' => $board->schedules->isNotEmpty(),
             'unlinked' => $this->unlinkedCount(),
+            'pendingRequests' => AttendanceRequest::where('status', 'pending')->whereHas('employee')->count(),
             'lastImport' => AttendanceImport::latest('id')->first(['date_to', 'created_at'])?->date_to?->toDateString(),
         ]);
     }

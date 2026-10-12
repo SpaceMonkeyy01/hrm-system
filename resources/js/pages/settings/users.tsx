@@ -10,10 +10,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import type { SharedProps } from '@/types';
 
-type User = { id: number; name: string; email: string; role: string; is_active: boolean; created_at: string | null };
+type User = { id: number; name: string; email: string; role: string; is_active: boolean; employee_id: number | null; employee: string | null; created_at: string | null };
+type Option = { value: number; label: string };
 
-function UserRow({ user, roles, isMe }: { user: User; roles: Record<string, string>; isMe: boolean }) {
-    const form = useForm({ name: user.name, role: user.role, is_active: user.is_active, password: '' });
+const roleName = (r: string) => (r === 'hr' ? 'HR' : r[0].toUpperCase() + r.slice(1));
+
+function UserRow({ user, roles, isMe, employees }: { user: User; roles: Record<string, string>; isMe: boolean; employees: Option[] }) {
+    const form = useForm({ name: user.name, role: user.role, is_active: user.is_active, password: '', employee_id: user.employee_id ? String(user.employee_id) : '' });
     const submit = (e: FormEvent) => {
         e.preventDefault();
         form.put(`/settings/users/${user.id}`, { preserveScroll: true, onSuccess: () => { form.setDefaults({ ...form.data, password: '' }); form.reset('password'); } });
@@ -26,8 +29,14 @@ function UserRow({ user, roles, isMe }: { user: User; roles: Record<string, stri
             </td>
             <td className="py-2 pr-3">
                 <NativeSelect aria-label="Role" value={form.data.role} disabled={isMe} onChange={(e) => form.setData('role', e.target.value)}
-                    options={Object.keys(roles).map((r) => ({ value: r, label: r === 'hr' ? 'HR' : r[0].toUpperCase() + r.slice(1) }))} />
+                    options={Object.keys(roles).map((r) => ({ value: r, label: roleName(r) }))} />
                 {form.errors.role && <p className="mt-1 text-xs text-missing">{form.errors.role}</p>}
+            </td>
+            <td className="py-2 pr-3">
+                <NativeSelect aria-label="Their employee record" value={form.data.employee_id} placeholder={form.data.role === 'employee' ? 'Pick the employee' : 'Not linked'}
+                    options={user.employee_id && !employees.some((o) => o.value === user.employee_id) ? [{ value: user.employee_id, label: user.employee ?? 'Linked' }, ...employees] : employees}
+                    onChange={(e) => form.setData('employee_id', e.target.value)} />
+                {form.errors.employee_id && <p className="mt-1 text-xs text-missing">{form.errors.employee_id}</p>}
             </td>
             <td className="py-2 pr-3 pt-3.5">
                 <label className="flex items-center gap-2 text-sm">
@@ -47,10 +56,10 @@ function UserRow({ user, roles, isMe }: { user: User; roles: Record<string, stri
     );
 }
 
-export default function Users({ users, roles }: { users: User[]; roles: Record<string, string> }) {
+export default function Users({ users, roles, employees }: { users: User[]; roles: Record<string, string>; employees: Option[] }) {
     const { auth } = usePage<SharedProps>().props;
     const [open, setOpen] = useState(false);
-    const form = useForm({ name: '', email: '', role: 'hr', password: '' });
+    const form = useForm({ name: '', email: '', role: 'hr', password: '', employee_id: '' });
     const submit = (e: FormEvent) => {
         e.preventDefault();
         form.post('/settings/users', { preserveScroll: true, onSuccess: () => { form.reset(); setOpen(false); } });
@@ -61,23 +70,24 @@ export default function Users({ users, roles }: { users: User[]; roles: Record<s
             <Head title="Users" />
             <PageHeader title="Users" description="Who can log in and what they can do. There is no public sign-up: add each person here."
                 actions={<Button onClick={() => setOpen(true)}><Plus /> Add login</Button>}>
-                <ul className="grid gap-1 text-sm text-muted-foreground sm:grid-cols-3">
+                <ul className="grid gap-1 text-sm text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
                     {Object.entries(roles).map(([k, v]) => <li key={k}>{v}</li>)}
                 </ul>
             </PageHeader>
             <div className="overflow-x-auto px-4 py-4 md:px-6">
-                <table className="w-full min-w-[820px] text-sm">
+                <table className="w-full min-w-[1080px] text-sm">
                     <thead>
                         <tr className="border-b text-left text-xs text-muted-foreground">
                             <th className="py-2.5 pr-3 font-semibold">Name and email</th>
                             <th className="w-40 py-2.5 pr-3 font-semibold">Role</th>
+                            <th className="w-64 py-2.5 pr-3 font-semibold">Their employee record</th>
                             <th className="w-36 py-2.5 pr-3 font-semibold">Access</th>
                             <th className="w-56 py-2.5 pr-3 font-semibold">Reset password</th>
                             <th className="w-20 py-2.5" />
                         </tr>
                     </thead>
                     <tbody className="divide-y">
-                        {users.map((u) => <UserRow key={u.id} user={u} roles={roles} isMe={u.id === auth.user?.id} />)}
+                        {users.map((u) => <UserRow key={u.id} user={u} roles={roles} employees={employees} isMe={u.id === auth.user?.id} />)}
                     </tbody>
                 </table>
             </div>
@@ -94,6 +104,11 @@ export default function Users({ users, roles }: { users: User[]; roles: Record<s
                         <Field label="Role" htmlFor="u-role" error={form.errors.role}>
                             <NativeSelect id="u-role" value={form.data.role} onChange={(e) => form.setData('role', e.target.value)}
                                 options={Object.entries(roles).map(([k, v]) => ({ value: k, label: v }))} />
+                        </Field>
+                        <Field label="Their employee record" htmlFor="u-emp" error={form.errors.employee_id}
+                            hint={form.data.role === 'employee' ? 'Employee logins see only this record, on My page.' : 'Optional. Linking gives them My page too.'}>
+                            <NativeSelect id="u-emp" value={form.data.employee_id} placeholder={form.data.role === 'employee' ? 'Pick the employee' : 'Not linked'}
+                                options={employees} onChange={(e) => form.setData('employee_id', e.target.value)} />
                         </Field>
                         <Field label="Password" htmlFor="u-pass" error={form.errors.password} hint="At least 8 characters.">
                             <Input id="u-pass" type="text" required value={form.data.password} onChange={(e) => form.setData('password', e.target.value)} autoComplete="off" />

@@ -14,7 +14,7 @@ type DocItem = { key: string; label: string; yes: number; na: number; pending: n
 type Props = {
     today: string;
     reminders: Reminder[];
-    totals: { current: number; unassigned: number; needsReview: number; inOnboarding: number; offboarding: number };
+    totals: { current: number; unassigned: number; needsReview: number; inOnboarding: number; offboarding: number; requests: number };
     onboarding: {
         total: number;
         orientation: Record<'Not Started' | 'In Progress' | 'Complete', number>;
@@ -240,6 +240,11 @@ export default function Dashboard(props: Props) {
 
                     <Section title="Lists to check" description="Each line opens the list behind it.">
                         <ul className="grid gap-0.5 rounded-lg border p-2">
+                            {auth.can.edit && (
+                                <Attention n={totals.requests} href="/attendance/requests" tone="missing">
+                                    attendance fixes asked for on My page are waiting for HR
+                                </Attention>
+                            )}
                             <Attention n={o.overdue.length} href="/onboarding?probation=overdue" tone="missing">
                                 people are past their probation end date with the result still Pending
                             </Attention>

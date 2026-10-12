@@ -22,5 +22,7 @@ class AppServiceProvider extends ServiceProvider
         // Permissions. Routes use them as middleware: ->middleware('can:edit-hr')
         Gate::define('edit-hr', fn (User $user) => $user->canEdit());   // admin, hr
         Gate::define('admin', fn (User $user) => $user->isAdmin());      // admin only
+        Gate::define('view-hr', fn (User $user) => $user->canViewHr());  // admin, hr, viewer: every HR page
+        Gate::define('self-service', fn (User $user) => $user->hasSelfService());   // a login linked to an employee: My page
     }
 }

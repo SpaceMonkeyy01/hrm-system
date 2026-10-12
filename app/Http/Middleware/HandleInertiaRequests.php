@@ -24,6 +24,8 @@ class HandleInertiaRequests extends Middleware
                 'can' => [
                     'edit' => (bool) $user?->canEdit(),
                     'admin' => (bool) $user?->isAdmin(),
+                    'view' => (bool) $user?->canViewHr(),
+                    'self' => (bool) $user?->hasSelfService(),
                 ],
             ],
             // One-off messages from ->with('success' | 'error', ...). The id lets the browser show

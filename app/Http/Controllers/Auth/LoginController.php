@@ -43,7 +43,10 @@ class LoginController extends Controller
         RateLimiter::clear($key);
         $request->session()->regenerate();
 
-        return redirect()->intended(route('dashboard'));
+        // Staff go where they were heading; an employee login only ever has My page.
+        $user = $request->user();
+
+        return $user->canViewHr() ? redirect()->intended($user->homeUrl()) : redirect($user->homeUrl());
     }
 
     public function destroy(Request $request): RedirectResponse

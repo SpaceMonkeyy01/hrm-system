@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
 use App\Models\AttendancePunch;
+use App\Models\AttendanceRequest;
 use App\Models\Employee;
 use App\Models\Holiday;
 use App\Models\LeaveRecord;
@@ -51,6 +52,7 @@ class DashboardController extends Controller
                 'inOnboarding' => $snapshot['onboarding']['total'],
                 // Skip cases whose employee was soft-deleted, like every other tile (the relation itself includes trashed).
                 'offboarding' => Offboarding::where('status', 'in_progress')->whereHas('employee', fn ($q) => $q->withoutTrashed())->count(),
+                'requests' => AttendanceRequest::where('status', 'pending')->whereHas('employee')->count(),
             ],
             ...$snapshot,
             'attendance' => $this->latestAttendance($current, $today, $now),

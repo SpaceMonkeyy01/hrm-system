@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Models\Employee;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,9 +19,14 @@ class UserController extends Controller
     public function index(): Response
     {
         return Inertia::render('settings/users', [
-            'users' => User::query()->orderBy('name')->get(['id', 'name', 'email', 'role', 'is_active', 'created_at'])
-                ->map(fn ($u) => [...$u->only('id', 'name', 'email', 'role', 'is_active'), 'created_at' => $u->created_at?->toIso8601String()]),
+            'users' => User::query()->with('employee:id,full_name,employee_code')->orderBy('name')->get(['id', 'name', 'email', 'role', 'is_active', 'employee_id', 'created_at'])
+                ->map(fn ($u) => [...$u->only('id', 'name', 'email', 'role', 'is_active', 'employee_id'),
+                    'employee' => $u->employee ? "{$u->employee->full_name} ({$u->employee->employee_code})" : null,
+                    'created_at' => $u->created_at?->toIso8601String()]),
             'roles' => config('hrm.roles'),
+            // Current staff, for linking a login to its own employee record (My page).
+            'employees' => Employee::query()->whereIn('status', ['active', 'offboarding'])->orderBy('full_name')->get(['id', 'full_name', 'employee_code'])
+                ->map(fn ($e) => ['value' => $e->id, 'label' => "{$e->full_name} ({$e->employee_code})"]),
         ]);
     }
 
@@ -35,7 +41,8 @@ class UserController extends Controller
             'email' => ['required', 'email', 'max:150', 'unique:users,email'],
             'role' => ['required', Rule::in(array_keys(config('hrm.roles')))],
             'password' => ['required', Password::min(8)],
-        ]);
+            ...$this->employeeRule(null),
+        ], self::MESSAGES);
         $user = User::create($data + ['is_active' => true]);
 
         return back()->with('success', "Login created for {$user->email}. Share the password with them directly.");
@@ -48,7 +55,8 @@ class UserController extends Controller
             'role' => ['required', Rule::in(array_keys(config('hrm.roles')))],
             'is_active' => ['required', 'boolean'],
             'password' => ['nullable', Password::min(8)],
-        ]);
+            ...$this->employeeRule($user),
+        ], self::MESSAGES);
 
         // Don't let an admin lock themselves (and possibly everyone) out.
         if ($user->is($request->user()) && ($data['role'] !== 'admin' || ! $data['is_active'])) {
@@ -60,5 +68,17 @@ class UserController extends Controller
         $user->update($data);
 
         return back()->with('success', "Saved {$user->email}.");
+    }
+
+    private const MESSAGES = [
+        'employee_id.required_if' => 'Pick the employee this login belongs to.',
+        'employee_id.unique' => 'That employee already has a login.',
+    ];
+
+    /** Employee logins must belong to someone; other roles may (so HR staff get My page too). */
+    private function employeeRule(?User $user): array
+    {
+        return ['employee_id' => ['nullable', 'required_if:role,employee', 'integer',
+            Rule::exists('employees', 'id')->withoutTrashed(), Rule::unique('users', 'employee_id')->ignore($user?->id)]];
     }
 }

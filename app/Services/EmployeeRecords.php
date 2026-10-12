@@ -1,0 +1,55 @@
+<?php
+
+namespace App\Services;
+
+use App\Http\Controllers\LeaveController;
+use App\Models\Employee;
+use Carbon\CarbonImmutable;
+
+/** One person's month of attendance and year of leave. The HR profile and My page both show these. */
+class EmployeeRecords
+{
+    /** One month of attendance (?month=2026-05), newest day first. */
+    public static function attendanceMonth(Employee $employee, mixed $month): array
+    {
+        $month = is_string($month) && preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $month) ? $month : CarbonImmutable::today()->format('Y-m');
+        $first = CarbonImmutable::parse($month.'-01');
+        $now = CarbonImmutable::now();
+        $board = new AttendanceBoard(collect([$employee]), $first->toDateString(), $first->endOfMonth()->toDateString());
+        $days = [];
+        foreach ($board->dates() as $date) {
+            $day = $board->day($employee, $date, $now);
+            if ($day && $day['status'] !== null) {
+                $days[] = $day + [
+                    'schedule' => $day['schedule_id'] ? $board->schedules->get($day['schedule_id'])?->name : null,
+                    'punchTimes' => array_map(fn ($t) => substr($t, 0, 5), $board->punchesOn($employee->id, $date)),
+                ];
+            }
+        }
+        $current = $board->scheduleFor($employee->id, min($now->toDateString(), $first->endOfMonth()->toDateString()));
+
+        return [
+            'month' => $month,
+            'days' => array_reverse($days),
+            'counts' => array_count_values(array_column($days, 'status')) + ['Late' => count(array_filter($days, fn ($d) => $d['late'] > 0))],
+            'worked' => array_sum(array_column($days, 'worked')),
+            'schedule' => $current ? ['name' => $current->name, 'summary' => $current->summary()] : null,
+            'linked' => (bool) ($employee->attendance_machine_id || $employee->hr_portal_id),
+            'statuses' => config('hrm.attendance.statuses'),
+        ];
+    }
+
+    /** This year's leave, newest first, with days per type. */
+    public static function leaveYear(Employee $employee): array
+    {
+        $year = CarbonImmutable::today()->year;
+        $records = $employee->leaveRecords()->with('type:id,name', 'author:id,name')
+            ->where('end_date', '>=', "$year-01-01")->where('start_date', '<=', "$year-12-31")->orderByDesc('start_date')->get();
+
+        return [
+            'year' => $year,
+            'records' => $records->map(fn ($r) => LeaveController::recordProps($r))->values(),
+            'totals' => $records->groupBy(fn ($r) => $r->type->name)->map(fn ($g) => $g->sum('days'))->all(),
+        ];
+    }
+}

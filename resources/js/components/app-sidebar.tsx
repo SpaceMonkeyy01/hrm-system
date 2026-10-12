@@ -1,6 +1,7 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
     CalendarClock,
+    CircleUserRound,
     ChartColumnBig,
     ChevronsUpDown,
     ClipboardCheck,
@@ -38,6 +39,7 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { APP_CREDIT } from '@/lib/app-info';
 import type { SharedProps } from '@/types';
 
 type Item = { title: string; href: string; icon: LucideIcon };
@@ -62,7 +64,9 @@ const settings: Item[] = [
     { title: 'Checklists', href: '/settings/checklists', icon: ListChecks },
 ];
 
-const roleLabel = { admin: 'Admin', hr: 'HR', viewer: 'Viewer' } as const;
+const roleLabel = { admin: 'Admin', hr: 'HR', viewer: 'Viewer', employee: 'Employee' } as const;
+
+const mine: Item[] = [{ title: 'My page', href: '/me', icon: CircleUserRound }];
 
 /** Blue Cascade branding. "mark" (sidebar) is the square "bl" icon plus the app name; "full" (login) is the full logo. */
 export function AppLogo({ variant = 'mark' }: { variant?: 'mark' | 'full' }) {
@@ -126,7 +130,7 @@ export function AppSidebar() {
                 <SidebarMenu>
                     <SidebarMenuItem>
                         <SidebarMenuButton size="lg" asChild>
-                            <Link href="/dashboard" aria-label="HRM System home">
+                            <Link href={auth.can.view ? '/dashboard' : '/me'} aria-label="HRM System home">
                                 <AppLogo />
                             </Link>
                         </SidebarMenuButton>
@@ -135,11 +139,13 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavGroup label="HR records" items={work} />
+                {auth.can.view && <NavGroup label="HR records" items={work} />}
+                {(auth.can.self || !auth.can.view) && <NavGroup label="Me" items={mine} />}
                 {auth.can.admin && <NavGroup label="Settings" items={settings} />}
             </SidebarContent>
 
             <SidebarFooter>
+                <p className="px-2 text-[11px] text-muted-foreground group-data-[collapsible=icon]:hidden">{APP_CREDIT}</p>
                 <SidebarMenu>
                     <SidebarMenuItem>
                         <DropdownMenu>

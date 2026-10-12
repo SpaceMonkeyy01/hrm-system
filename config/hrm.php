@@ -12,11 +12,21 @@
 
 return [
 
-    // Roles a login can have. admin > hr > viewer.
+    // Roles a login can have. admin > hr > viewer see HR records; employee sees only their own (My page).
     'roles' => [
         'admin' => 'Admin: everything, plus users and settings',
         'hr' => 'HR: add and edit employee records',
         'viewer' => 'Viewer: read only',
+        'employee' => 'Employee: only their own record',
+    ],
+
+    // Self-service (My page)
+    'self_service' => [
+        // How far back someone can ask HR to fix a day.
+        'request_days_back' => 60,
+        // Contact details people can update themselves (written to the activity log like any change).
+        'editable_fields' => ['phone', 'alternate_phone', 'personal_email', 'current_address', 'city',
+            'emergency_contact_name', 'emergency_contact_relation', 'emergency_contact_phone'],
     ],
 
     /*

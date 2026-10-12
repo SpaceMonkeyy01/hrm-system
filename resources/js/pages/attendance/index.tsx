@@ -1,5 +1,5 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { ChevronLeft, ChevronRight, Pencil, Upload } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Inbox, Pencil, Upload } from 'lucide-react';
 import { useState } from 'react';
 import { AdjustDialog, DayStatus, duration, TimeCell } from '@/components/attendance';
 import type { AttendanceDay } from '@/components/attendance';
@@ -16,7 +16,7 @@ type Company = { id: number; name: string; departments: { id: number; name: stri
 type Props = {
     date: string; today: string; rows: Row[]; counts: Record<string, number>;
     filters: { company?: number; department?: number; status?: string; q?: string };
-    companies: Company[]; statuses: Record<string, Tone>; hasSchedules: boolean; unlinked: number; lastImport: string | null;
+    companies: Company[]; statuses: Record<string, Tone>; hasSchedules: boolean; unlinked: number; lastImport: string | null; pendingRequests: number;
 };
 
 function shift(date: string, days: number): string {
@@ -43,7 +43,12 @@ export default function AttendanceIndex(props: Props) {
             <PageHeader
                 title="Attendance"
                 description={`Worked out from machine and HR.my punches, leave, holidays and each person's work schedule.${props.lastImport ? ` Punches loaded up to ${formatDate(props.lastImport)}.` : ''}`}
-                actions={can && <Button variant="outline" asChild><Link href="/attendance/imports"><Upload /> Upload attendance file</Link></Button>}
+                actions={can && (
+                    <>
+                        <Button variant="outline" asChild><Link href="/attendance/requests"><Inbox /> Requests{props.pendingRequests ? ` (${props.pendingRequests})` : ''}</Link></Button>
+                        <Button variant="outline" asChild><Link href="/attendance/imports"><Upload /> Upload attendance file</Link></Button>
+                    </>
+                )}
             >
                 <div className="flex flex-wrap items-center gap-2">
                     <Button variant="outline" size="icon" aria-label="Previous day" onClick={() => go({ date: shift(props.date, -1) })}><ChevronLeft /></Button>
