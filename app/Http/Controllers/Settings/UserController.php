@@ -5,8 +5,11 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Models\Employee;
 use App\Models\User;
+use App\Notifications\SetPasswordNotification;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Password as PasswordBroker;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
@@ -41,12 +44,27 @@ class UserController extends Controller
             'name' => ['required', 'string', 'max:150'],
             'email' => ['required', 'email', 'max:150', 'unique:users,email'],
             'role' => ['required', Rule::in(array_keys(config('hrm.roles')))],
-            'password' => ['required', Password::min(8)],
+            // With the welcome email the person chooses their own password from the link, so HR doesn't set one.
+            'send_invite' => ['boolean'],
+            'password' => ['exclude_if:send_invite,true', 'required', Password::min(8)],
             ...$this->employeeRule(null),
         ], self::MESSAGES);
-        $user = User::create($data + ['is_active' => true]);
+        $invite = $request->boolean('send_invite');
+        $user = User::create(collect($data)->except('send_invite')->all() + ['is_active' => true]
+            + ($invite ? ['password' => Str::random(40)] : []));   // unknown to everyone until they use the link
 
-        return back()->with('success', "Login created for {$user->email}. Share the password with them directly.");
+        if (! $invite) {
+            return back()->with('success', "Login created for {$user->email}. Share the password with them directly.");
+        }
+        try {
+            $user->notify(new SetPasswordNotification(PasswordBroker::broker('invites')->createToken($user), invite: true));
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', "Login created for {$user->email}, but the welcome email couldn't be sent. Check the email settings, then set a password for them here or ask them to use \"Forgot your password?\".");
+        }
+
+        return back()->with('success', "Login created. {$user->email} has an email with a link to choose their password.");
     }
 
     public function update(Request $request, User $user): RedirectResponse

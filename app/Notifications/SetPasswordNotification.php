@@ -27,7 +27,9 @@ class SetPasswordNotification extends Notification
         return $this->invite
             ? (new MailMessage)->subject("Your $app login")
                 ->greeting("Hello {$notifiable->name},")
-                ->line("HR has set up a login for you on $app. You can see your attendance, leave and reviews, and keep your contact details up to date.")
+                ->line("HR has set up a login for you on $app. ".($notifiable->role === 'employee'
+                    ? 'You can see your attendance, leave and reviews, and keep your contact details up to date.'
+                    : 'You can use it to work with HR records.'))
                 ->action('Choose your password', $url)
                 ->line("The link works for $hours hours. If it has run out, use \"Forgot your password?\" on the login page.")
             : (new MailMessage)->subject("Reset your $app password")

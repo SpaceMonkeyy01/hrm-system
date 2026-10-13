@@ -60,7 +60,7 @@ function UserRow({ user, roles, isMe, employees }: { user: User; roles: Record<s
 export default function Users({ users, roles, employees, staffLogins }: { users: User[]; roles: Record<string, string>; employees: Option[]; staffLogins: { ready: number; noEmail: number; emailTaken: number } }) {
     const { auth } = usePage<SharedProps>().props;
     const [open, setOpen] = useState(false);
-    const form = useForm({ name: '', email: '', role: 'hr', password: '', employee_id: '' });
+    const form = useForm({ name: '', email: '', role: 'hr', password: '', employee_id: '', send_invite: true });
     const submit = (e: FormEvent) => {
         e.preventDefault();
         form.post('/settings/users', { preserveScroll: true, onSuccess: () => { form.reset(); setOpen(false); } });
@@ -113,7 +113,11 @@ export default function Users({ users, roles, employees, staffLogins }: { users:
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                         <DialogTitle>Add login</DialogTitle>
-                        <DialogDescription>Share the password with the person directly. They can change it under Your account.</DialogDescription>
+                        <DialogDescription>
+                            {form.data.send_invite
+                                ? 'They get an email with a link to choose their own password. The link works for 3 days.'
+                                : 'Share the password with the person directly. They can change it under Your account.'}
+                        </DialogDescription>
                     </DialogHeader>
                     <form onSubmit={submit} className="grid gap-4">
                         <Field label="Name" htmlFor="u-name" error={form.errors.name}><Input id="u-name" required value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} /></Field>
@@ -127,9 +131,15 @@ export default function Users({ users, roles, employees, staffLogins }: { users:
                             <NativeSelect id="u-emp" value={form.data.employee_id} placeholder={form.data.role === 'employee' ? 'Pick the employee' : 'Not linked'}
                                 options={employees} onChange={(e) => form.setData('employee_id', e.target.value)} />
                         </Field>
-                        <Field label="Password" htmlFor="u-pass" error={form.errors.password} hint="At least 8 characters.">
-                            <Input id="u-pass" type="text" required value={form.data.password} onChange={(e) => form.setData('password', e.target.value)} autoComplete="off" />
-                        </Field>
+                        <label className="flex items-center gap-2 text-sm">
+                            <input type="checkbox" className="size-4 accent-cascade" checked={form.data.send_invite} onChange={(e) => form.setData('send_invite', e.target.checked)} />
+                            Send them a welcome email
+                        </label>
+                        {!form.data.send_invite && (
+                            <Field label="Password" htmlFor="u-pass" error={form.errors.password} hint="At least 8 characters.">
+                                <Input id="u-pass" type="text" required value={form.data.password} onChange={(e) => form.setData('password', e.target.value)} autoComplete="off" />
+                            </Field>
+                        )}
                         <DialogFooter>
                             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
                             <Button type="submit" disabled={form.processing}>Add login</Button>

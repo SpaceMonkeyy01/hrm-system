@@ -183,6 +183,41 @@ class DataToolsTest extends TestCase
         $this->post('/login', ['email' => 'alpha@fake.test', 'password' => 'new-pass-123'])->assertRedirect('/me');
     }
 
+    public function test_adding_one_login_can_send_a_welcome_email_instead_of_a_password(): void
+    {
+        Notification::fake();
+        $admin = $this->user('admin');
+
+        $this->actingAs($admin)->post('/settings/users', ['name' => 'Fake Alpha', 'email' => 'alpha@fake.test', 'role' => 'employee', 'employee_id' => $this->a->id, 'send_invite' => true])
+            ->assertSessionHasNoErrors()->assertSessionHas('success');
+        $login = User::where('email', 'alpha@fake.test')->sole();
+        $token = null;
+        Notification::assertSentTo($login, SetPasswordNotification::class, function ($n) use (&$token) {
+            $token = $n->token;
+
+            return $n->invite;
+        });
+        $this->assertStringContainsString('attendance, leave and reviews', implode(' ', (new SetPasswordNotification('t', invite: true))->toMail($login)->introLines));
+
+        auth()->logout();
+        $this->post('/reset-password', ['token' => $token, 'email' => 'alpha@fake.test', 'password' => 'new-pass-123', 'password_confirmation' => 'new-pass-123', 'invite' => true])
+            ->assertRedirect('/login');
+        $this->post('/login', ['email' => 'alpha@fake.test', 'password' => 'new-pass-123'])->assertRedirect('/me');
+
+        // Without the email, HR still has to give a password.
+        $this->actingAs($admin)->post('/settings/users', ['name' => 'B', 'email' => 'b@fake.test', 'role' => 'hr', 'send_invite' => false])
+            ->assertSessionHasErrors('password');
+        Notification::assertCount(1);
+    }
+
+    public function test_a_failed_welcome_email_still_keeps_the_login_and_says_so(): void
+    {
+        Notification::shouldReceive('send')->andThrow(new \RuntimeException('SMTP down'));
+        $this->actingAs($this->user('admin'))->post('/settings/users', ['name' => 'B', 'email' => 'b@fake.test', 'role' => 'hr', 'send_invite' => true])
+            ->assertSessionHas('error');
+        $this->assertTrue(User::where('email', 'b@fake.test')->exists());
+    }
+
     public function test_forgot_password_never_says_who_has_a_login(): void
     {
         Notification::fake();
