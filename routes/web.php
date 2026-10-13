@@ -48,6 +48,7 @@ use Illuminate\Support\Facades\Route;
 
 // Daily reminder email for hosts without a scheduler (CronController). 404 unless CRON_TOKEN is set and matches.
 Route::get('cron/reminders/{token}', [CronController::class, 'reminders'])->middleware('throttle:10,1')->name('cron.reminders');
+Route::get('cron/machine/{token}', [CronController::class, 'machine'])->middleware('throttle:10,1')->name('cron.machine');
 
 Route::middleware('guest')->group(function () {
     Route::get('login', [LoginController::class, 'create'])->name('login');
@@ -162,6 +163,7 @@ Route::middleware('auth')->group(function () {
             Route::post('attendance/imports/check', [AttendanceUploadController::class, 'check'])->name('attendance.check');
             Route::post('attendance/imports/confirm', [AttendanceUploadController::class, 'confirm'])->name('attendance.confirm');
             Route::post('attendance/imports/discard', [AttendanceUploadController::class, 'discard'])->name('attendance.discard');
+            Route::post('attendance/machine/sync', [AttendanceUploadController::class, 'syncMachine'])->middleware('throttle:6,1')->name('attendance.machine.sync');
             Route::post('attendance/link', [AttendanceController::class, 'link'])->name('attendance.link');
             Route::get('attendance/requests', [AttendanceRequestController::class, 'index'])->name('attendance.requests');
             Route::post('attendance/requests/{correction}/approve', [AttendanceRequestController::class, 'approve'])->name('attendance.requests.approve');

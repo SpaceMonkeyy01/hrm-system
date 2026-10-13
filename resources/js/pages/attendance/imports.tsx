@@ -3,6 +3,8 @@ import { Check, CircleCheck, FileSearch, Info, Link2, TriangleAlert, X } from 'l
 import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { toast } from 'sonner';
+import { MachineSyncBar } from '@/components/attendance';
+import type { MachineStatus } from '@/components/attendance';
 import { EmptyState } from '@/components/empty-state';
 import { Field } from '@/components/field';
 import { NativeSelect } from '@/components/native-select';
@@ -16,7 +18,7 @@ type Import = { id: number; source: string; original_name: string; punches_found
 type Source = 'machine' | 'hrmy';
 type Unlinked = { source: Source; device_user_id: string; device_name: string | null; punches: number; last_seen: string; suggestion: number | null; confidence: 'match' | 'check' | 'several' | 'none' };
 type Person = { id: number; label: string; machine: string | null; hrmy: string | null };
-type Props = { imports: Import[]; unlinked: Unlinked[]; people: Person[]; sources: Record<Source, string>; pending: Pending | null; maxKb: number };
+type Props = { imports: Import[]; unlinked: Unlinked[]; people: Person[]; sources: Record<Source, string>; pending: Pending | null; machine: MachineStatus; maxKb: number };
 
 const confidence = {
     match: { label: 'Name matches', tone: 'done' },
@@ -208,13 +210,14 @@ function LinkTable({ source, unlinked, people }: { source: Source; unlinked: Unl
     );
 }
 
-export default function AttendanceImports({ imports, unlinked, people, sources, pending, maxKb }: Props) {
+export default function AttendanceImports({ imports, unlinked, people, sources, pending, machine, maxKb }: Props) {
     const bySource = (['machine', 'hrmy'] as const).map((s) => ({ source: s, rows: unlinked.filter((u) => u.source === s) })).filter((g) => g.rows.length > 0);
     return (
         <>
             <Head title="Attendance files" />
             <PageHeader back={{ href: '/attendance', label: 'Attendance' }} title="Attendance files" description="Upload the machine and HR.my files, and link their IDs to employees." />
             <div className="grid gap-10 px-4 py-6 md:px-6">
+                <MachineSyncBar machine={machine} canSync showRecent />
                 <UploadForm maxKb={maxKb} />
                 {pending && pending.files.length > 0 && <PendingFiles pending={pending} />}
 

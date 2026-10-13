@@ -1,8 +1,8 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { ChevronLeft, ChevronRight, Clock, Inbox, Pencil, SearchX, Upload } from 'lucide-react';
 import { useState } from 'react';
-import { AdjustDialog, DayStatus, duration, SessionsLine, TimeCell } from '@/components/attendance';
-import type { AttendanceDay } from '@/components/attendance';
+import { AdjustDialog, DayStatus, duration, MachineSyncBar, SessionsLine, TimeCell } from '@/components/attendance';
+import type { AttendanceDay, MachineStatus } from '@/components/attendance';
 import { Avatar } from '@/components/avatar';
 import { EmptyState } from '@/components/empty-state';
 import { NativeSelect } from '@/components/native-select';
@@ -18,6 +18,7 @@ type Props = {
     date: string; today: string; rows: Row[]; counts: Record<string, number>;
     filters: { company?: number; department?: number; status?: string; q?: string };
     companies: Company[]; statuses: Record<string, Tone>; hasSchedules: boolean; unlinked: number; lastImport: string | null; pendingRequests: number;
+    machine: MachineStatus;
 };
 
 function shift(date: string, days: number): string {
@@ -65,6 +66,7 @@ export default function AttendanceIndex(props: Props) {
             </PageHeader>
 
             <div className="grid gap-4 px-4 py-6 md:px-6">
+                <MachineSyncBar machine={props.machine} canSync={can} />
                 {!props.hasSchedules && (
                     <p className="rounded-lg border border-[#ecd29c] bg-pending-soft px-4 py-3 text-sm">
                         No work schedules yet, so nobody is marked late, absent or on a half day. <Link className="font-semibold text-cascade underline" href="/attendance/schedules">Add work schedules</Link>.

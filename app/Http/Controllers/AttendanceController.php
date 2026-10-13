@@ -10,6 +10,7 @@ use App\Models\Company;
 use App\Models\Employee;
 use App\Services\AttendanceBoard;
 use App\Services\Import\AttendanceFileImporter;
+use App\Services\Import\MachineSyncer;
 use App\Services\Import\NameMatcher;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
@@ -83,6 +84,7 @@ class AttendanceController extends Controller
             'hasSchedules' => $board->schedules->isNotEmpty(),
             'unlinked' => $this->unlinkedCount(),
             'pendingRequests' => AttendanceRequest::where('status', 'pending')->whereHas('employee')->count(),
+            'machine' => MachineSyncer::status(),
             'lastImport' => AttendanceImport::latest('id')->first(['date_to', 'created_at'])?->date_to?->toDateString(),
         ]);
     }
@@ -157,6 +159,7 @@ class AttendanceController extends Controller
                 'machine' => $e->attendance_machine_id, 'hrmy' => $e->hr_portal_id])->values(),
             'sources' => AttendanceFileImporter::SOURCES,
             'pending' => AttendanceUploadController::pending($request),
+            'machine' => MachineSyncer::status(),
             'maxKb' => config('hrm.uploads.max_kb'),
         ]);
     }

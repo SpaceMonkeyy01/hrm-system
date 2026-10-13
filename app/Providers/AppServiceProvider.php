@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use App\Models\User;
+use App\Support\Zk\AttendanceMachine;
+use App\Support\Zk\ZkClient;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -11,7 +13,9 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
+        $this->app->bind(AttendanceMachine::class, fn () => new ZkClient(
+            (string) config('hrm.machine.host'), (int) config('hrm.machine.port'), (int) config('hrm.machine.comm_key'), (int) config('hrm.machine.timeout'),
+        ));
     }
 
     public function boot(): void

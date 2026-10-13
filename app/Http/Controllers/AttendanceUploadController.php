@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\Import\AttendanceFileImporter;
 use App\Services\Import\AttendanceFilePreview;
+use App\Services\Import\MachineSyncer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -77,6 +78,16 @@ class AttendanceUploadController extends Controller
         }
 
         return redirect()->route('attendance.imports')->with('success', 'Imported. '.implode('; ', $done).'.');
+    }
+
+    /** "Sync now": read the attendance machine straight away. */
+    public function syncMachine(Request $request, MachineSyncer $syncer): RedirectResponse
+    {
+        abort_unless(MachineSyncer::configured(), 404);
+        set_time_limit(180);
+        $sync = $syncer->run('manual', $request->user()->id);
+
+        return back()->with($sync->ok ? 'success' : 'error', MachineSyncer::summary($sync));
     }
 
     public function discard(Request $request): RedirectResponse

@@ -1,4 +1,5 @@
 import { router } from '@inertiajs/react';
+import { RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Field } from '@/components/field';
@@ -7,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { formatDate } from '@/lib/format';
+import { formatDate, formatDateTime, timeAgo } from '@/lib/format';
 import type { Tone } from '@/types';
 
 /** app/Services/AttendanceRules.php day() */
@@ -45,6 +46,54 @@ export function SessionsLine({ day, className }: { day: Pick<AttendanceDay, 'ses
         <span className={`block text-xs font-normal text-muted-foreground ${className ?? ''}`} title="Each stretch of work. The time between them isn't counted.">
             {day.sessions.map((s) => `${plainTime(s.in)}-${plainTime(s.out)} ${sessionSource[s.source]}`).join(', ')}
         </span>
+    );
+}
+
+/** app/Services/Import/MachineSyncer.php status() */
+export type MachineStatus = {
+    configured: boolean;
+    last?: { at: string; ok: boolean | null; added: number; error: string | null } | null;
+    last_ok_at?: string | null;
+    clock_offset?: number | null;
+    clock_wrong?: boolean;
+    recent?: { at: string; ok: boolean | null; added: number; checked: number; trigger: string; error: string | null }[];
+};
+
+/** "Machine synced 4 minutes ago, 3 new punches" with Sync now; the error when the last try failed. */
+export function MachineSyncBar({ machine, canSync, showRecent }: { machine: MachineStatus; canSync: boolean; showRecent?: boolean }) {
+    const [busy, setBusy] = useState(false);
+    if (!machine.configured) return null;
+    const last = machine.last;
+    const sync = () => router.post('/attendance/machine/sync', {}, { preserveScroll: true, onStart: () => setBusy(true), onFinish: () => setBusy(false) });
+    const offset = machine.clock_offset ?? 0;
+    return (
+        <div className={`grid gap-2 rounded-lg border px-4 py-3 text-sm ${last && last.ok === false ? 'border-[#f0b8b8] bg-missing-soft' : ''}`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <p>
+                    <span className="font-semibold">Attendance machine. </span>
+                    {!last && 'Not synced yet.'}
+                    {last?.ok && `Synced ${timeAgo(last.at)}${last.added ? `, ${last.added} new ${last.added === 1 ? 'punch' : 'punches'}` : ', nothing new'}.`}
+                    {last && last.ok === false && <>Last try {timeAgo(last.at)} failed: {last.error}{machine.last_ok_at ? ` Last good sync ${timeAgo(machine.last_ok_at)}.` : ''}</>}
+                    {last && last.ok === null && `Syncing since ${timeAgo(last.at)}.`}
+                </p>
+                {canSync && <Button variant="outline" size="sm" disabled={busy} onClick={sync}><RefreshCw className={busy ? 'animate-spin' : ''} /> {busy ? 'Reading the machine' : 'Sync now'}</Button>}
+            </div>
+            {machine.clock_wrong && (
+                <p className="text-pending">
+                    The machine's clock is {Math.abs(offset) < 120 ? `${Math.abs(offset)} seconds` : duration(Math.round(Math.abs(offset) / 60))} {offset > 0 ? 'fast' : 'slow'}, so its punches are off by that much. Set the time on the machine (Menu, Date/Time).
+                </p>
+            )}
+            {showRecent && machine.recent && machine.recent.length > 0 && (
+                <ul className="grid gap-0.5 text-xs text-muted-foreground">
+                    {machine.recent.map((r) => (
+                        <li key={r.at}>
+                            {formatDateTime(r.at)}, {r.trigger === 'cron' ? 'automatic' : r.trigger === 'manual' ? 'Sync now' : r.trigger}:{' '}
+                            {r.ok ? `${r.added} new of ${r.checked} recent` : r.ok === false ? <span className="text-missing">{r.error}</span> : 'did not finish'}
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
     );
 }
 

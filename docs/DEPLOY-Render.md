@@ -99,6 +99,26 @@ Render free has no always-on scheduler, so an outside service opens the app's re
 
 Keep the link private: anyone with it can trigger the email (only to HR and admin, and only once a day).
 
+## 5b. Attendance machine sync
+
+The app reads the ZKTeco machine over the internet: new punches, the user list and its clock. It never changes,
+clears or restarts anything on the machine.
+
+1. On the machine: set a **Comm Key** that isn't a default like 123456 (*Comm. > Comm Key*).
+2. On the office router: port forward the static IP's port 4370 to the machine. **Allow only Render's outbound IPs**
+   (Render dashboard > your service > *Connect* > *Outbound*), so nobody else on the internet can reach the machine.
+3. Render > Environment: `ZK_HOST` = the static IP, `ZK_PORT` = 4370, `ZK_COMM_KEY` = the key.
+4. Attendance > Upload attendance file > **Sync now**. The first sync brings in everything stored on the machine
+   (about 6 seconds for 20,000 punches); after that each sync only compares the last 3 days.
+5. cron-job.org > **Create cronjob**:
+   - URL: `https://hrm-system.onrender.com/cron/machine/THE-CRON-TOKEN` (same token as the reminders)
+   - Schedule: every 10 minutes (every 5 is fine too)
+   - Turn on "notify on failure": a failed sync answers with an error, e.g. "Sync failed: Couldn't reach the machine".
+
+The Attendance page shows when the machine was last synced, and warns when the machine's clock is more than a minute
+off (set it under the machine's *Date/Time* menu). Uploading a Full day log still works and never doubles punches
+the sync already brought in.
+
 ## 6. Staff logins and email
 
 Logins for staff (Settings > Users > Create staff logins) send each person a link to choose their password. That needs the `MAIL_*` settings from step 3. With Gmail: turn on 2-step verification, create an **app password**, then `MAIL_HOST=smtp.gmail.com`, `MAIL_PORT=587`, `MAIL_USERNAME` = the Gmail address, `MAIL_PASSWORD` = the app password, `MAIL_FROM_ADDRESS` = the same address.

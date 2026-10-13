@@ -40,6 +40,16 @@ export function daysBetween(from: string, to: string): number {
     return Math.round((utc(to) - utc(from)) / 86_400_000);
 }
 
+/** ISO timestamp -> "just now", "4 minutes ago", "2 hours ago", else the date and time. */
+export function timeAgo(value: string | null | undefined): string {
+    if (!value) return '';
+    const minutes = Math.round((Date.now() - new Date(value).getTime()) / 60000);
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`;
+    if (minutes < 24 * 60) return `${Math.round(minutes / 60)} ${Math.round(minutes / 60) === 1 ? 'hour' : 'hours'} ago`;
+    return formatDateTime(value);
+}
+
 export function plural(n: number, one: string, many = `${one}s`): string {
     return `${n} ${n === 1 ? one : many}`;
 }

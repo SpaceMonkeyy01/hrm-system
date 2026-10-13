@@ -53,6 +53,20 @@ return [
     // Empty = the URL doesn't exist. Make it long and random: anyone with it can trigger the daily email.
     'cron_token' => env('CRON_TOKEN', ''),
 
+    // The ZKTeco attendance machine, read over the internet (port forward to its port 4370). Empty host = not set up.
+    // The app only reads: punches, the user list, the clock. Restrict the port forward to the server's outbound IPs.
+    'machine' => [
+        'host' => env('ZK_HOST', ''),
+        'port' => (int) env('ZK_PORT', 4370),
+        'comm_key' => (int) env('ZK_COMM_KEY', 0),   // Comm. > Comm Key on the machine; 0 = none
+        'timeout' => 20,
+        // Each sync saves the machine's punches from this many days before our latest machine punch (the first
+        // sync saves everything). Covers a sync that failed for a few days without re-checking months of punches.
+        'lookback_days' => 3,
+        // Warn HR when the machine's clock is off by more than this.
+        'clock_warn_seconds' => 60,
+    ],
+
     // Self-service (My page)
     'self_service' => [
         // How far back someone can ask HR to fix a day.
