@@ -47,8 +47,9 @@ use Illuminate\Support\Facades\Route;
 */
 
 // Daily reminder email for hosts without a scheduler (CronController). 404 unless CRON_TOKEN is set and matches.
-Route::get('cron/reminders/{token}', [CronController::class, 'reminders'])->middleware('throttle:10,1')->name('cron.reminders');
-Route::get('cron/machine/{token}', [CronController::class, 'machine'])->middleware('throttle:10,1')->name('cron.machine');
+// Render's generated CRON_TOKEN is base64 and can contain "/", so the token may span several path segments.
+Route::get('cron/reminders/{token}', [CronController::class, 'reminders'])->where('token', '.+')->middleware('throttle:10,1')->name('cron.reminders');
+Route::get('cron/machine/{token}', [CronController::class, 'machine'])->where('token', '.+')->middleware('throttle:10,1')->name('cron.machine');
 
 Route::middleware('guest')->group(function () {
     Route::get('login', [LoginController::class, 'create'])->name('login');

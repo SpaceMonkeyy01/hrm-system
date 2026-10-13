@@ -88,6 +88,13 @@ class MachineSyncTest extends TestCase
         $this->assertSame([true, false], MachineSync::orderBy('id')->pluck('ok')->all());
     }
 
+    public function test_a_generated_token_with_slashes_and_plus_works(): void
+    {
+        config(['hrm.cron_token' => 'aB3/x+Yz9/Qw==']);   // Render's generateValue is base64
+        $this->get('/cron/machine/aB3/x+Yz9/Qw==')->assertOk()->assertSee('Synced: 3 new punches');
+        $this->get('/cron/machine/aB3/x+Yz9')->assertNotFound();
+    }
+
     public function test_sync_now_is_for_hr_and_admin_only(): void
     {
         $this->actingAs($this->user('viewer'))->post('/attendance/machine/sync')->assertForbidden();
