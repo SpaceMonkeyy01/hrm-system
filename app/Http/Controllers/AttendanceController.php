@@ -122,7 +122,7 @@ class AttendanceController extends Controller
 
     // ---------------------------------------------------------------- files and linking
 
-    public function imports(): Response
+    public function imports(Request $request): Response
     {
         $people = Employee::query()->whereIn('status', ['active', 'offboarding'])->orderBy('full_name')
             ->get(['id', 'employee_code', 'full_name', 'attendance_machine_id', 'hr_portal_id']);
@@ -156,6 +156,7 @@ class AttendanceController extends Controller
             'people' => $people->map(fn ($e) => ['id' => $e->id, 'label' => "{$e->full_name} ({$e->employee_code})",
                 'machine' => $e->attendance_machine_id, 'hrmy' => $e->hr_portal_id])->values(),
             'sources' => AttendanceFileImporter::SOURCES,
+            'pending' => AttendanceUploadController::pending($request),
             'maxKb' => config('hrm.uploads.max_kb'),
         ]);
     }

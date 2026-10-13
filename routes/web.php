@@ -4,6 +4,7 @@ use App\Http\Controllers\AccountController;
 use App\Http\Controllers\AssetController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\AttendanceRequestController;
+use App\Http\Controllers\AttendanceUploadController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\ChecklistEntryController;
@@ -158,6 +159,9 @@ Route::middleware('auth')->group(function () {
         Route::middleware('can:edit-hr')->group(function () {
             Route::get('attendance/imports', [AttendanceController::class, 'imports'])->name('attendance.imports');
             Route::post('attendance/imports', [AttendanceController::class, 'upload'])->name('attendance.upload');
+            Route::post('attendance/imports/check', [AttendanceUploadController::class, 'check'])->name('attendance.check');
+            Route::post('attendance/imports/confirm', [AttendanceUploadController::class, 'confirm'])->name('attendance.confirm');
+            Route::post('attendance/imports/discard', [AttendanceUploadController::class, 'discard'])->name('attendance.discard');
             Route::post('attendance/link', [AttendanceController::class, 'link'])->name('attendance.link');
             Route::get('attendance/requests', [AttendanceRequestController::class, 'index'])->name('attendance.requests');
             Route::post('attendance/requests/{correction}/approve', [AttendanceRequestController::class, 'approve'])->name('attendance.requests.approve');

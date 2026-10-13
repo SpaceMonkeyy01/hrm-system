@@ -40,22 +40,7 @@ class AttendanceFileImporter
      */
     public function import(string $path, string $originalName, ?string $storedPath, ?int $userId): array
     {
-        [$source, $records] = $this->read($path, $originalName);
-
-        $rows = [];
-        $skipped = [];
-        foreach ($records as $i => $r) {
-            $row = $source === 'machine' ? $this->machineRow($r) : $this->hrmyRow($r);
-            if (is_string($row)) {
-                $skipped[] = 'Row '.($i + 2).': '.$row;
-
-                continue;
-            }
-            $rows[$row['device_user_id'].'|'.$row['punched_at']] = $row + ['source' => $source];
-        }
-        if (! $rows) {
-            throw ValidationException::withMessages(['file' => 'No punches could be read. '.implode('; ', array_slice($skipped, 0, 3))]);
-        }
+        ['source' => $source, 'rows' => $rows, 'skipped' => $skipped] = $this->punches($path, $originalName);
 
         return DB::transaction(function () use ($rows, $source, $originalName, $storedPath, $userId, $skipped) {
             $dates = array_column($rows, 'work_date');
@@ -75,7 +60,36 @@ class AttendanceFileImporter
         });
     }
 
-    /** @return array{0: string, 1: list<array<string, string>>} source and records */
+    /**
+     * Reads the file without saving anything: what import() would store, for the preview.
+     *
+     * @return array{source: string, format: string, rows: array<string, array<string, mixed>>, skipped: list<string>}
+     *
+     * @throws ValidationException when the file isn't a punch export we know, or has no readable punches
+     */
+    public function punches(string $path, string $originalName): array
+    {
+        [$source, $format, $records] = $this->read($path, $originalName);
+
+        $rows = [];
+        $skipped = [];
+        foreach ($records as $i => $r) {
+            $row = $source === 'machine' ? $this->machineRow($r) : $this->hrmyRow($r);
+            if (is_string($row)) {
+                $skipped[] = 'Row '.($i + 2).': '.$row;
+
+                continue;
+            }
+            $rows[$row['device_user_id'].'|'.$row['punched_at']] = $row + ['source' => $source];
+        }
+        if (! $rows) {
+            throw ValidationException::withMessages(['file' => 'No punches could be read. '.implode('; ', array_slice($skipped, 0, 3))]);
+        }
+
+        return ['source' => $source, 'format' => $format, 'rows' => $rows, 'skipped' => $skipped];
+    }
+
+    /** @return array{0: string, 1: string, 2: list<array<string, string>>} source, format name and records */
     private function read(string $path, string $originalName): array
     {
         try {
@@ -89,13 +103,14 @@ class AttendanceFileImporter
             if (in_array('AC-No.', $names, true) || in_array('Clock In', $names, true)) {
                 throw ValidationException::withMessages(['file' => 'This is the machine\'s Full Report. Upload the "Full day log" instead (the file with a Date/Time column, one row per punch).']);
             }
-            foreach (['machine' => ['No.', 'Date/Time'], 'hrmy' => ['Date', 'ID', 'Action', 'Time']] as $source => $required) {
-                if (! array_diff($required, $names)) {
-                    return [$source, self::recordsBelow($table, $required)];
-                }
+            if (! array_diff(['No.', 'Date/Time'], $names)) {
+                return ['machine', 'Full day log', self::recordsBelow($table, ['No.', 'Date/Time'])];
+            }
+            if (! array_diff(['Date', 'ID', 'Action', 'Time'], $names)) {
+                return ['hrmy', 'Time Clock Records', self::recordsBelow($table, ['Date', 'ID', 'Action', 'Time'])];
             }
             if (! array_diff(self::HRMY_DAILY, $names)) {
-                return ['hrmy', self::dailyToPunches(self::recordsBelow($table, self::HRMY_DAILY))];
+                return ['hrmy', 'Attendance Transactions', self::dailyToPunches(self::recordsBelow($table, self::HRMY_DAILY))];
             }
         }
         throw ValidationException::withMessages(['file' => 'This isn\'t a file we know. Upload the machine\'s "Full day log" or an HR.my export (Time Clock Records or Attendance Transactions).']);
