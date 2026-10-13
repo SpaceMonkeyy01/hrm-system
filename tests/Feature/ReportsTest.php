@@ -114,6 +114,25 @@ class ReportsTest extends TestCase
         $this->assertSame([0, 0], [$april['absent'], $april['working_days']]);
     }
 
+    public function test_split_day_shows_each_session_and_counts_only_the_time_worked(): void
+    {
+        // Office in the morning on the machine, then a shift from home on HR.my.
+        $this->linked->update(['hr_portal_id' => 'BCC-901']);
+        foreach (['2026-05-19 09:00:00', '2026-05-19 13:00:00'] as $at) {
+            AttendancePunch::create(['source' => 'machine', 'device_user_id' => '1', 'punched_at' => $at, 'work_date' => '2026-05-19']);
+        }
+        foreach (['In' => '2026-05-19 20:00:00', 'Out' => '2026-05-19 23:30:00'] as $action => $at) {
+            AttendancePunch::create(['source' => 'hrmy', 'device_user_id' => 'BCC-901', 'punched_at' => $at, 'work_date' => '2026-05-19', 'method' => $action]);
+        }
+
+        $log = $this->props('/reports/attendance-log?from=2026-05-18&to=2026-05-19')['result'];
+        $this->assertSame([['2026-05-18', '09:30-17:05 machine', 455], ['2026-05-19', '09:00-13:00 machine, 20:00-23:30 HR.my', 450]],
+            array_map(fn ($r) => [$r['date'], $r['sessions'], $r['worked']], array_values(array_filter($log['rows'], fn ($r) => $r['employee']['name'] === 'Fake Linked'))));
+        $day = collect($this->props('/attendance?date=2026-05-19')['rows'])->firstWhere('employee.name', 'Fake Linked');
+        $this->assertSame([450, 2, '23:30'], [$day['worked'], count($day['sessions']), $day['out']]);
+        $this->assertStringContainsString('20:00-23:30 HR.my', $this->row($this->props('/reports/attendance-sheet?month=2026-05'), 'Fake Linked')['d19']['title']);
+    }
+
     public function test_late_and_absence_lists(): void
     {
         $late = $this->props('/reports/late-arrivals?from=2026-05-18&to=2026-05-19')['result']['rows'];

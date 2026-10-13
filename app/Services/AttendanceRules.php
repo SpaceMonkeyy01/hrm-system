@@ -10,14 +10,21 @@ use Carbon\CarbonInterface;
  * Attendance status for one person on one day: the only place it is worked out (like HrRules for onboarding).
  * Inputs are the day's punch times, HR's manual adjustment and the work schedule that applied that day.
  *
- *   check-in   HR's time, else the first punch
- *   check-out  HR's time, else the last punch (if there are two or more), else the schedule's end time when the
- *              schedule auto-checks-out, else missing
+ *   sessions   the day's punches as stretches of work. Machine punches in a row are one block, first to last
+ *              (a lunch break inside it counts as work). HR.my punches carry In/Out and pair up in order. So
+ *              office 09:00-14:00 then remote 20:00-23:00 is two sessions, and the evening at home isn't work.
+ *              An In with no Out, or a block with one punch, is an open session
+ *   check-in   HR's time, else the first session's start
+ *   check-out  HR's time, else the last session's end (open last session = missing), else the schedule's end
+ *              time when the schedule auto-checks-out, else missing
+ *   worked     the sessions added up (overlaps counted once); HR's times move the first start and the last end
  *   late       fixed schedules: in after start + grace; counted from the start time
  *   early      fixed schedules: out before end - grace; counted to the end time
  *   short      flexible schedules: worked less than the day's hours
  *   overtime   worked past the end time (fixed) or past the day's hours (flexible) by more than the schedule's
- *              overtime_after_minutes; counted from the end / the day's hours. Null on the schedule = not counted
+ *              overtime_after_minutes; counted from the end / the day's hours. Null on the schedule = not counted.
+ *              Fixed: only the session that started before the end counts; a later session (a second shift
+ *              from home) is shown but not labelled overtime
  *   night      times can run past midnight: a punch on the next morning arrives as "33:00" (24 + 9). A schedule
  *              whose end is before its start (21:00-06:00) ends the next morning; HR's check-out before the
  *              check-in means the next morning too
@@ -30,17 +37,19 @@ use Carbon\CarbonInterface;
 class AttendanceRules
 {
     /**
-     * @param  list<string>  $punches  "H:i:s" times on $date, any order
+     * @param  list<string|array{time: string, source?: ?string, method?: ?string}>  $punches  "H:i:s" times on $date, any
+     *     order; with the source and HR.my's In/Out when known
      * @param  array{check_in: ?string, check_out: ?string, note?: ?string}|null  $adjustment
      * @param  array{holiday?: ?string, leave?: ?array{type: string, part: string}}  $context
      * @return array{date: string, status: ?string, in: ?string, out: ?string, in_source: ?string, out_source: ?string,
      *     worked: ?int, late: int, early: int, short: int, overtime: int, punches: int, working_day: bool, adjusted: bool,
-     *     note: ?string, holiday: ?string, leave: ?array{type: string, part: string}}
+     *     note: ?string, holiday: ?string, leave: ?array{type: string, part: string},
+     *     sessions: list<array{in: ?string, out: ?string, source: string, minutes: ?int}>}
      *         status null = a future day (nothing to show yet)
      */
     public static function day(string $date, array $punches, ?array $adjustment, ?WorkSchedule $schedule, CarbonInterface $now, array $context = []): array
     {
-        $times = self::dedupe($punches);
+        $sessions = self::sessions($punches, $count);
         $today = $now->toDateString();
         $holiday = $context['holiday'] ?? null;
         $leave = $context['leave'] ?? null;
@@ -48,34 +57,55 @@ class AttendanceRules
         $working = ($schedule === null || in_array(CarbonImmutable::parse($date)->isoWeekday(), array_map('intval', $schedule->working_days ?? []), true))
             && $holiday === null;
 
+        // HR's times replace the first start and the last end.
         $in = $adjustment['check_in'] ?? null;
         $inSource = $in ? 'manual' : null;
-        if (! $in && $times) {
-            $in = substr($times[0], 0, 5);
+        if ($in && $sessions) {
+            $sessions[0]['in'] = $in;
+            $sessions[0]['source'] = 'manual';
+        } elseif ($in) {
+            $sessions[] = ['in' => $in, 'out' => null, 'source' => 'manual'];
+        } elseif ($sessions && $sessions[0]['in']) {
+            $in = $sessions[0]['in'];
             $inSource = 'punch';
         }
         $out = $adjustment['check_out'] ?? null;
         $outSource = $out ? 'manual' : null;
-        if (! $out && count($times) >= 2) {
-            $out = substr(end($times), 0, 5);
-            $outSource = 'punch';
-        }
         if ($out && $in && self::minutes($out) <= self::minutes($in)) {
             $out = self::clock(self::minutes($out) + 1440);   // HR typed 06:00 for a night shift: next morning
+        }
+        if ($out) {
+            $last = array_key_last($sessions);
+            if ($last === null) {
+                $sessions[] = ['in' => null, 'out' => $out, 'source' => 'manual'];
+            } else {
+                $sessions[$last]['out'] = $out;
+                $sessions[$last]['source'] = 'manual';
+            }
+        } elseif ($sessions && end($sessions)['out']) {
+            $out = end($sessions)['out'];
+            $outSource = 'punch';
         }
         $fixed = $schedule && ! $schedule->isFlexible() && $schedule->start_time && $schedule->end_time;
         $startMin = $fixed ? self::minutes($schedule->start_time) : null;
         $endMin = $fixed ? self::minutes($schedule->end_time) + (self::minutes($schedule->end_time) <= $startMin ? 1440 : 0) : null;
         // One punch after the end of the day is not a check-in to close.
-        if ($in && ! $out && $date < $today && $fixed && $schedule->missing_checkout === 'auto' && self::minutes($in) < $endMin) {
+        if ($in && ! $out && $date < $today && $fixed && $schedule->missing_checkout === 'auto'
+            && self::minutes(end($sessions)['in'] ?? $in) < $endMin) {
             $out = self::clock($endMin);
             $outSource = 'auto';
+            $sessions[array_key_last($sessions)]['out'] = $out;
         }
+        foreach ($sessions as &$s) {
+            $s['minutes'] = $s['in'] && $s['out'] ? max(0, self::minutes($s['out']) - self::minutes($s['in'])) : null;
+        }
+        unset($s);
 
         $result = [
             'date' => $date, 'status' => null, 'in' => $in, 'out' => $out, 'in_source' => $inSource, 'out_source' => $outSource,
-            'worked' => null, 'late' => 0, 'early' => 0, 'short' => 0, 'overtime' => 0, 'punches' => count($times), 'working_day' => $working,
+            'worked' => null, 'late' => 0, 'early' => 0, 'short' => 0, 'overtime' => 0, 'punches' => $count, 'working_day' => $working,
             'adjusted' => $adjustment !== null, 'note' => $adjustment['note'] ?? null, 'holiday' => $holiday, 'leave' => $leave,
+            'sessions' => $sessions,
         ];
 
         if ($date > $today) {
@@ -105,12 +135,13 @@ class AttendanceRules
         // ------------------------------------------------------------ one side missing
         if (! $in || ! $out) {
             $result['status'] = $date === $today && $in ? 'In office' : 'Missing punch';
+            $result['worked'] = self::worked($sessions) ?: null;   // a split day still shows the sessions that closed
 
             return $result;
         }
 
         // ------------------------------------------------------------ both
-        $worked = max(0, self::minutes($out) - self::minutes($in));
+        $worked = self::worked($sessions);
         $result['worked'] = $worked;
         if ($fixed && $working && ! $fullLeave && ($leave['part'] ?? null) !== 'second_half') {
             if (self::minutes($out) < $endMin - $schedule->early_grace_minutes) {
@@ -119,7 +150,13 @@ class AttendanceRules
         } elseif ($schedule && $schedule->isFlexible() && $working && ! $leave && $worked < $schedule->full_day_minutes) {
             $result['short'] = $schedule->full_day_minutes - $worked;
         }
-        $result['overtime'] = self::overtime($schedule, $out, $worked, $working, $endMin);
+        // Fixed: overtime runs on from the session that started before the end, not from a later one.
+        $dayOut = $out;
+        if ($endMin !== null) {
+            $before = array_filter($sessions, fn ($s) => $s['in'] && $s['out'] && self::minutes($s['in']) < $endMin);
+            $dayOut = $before ? end($before)['out'] : null;   // only after-hours sessions: nothing runs on past the end
+        }
+        $result['overtime'] = $dayOut === null && $working ? 0 : self::overtime($schedule, $dayOut ?? $out, $worked, $working, $endMin);
         $result['status'] = match (true) {
             ! $working => 'Worked day off',
             $schedule !== null && ! $leave && $worked < $schedule->half_day_minutes => 'Half day',
@@ -141,6 +178,122 @@ class AttendanceRules
         $extra = $endMin !== null ? self::minutes($out) - $endMin : $worked - $schedule->full_day_minutes;
 
         return $extra > $schedule->overtime_after_minutes ? $extra : 0;
+    }
+
+    /**
+     * The day's punches as sessions, in time order. HR.my In/Out pairs make one session each. Machine (and
+     * unlabelled) punches make one block from first to last, split only where a whole HR.my session lies between
+     * two of them. An Out with no In ends the block before it (in at the office, out from home). Known limit: the
+     * machine has no In/Out, so leaving the office and punching back in later the same day stays one block.
+     *
+     * @param  list<string|array{time: string, source?: ?string, method?: ?string}>  $punches
+     * @param  int|null  $count  set to the number of punches kept (double taps dropped)
+     * @return list<array{in: ?string, out: ?string, source: string}>
+     */
+    public static function sessions(array $punches, ?int &$count = null): array
+    {
+        $labelled = [];
+        $plain = [];
+        foreach ($punches as $p) {
+            $p = is_string($p) ? ['time' => $p] : $p;
+            $method = ucfirst(strtolower((string) ($p['method'] ?? '')));
+            if (in_array($method, ['In', 'Out'], true)) {
+                $labelled[] = ['time' => $p['time'], 'source' => $p['source'] ?? 'hrmy', 'method' => $method];
+            } else {
+                $plain[$p['source'] ?? 'machine'][] = $p['time'];
+            }
+        }
+        usort($labelled, fn ($a, $b) => strcmp($a['time'], $b['time']));
+        $count = count($labelled);
+
+        // 1. HR.my: each In with the Out after it. An Out with nothing open is kept aside for step 3.
+        $remote = [];
+        $orphans = [];
+        $open = null;
+        foreach ($labelled as $p) {
+            $t = substr($p['time'], 0, 5);
+            if ($p['method'] === 'In') {
+                $open !== null && $remote[] = $open;
+                $open = ['in' => $t, 'out' => null, 'source' => $p['source']];
+            } elseif ($open !== null) {
+                $remote[] = ['in' => $open['in'], 'out' => $t, 'source' => $open['source']];
+                $open = null;
+            } else {
+                $orphans[] = ['time' => $t, 'source' => $p['source']];
+            }
+        }
+        $open !== null && $remote[] = $open;
+
+        // 2. Machine: punches in a row are one block, split only where a whole HR.my session lies between two punches
+        //    (office, then a stretch from home, then the office again).
+        $blocks = [];
+        foreach ($plain as $source => $times) {
+            $times = self::dedupe($times);
+            $count += count($times);
+            $block = null;
+            foreach ($times as $time) {
+                $t = substr($time, 0, 5);
+                $splits = $block !== null && array_filter($remote, fn ($r) => $r['in'] && $r['out']
+                    && strcmp($r['in'], end($block['times'])) > 0 && strcmp($r['out'], $t) < 0);
+                if ($block === null || $splits) {
+                    $block !== null && $blocks[] = $block;
+                    $block = ['source' => $source, 'times' => []];
+                }
+                $block['times'][] = $t;
+            }
+            $block !== null && $blocks[] = $block;
+        }
+
+        // 3. An Out with no In ends the block before it (in at the office, out from home).
+        foreach ($orphans as $o) {
+            $before = array_filter(array_keys($blocks), fn ($k) => strcmp(end($blocks[$k]['times']), $o['time']) < 0);
+            if ($before) {
+                $k = end($before);
+                $blocks[$k]['times'][] = $o['time'];
+                $blocks[$k]['source'] = $blocks[$k]['source'] === $o['source'] ? $o['source'] : 'mixed';
+            } else {
+                $remote[] = ['in' => null, 'out' => $o['time'], 'source' => $o['source']];
+            }
+        }
+
+        $sessions = $remote;
+        foreach ($blocks as $b) {
+            $sessions[] = ['in' => $b['times'][0], 'out' => count($b['times']) > 1 ? end($b['times']) : null, 'source' => $b['source']];
+        }
+        usort($sessions, fn ($a, $b) => strcmp($a['in'] ?? $a['out'], $b['in'] ?? $b['out']));
+
+        return $sessions;
+    }
+
+    /** Minutes covered by the closed sessions, overlaps counted once. */
+    private static function worked(array $sessions): int
+    {
+        $spans = [];
+        foreach ($sessions as $s) {
+            if ($s['in'] && $s['out']) {
+                $spans[] = [self::minutes($s['in']), max(self::minutes($s['in']), self::minutes($s['out']))];
+            }
+        }
+        sort($spans);
+        $total = 0;
+        $end = -1;
+        foreach ($spans as [$a, $b]) {
+            $a = max($a, $end);
+            if ($b > $a) {
+                $total += $b - $a;
+                $end = $b;
+            }
+        }
+
+        return $total;
+    }
+
+    /** "09:00-14:00 machine, 20:00-23:00 HR.my": the sessions in a line, for reports and the activity log. */
+    public static function sessionsText(array $sessions): string
+    {
+        $names = ['machine' => 'machine', 'hrmy' => 'HR.my', 'manual' => 'HR', 'mixed' => 'machine and HR.my'];
+
+        return implode(', ', array_map(fn ($s) => ($s['in'] ?? '?').'-'.($s['out'] ?? '?').' '.($names[$s['source']] ?? $s['source']), $sessions));
     }
 
     /**

@@ -1,7 +1,7 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { ChevronLeft, ChevronRight, Clock, Inbox, Pencil, SearchX, Upload } from 'lucide-react';
 import { useState } from 'react';
-import { AdjustDialog, DayStatus, duration, TimeCell } from '@/components/attendance';
+import { AdjustDialog, DayStatus, duration, SessionsLine, TimeCell } from '@/components/attendance';
 import type { AttendanceDay } from '@/components/attendance';
 import { Avatar } from '@/components/avatar';
 import { EmptyState } from '@/components/empty-state';
@@ -121,7 +121,7 @@ export default function AttendanceIndex(props: Props) {
                                         <td className="px-3 py-2 text-muted-foreground">{r.schedule ?? 'None'}</td>
                                         <td className="px-3 py-2"><TimeCell time={r.in} source={r.in_source} /></td>
                                         <td className="px-3 py-2"><TimeCell time={r.out} source={r.out_source} /></td>
-                                        <td className="px-3 py-2 tabular-nums">{duration(r.worked)}</td>
+                                        <td className="px-3 py-2 tabular-nums">{duration(r.worked)}<SessionsLine day={r} /></td>
                                         <td className="px-3 py-2">
                                             <DayStatus day={r} statuses={props.statuses} />
                                             {r.note && <span className="mt-0.5 block max-w-64 truncate text-xs text-muted-foreground" title={r.note}>{r.note}</span>}

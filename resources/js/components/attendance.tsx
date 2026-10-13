@@ -31,7 +31,22 @@ export type AttendanceDay = {
     note: string | null;
     schedule: string | null;
     punchTimes: string[];
+    /** Stretches of work: machine blocks and HR.my In/Out pairs. More than one = a split day. */
+    sessions: { in: string | null; out: string | null; source: 'machine' | 'hrmy' | 'manual' | 'mixed'; minutes: number | null }[];
 };
+
+const sessionSource = { machine: 'machine', hrmy: 'HR.my', manual: 'HR', mixed: 'machine and HR.my' } as const;
+const plainTime = (t: string | null) => (t ? `${String(Number(t.slice(0, 2)) % 24).padStart(2, '0')}${t.slice(2)}` : '?');
+
+/** "09:58-14:00 machine, 20:00-23:00 HR.my" under the hours on a split day; nothing on an ordinary day. */
+export function SessionsLine({ day, className }: { day: Pick<AttendanceDay, 'sessions'>; className?: string }) {
+    if (day.sessions.length < 2) return null;
+    return (
+        <span className={`block text-xs font-normal text-muted-foreground ${className ?? ''}`} title="Each stretch of work. The time between them isn't counted.">
+            {day.sessions.map((s) => `${plainTime(s.in)}-${plainTime(s.out)} ${sessionSource[s.source]}`).join(', ')}
+        </span>
+    );
+}
 
 export function duration(minutes: number | null | undefined): string {
     if (minutes === null || minutes === undefined) return '';
@@ -95,7 +110,9 @@ export function AdjustDialog({ open, onClose, employee, day, only }: {
                     <DialogHeader>
                         <DialogTitle>{employee.name}, {formatDate(day.date)}</DialogTitle>
                         <DialogDescription>
-                            Punches: {day.punchTimes.length ? day.punchTimes.join(', ') : 'none'}. Leave a time empty to use the punch.
+                            Punches: {day.punchTimes.length ? day.punchTimes.join(', ') : 'none'}.
+                            {day.sessions.length > 1 && ' This day has more than one session: check-in changes the first one, check-out the last one.'}
+                            {' '}Leave a time empty to use the punch.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 sm:grid-cols-2">

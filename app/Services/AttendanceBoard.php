@@ -34,7 +34,7 @@ class AttendanceBoard
     /** @var array<int, list<array{from: string, schedule: int}>> employee id => assignments, newest first */
     private array $assignments = [];
 
-    /** @var array<int, array<string, list<string>>> employee id => date => punch times */
+    /** @var array<int, array<string, list<array{time: string, source: string, method: ?string}>>> employee id => date => punches */
     private array $punches = [];
 
     /** @var array<int, array<string, array>> employee id => date => adjustment */
@@ -78,14 +78,14 @@ class AttendanceBoard
             ->where(fn ($q) => $q
                 ->where(fn ($m) => $m->where('source', 'machine')->whereIn('device_user_id', array_map('strval', array_keys($byDevice['machine']))))
                 ->orWhere(fn ($h) => $h->where('source', 'hrmy')->whereIn('device_user_id', array_map('strval', array_keys($byDevice['hrmy'])))));
-        foreach ($query->toBase()->get(['source', 'device_user_id', 'punched_at', 'work_date']) as $p) {
+        foreach ($query->toBase()->get(['source', 'device_user_id', 'punched_at', 'work_date', 'method']) as $p) {
             $employeeId = $byDevice[$p->source][$p->device_user_id] ?? null;
             if ($employeeId) {
                 $at = CarbonImmutable::parse($p->punched_at);
                 $day = substr((string) $p->work_date, 0, 10);
                 // A punch the next morning on a night shift: 09:00 the day after reads "33:00:00".
                 $hours = (int) $at->format('H') + 24 * (int) CarbonImmutable::parse($day)->diffInDays($at->startOfDay());
-                $this->punches[$employeeId][$day][] = sprintf('%02d', $hours).$at->format(':i:s');
+                $this->punches[$employeeId][$day][] = ['time' => sprintf('%02d', $hours).$at->format(':i:s'), 'source' => $p->source, 'method' => $p->method];
             }
         }
 
@@ -204,7 +204,7 @@ class AttendanceBoard
     /** Raw punch times on a day, for the detail view. @return list<string> */
     public function punchesOn(int $employeeId, string $date): array
     {
-        $p = $this->punches[$employeeId][$date] ?? [];
+        $p = array_column($this->punches[$employeeId][$date] ?? [], 'time');
         sort($p);
 
         return $p;

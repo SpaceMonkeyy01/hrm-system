@@ -1,7 +1,7 @@
 import { Head, router, useForm } from '@inertiajs/react';
 import { CheckCircle2, CircleDashed, Send } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
-import { DayStatus, duration, TimeCell } from '@/components/attendance';
+import { DayStatus, duration, SessionsLine, TimeCell } from '@/components/attendance';
 import { AttendanceHeatmap } from '@/components/attendance-heatmap';
 import type { AttendanceYear } from '@/components/attendance-heatmap';
 import type { AttendanceDay } from '@/components/attendance';
@@ -215,7 +215,7 @@ export default function MyPage(props: Props) {
                                         <DayStatus day={d} statuses={a.statuses} />
                                         {(d.in || d.out) && (
                                             <span className="text-xs text-muted-foreground">
-                                                In <TimeCell time={d.in} source={d.in_source} />, out <TimeCell time={d.out} source={d.out_source} />{d.worked ? `, ${duration(d.worked)}` : ''}
+                                                In <TimeCell time={d.in} source={d.in_source} />, out <TimeCell time={d.out} source={d.out_source} />{d.worked ? `, ${duration(d.worked)}` : ''}<SessionsLine day={d} />
                                             </span>
                                         )}
                                     </li>
@@ -237,7 +237,7 @@ export default function MyPage(props: Props) {
                                                     <td className="px-3 py-2 tabular-nums">{formatDate(d.date)}</td>
                                                     <td className="px-3 py-2"><TimeCell time={d.in} source={d.in_source} /></td>
                                                     <td className="px-3 py-2"><TimeCell time={d.out} source={d.out_source} /></td>
-                                                    <td className="px-3 py-2 tabular-nums">{duration(d.worked)}</td>
+                                                    <td className="px-3 py-2 tabular-nums">{duration(d.worked)}<SessionsLine day={d} /></td>
                                                     <td className="px-3 py-2">
                                                         <DayStatus day={d} statuses={a.statuses} />
                                                         {d.note && <span className="mt-0.5 block text-xs text-muted-foreground">{d.note}</span>}

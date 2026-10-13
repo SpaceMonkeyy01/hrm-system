@@ -4,6 +4,7 @@ namespace App\Services\Reports;
 
 use App\Models\Employee;
 use App\Services\AttendanceBoard;
+use App\Services\AttendanceRules;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 
@@ -148,7 +149,8 @@ class AttendanceReports
                     continue;
                 }
                 $status = $day['status'] === 'Present' && $day['late'] > 0 ? 'Late' : $day['status'];
-                $title = $status.($day['in'] ? " {$day['in']}".($day['out'] ? "-{$day['out']}" : '') : '')
+                $title = $status.(count($day['sessions']) > 1 ? ' '.AttendanceRules::sessionsText($day['sessions'])
+                    : ($day['in'] ? " {$day['in']}".($day['out'] ? "-{$day['out']}" : '') : ''))
                     .($day['late'] ? ", late {$day['late']} min" : '').($day['leave'] ? ", {$day['leave']['type']}" : '').($day['holiday'] ? ", {$day['holiday']}" : '');
                 $row[$key] = ['code' => self::CODES[$status] ?? '?', 'tone' => $tones[$status] ?? 'neutral', 'title' => $title];
                 $row['p'] += in_array($status, ['Present', 'Late', 'In office'], true) ? 1 : 0;
@@ -198,6 +200,25 @@ class AttendanceReports
         $minutes = array_sum(array_column($r->rows, 'late'));
         $r->stat('Late arrivals', count($r->rows), count($r->rows) ? 'pending' : null)->stat('People', count($people))
             ->stat('Average', count($r->rows) ? round($minutes / count($r->rows)).' min' : '0 min');
+
+        return $r;
+    }
+
+    /** Every day with a time on it, and each stretch of work: office blocks and HR.my sessions. */
+    public function log(ReportFilters $f): ReportResult
+    {
+        $tones = config('hrm.attendance.statuses');
+        $r = (new ReportResult)->column('date', 'Date', 'date')->column('employee', 'Employee', 'employee')
+            ->column('department', 'Department')->column('status', 'Status', 'status', ['tones' => $tones])
+            ->column('in', 'First in')->column('out', 'Last out')->column('sessions', 'Sessions')
+            ->column('worked', 'Hours worked', 'minutes')->column('punches', 'Punches', 'number')->column('note', 'HR note');
+        $people = $this->days($f, fn ($d) => $d['sessions'] !== [], $r, fn ($d) => [
+            'status' => $d['status'], 'in' => $d['in'], 'out' => $d['out'], 'sessions' => AttendanceRules::sessionsText($d['sessions']),
+            'worked' => $d['worked'] ?? 0, 'punches' => $d['punches'], 'note' => $d['note'],
+        ]);
+        $split = count(array_filter($r->rows, fn ($row) => substr_count($row['sessions'], ', ') > 0));
+        $r->stat('Days', count($r->rows))->stat('People', count($people))->stat('Split days', $split, $split ? 'info' : null)
+            ->note('Sessions: machine punches in a row are one block; each HR.my clock-in and clock-out is one session. The time between sessions is not counted as worked.');
 
         return $r;
     }

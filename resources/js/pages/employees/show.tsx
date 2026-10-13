@@ -18,7 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { formatDate, formatDateTime } from '@/lib/format';
 import type { ActivityItem, ChecklistColumn, OptionSets, SharedProps, Tone } from '@/types';
-import { AdjustDialog, DayStatus, duration, TimeCell } from '@/components/attendance';
+import { AdjustDialog, DayStatus, duration, SessionsLine, TimeCell } from '@/components/attendance';
 import type { AttendanceDay } from '@/components/attendance';
 import { AssetList } from '@/components/assets';
 import type { AssetRow } from '@/components/assets';
@@ -145,7 +145,7 @@ function AttendanceTab({ e, a, canEdit }: { e: Employee; a: AttendanceMonth; can
                                     <td className="px-3 py-2 tabular-nums">{formatDate(d.date)}</td>
                                     <td className="px-3 py-2"><TimeCell time={d.in} source={d.in_source} /></td>
                                     <td className="px-3 py-2"><TimeCell time={d.out} source={d.out_source} /></td>
-                                    <td className="px-3 py-2 tabular-nums">{duration(d.worked)}</td>
+                                    <td className="px-3 py-2 tabular-nums">{duration(d.worked)}<SessionsLine day={d} /></td>
                                     <td className="px-3 py-2">
                                         <DayStatus day={d} statuses={a.statuses} />
                                         {d.note && <span className="mt-0.5 block text-xs text-muted-foreground">{d.note}</span>}
