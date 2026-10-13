@@ -143,8 +143,8 @@ function AttendanceTab({ e, a, canEdit }: { e: Employee; a: AttendanceMonth; can
                             {a.days.map((d) => (
                                 <tr key={d.date} className={d.status === 'Day off' ? 'text-muted-foreground' : undefined}>
                                     <td className="px-3 py-2 tabular-nums">{formatDate(d.date)}</td>
-                                    <td className="px-3 py-2"><TimeCell time={d.in} source={d.in_source} /></td>
-                                    <td className="px-3 py-2"><TimeCell time={d.out} source={d.out_source} /></td>
+                                    <td className="px-3 py-2"><TimeCell time={d.in} source={d.in_source} where={d.in_where} /></td>
+                                    <td className="px-3 py-2"><TimeCell time={d.out} source={d.out_source} where={d.out_where} /></td>
                                     <td className="px-3 py-2 tabular-nums">{duration(d.worked)}<SessionsLine day={d} /></td>
                                     <td className="px-3 py-2">
                                         <DayStatus day={d} statuses={a.statuses} />

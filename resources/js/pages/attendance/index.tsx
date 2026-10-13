@@ -1,5 +1,5 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { ChevronLeft, ChevronRight, Clock, Inbox, Pencil, SearchX, Upload } from 'lucide-react';
+import { Building2, ChevronLeft, ChevronRight, Clock, House, Inbox, Pencil, SearchX, Upload } from 'lucide-react';
 import { useState } from 'react';
 import { AdjustDialog, DayStatus, duration, MachineSyncBar, SessionsLine, TimeCell } from '@/components/attendance';
 import type { AttendanceDay, MachineStatus } from '@/components/attendance';
@@ -16,10 +16,13 @@ type Row = AttendanceDay & { employee: { id: number; code: string; name: string;
 type Company = { id: number; name: string; departments: { id: number; name: string }[] };
 type Props = {
     date: string; today: string; rows: Row[]; counts: Record<string, number>;
-    filters: { company?: number; department?: number; status?: string; q?: string };
+    filters: { company?: number; department?: number; status?: string; where?: 'office' | 'remote' | 'both'; q?: string };
     companies: Company[]; statuses: Record<string, Tone>; hasSchedules: boolean; unlinked: number; lastImport: string | null; pendingRequests: number;
     machine: MachineStatus;
+    places: Record<'office' | 'remote' | 'both', number>;
 };
+
+const placeLabel = { office: 'In the office', remote: 'Remote', both: 'Office + remote' } as const;
 
 function shift(date: string, days: number): string {
     const [y, m, d] = date.split('-').map(Number);
@@ -88,10 +91,21 @@ export default function AttendanceIndex(props: Props) {
                         </Button>
                     ))}
                 </div>
+                {(props.places.remote > 0 || props.places.both > 0 || props.filters.where) && (
+                    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter by where">
+                        <span className="text-xs text-muted-foreground">Where:</span>
+                        <Button size="sm" variant={!props.filters.where ? 'default' : 'outline'} onClick={() => go({ where: undefined })}>Anywhere</Button>
+                        {(['office', 'remote', 'both'] as const).map((w) => (
+                            <Button key={w} size="sm" variant={props.filters.where === w ? 'default' : 'outline'} onClick={() => go({ where: w })}>
+                                {w === 'office' ? <Building2 /> : <House />} {placeLabel[w]} {props.places[w]}
+                            </Button>
+                        ))}
+                    </div>
+                )}
 
                 {props.rows.length === 0 ? (
-                    <EmptyState icon={props.filters.status || props.filters.q || props.filters.department ? SearchX : Clock}
-                        title={props.filters.status || props.filters.q || props.filters.department ? 'Nobody matches these filters.' : 'No attendance for this day.'}
+                    <EmptyState icon={props.filters.status || props.filters.where || props.filters.q || props.filters.department ? SearchX : Clock}
+                        title={props.filters.status || props.filters.where || props.filters.q || props.filters.department ? 'Nobody matches these filters.' : 'No attendance for this day.'}
                         action={can && !props.filters.status && !props.filters.q && <Button variant="outline" asChild><Link href="/attendance/imports"><Upload /> Upload attendance file</Link></Button>} />
                 ) : (
                     <div className="overflow-x-auto rounded-lg border">
@@ -121,8 +135,8 @@ export default function AttendanceIndex(props: Props) {
                                             </span>
                                         </td>
                                         <td className="px-3 py-2 text-muted-foreground">{r.schedule ?? 'None'}</td>
-                                        <td className="px-3 py-2"><TimeCell time={r.in} source={r.in_source} /></td>
-                                        <td className="px-3 py-2"><TimeCell time={r.out} source={r.out_source} /></td>
+                                        <td className="px-3 py-2"><TimeCell time={r.in} source={r.in_source} where={r.in_where} /></td>
+                                        <td className="px-3 py-2"><TimeCell time={r.out} source={r.out_source} where={r.out_where} /></td>
                                         <td className="px-3 py-2 tabular-nums">{duration(r.worked)}<SessionsLine day={r} /></td>
                                         <td className="px-3 py-2">
                                             <DayStatus day={r} statuses={props.statuses} />

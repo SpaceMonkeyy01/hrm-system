@@ -36,6 +36,9 @@ use Carbon\CarbonInterface;
  */
 class AttendanceRules
 {
+    /** Where a punch puts someone: the machine is on the office wall; HR.my (and later the app's clock-in) is remote. */
+    public const PLACES = ['machine' => 'office', 'hrmy' => 'remote'];
+
     /**
      * @param  list<string|array{time: string, source?: ?string, method?: ?string}>  $punches  "H:i:s" times on $date, any
      *     order; with the source and HR.my's In/Out when known
@@ -44,7 +47,8 @@ class AttendanceRules
      * @return array{date: string, status: ?string, in: ?string, out: ?string, in_source: ?string, out_source: ?string,
      *     worked: ?int, late: int, early: int, short: int, overtime: int, punches: int, working_day: bool, adjusted: bool,
      *     note: ?string, holiday: ?string, leave: ?array{type: string, part: string},
-     *     sessions: list<array{in: ?string, out: ?string, source: string, minutes: ?int}>}
+     *     sessions: list<array{in: ?string, out: ?string, source: string, minutes: ?int, edited: bool, in_where: ?string, out_where: ?string}>,
+     *     where: ?string, in_where: ?string, out_where: ?string}  where = office | remote | both (PLACES), null with no punches
      *         status null = a future day (nothing to show yet)
      */
     public static function day(string $date, array $punches, ?array $adjustment, ?WorkSchedule $schedule, CarbonInterface $now, array $context = []): array
@@ -57,14 +61,14 @@ class AttendanceRules
         $working = ($schedule === null || in_array(CarbonImmutable::parse($date)->isoWeekday(), array_map('intval', $schedule->working_days ?? []), true))
             && $holiday === null;
 
-        // HR's times replace the first start and the last end.
+        // HR's times replace the first start and the last end (where the session happened stays as it was).
         $in = $adjustment['check_in'] ?? null;
         $inSource = $in ? 'manual' : null;
         if ($in && $sessions) {
             $sessions[0]['in'] = $in;
-            $sessions[0]['source'] = 'manual';
+            $sessions[0]['edited'] = true;
         } elseif ($in) {
-            $sessions[] = ['in' => $in, 'out' => null, 'source' => 'manual'];
+            $sessions[] = ['in' => $in, 'out' => null, 'source' => 'manual', 'in_from' => null, 'out_from' => null, 'edited' => true];
         } elseif ($sessions && $sessions[0]['in']) {
             $in = $sessions[0]['in'];
             $inSource = 'punch';
@@ -77,10 +81,10 @@ class AttendanceRules
         if ($out) {
             $last = array_key_last($sessions);
             if ($last === null) {
-                $sessions[] = ['in' => null, 'out' => $out, 'source' => 'manual'];
+                $sessions[] = ['in' => null, 'out' => $out, 'source' => 'manual', 'in_from' => null, 'out_from' => null, 'edited' => true];
             } else {
                 $sessions[$last]['out'] = $out;
-                $sessions[$last]['source'] = 'manual';
+                $sessions[$last]['edited'] = true;
             }
         } elseif ($sessions && end($sessions)['out']) {
             $out = end($sessions)['out'];
@@ -96,16 +100,29 @@ class AttendanceRules
             $outSource = 'auto';
             $sessions[array_key_last($sessions)]['out'] = $out;
         }
+        $places = [];
         foreach ($sessions as &$s) {
             $s['minutes'] = $s['in'] && $s['out'] ? max(0, self::minutes($s['out']) - self::minutes($s['in'])) : null;
+            $s['edited'] ??= false;
+            $s['in_where'] = self::PLACES[$s['in_from']] ?? null;
+            $s['out_where'] = $s['out'] ? (self::PLACES[$s['out_from'] ?? ''] ?? null) : null;
+            $places += array_flip(array_filter([$s['in_where'], $s['out_where']]));
         }
         unset($s);
+        $where = match (true) {
+            isset($places['office'], $places['remote']) => 'both',
+            isset($places['remote']) => 'remote',
+            isset($places['office']) => 'office',
+            default => null,
+        };
 
         $result = [
             'date' => $date, 'status' => null, 'in' => $in, 'out' => $out, 'in_source' => $inSource, 'out_source' => $outSource,
             'worked' => null, 'late' => 0, 'early' => 0, 'short' => 0, 'overtime' => 0, 'punches' => $count, 'working_day' => $working,
             'adjusted' => $adjustment !== null, 'note' => $adjustment['note'] ?? null, 'holiday' => $holiday, 'leave' => $leave,
-            'sessions' => $sessions,
+            'sessions' => $sessions, 'where' => $where,
+            'in_where' => $in ? ($sessions[0]['in_where'] ?? null) : null,
+            'out_where' => $out && $outSource !== 'auto' ? ($sessions[array_key_last($sessions)]['out_where'] ?? null) : null,
         ];
 
         if ($date > $today) {
@@ -188,7 +205,8 @@ class AttendanceRules
      *
      * @param  list<string|array{time: string, source?: ?string, method?: ?string}>  $punches
      * @param  int|null  $count  set to the number of punches kept (double taps dropped)
-     * @return list<array{in: ?string, out: ?string, source: string}>
+     * @return list<array{in: ?string, out: ?string, source: string, in_from: ?string, out_from: ?string}> source machine | hrmy |
+     *     mixed (in at the office, out from home); in_from / out_from = the source of each end
      */
     public static function sessions(array $punches, ?int &$count = null): array
     {
@@ -214,9 +232,9 @@ class AttendanceRules
             $t = substr($p['time'], 0, 5);
             if ($p['method'] === 'In') {
                 $open !== null && $remote[] = $open;
-                $open = ['in' => $t, 'out' => null, 'source' => $p['source']];
+                $open = ['in' => $t, 'out' => null, 'source' => $p['source'], 'in_from' => $p['source'], 'out_from' => null];
             } elseif ($open !== null) {
-                $remote[] = ['in' => $open['in'], 'out' => $t, 'source' => $open['source']];
+                $remote[] = ['in' => $open['in'], 'out' => $t, 'source' => $open['source'], 'in_from' => $open['in_from'], 'out_from' => $p['source']];
                 $open = null;
             } else {
                 $orphans[] = ['time' => $t, 'source' => $p['source']];
@@ -237,7 +255,7 @@ class AttendanceRules
                     && strcmp($r['in'], end($block['times'])) > 0 && strcmp($r['out'], $t) < 0);
                 if ($block === null || $splits) {
                     $block !== null && $blocks[] = $block;
-                    $block = ['source' => $source, 'times' => []];
+                    $block = ['source' => $source, 'in_from' => $source, 'times' => []];
                 }
                 $block['times'][] = $t;
             }
@@ -250,15 +268,17 @@ class AttendanceRules
             if ($before) {
                 $k = end($before);
                 $blocks[$k]['times'][] = $o['time'];
+                $blocks[$k]['out_from'] = $o['source'];
                 $blocks[$k]['source'] = $blocks[$k]['source'] === $o['source'] ? $o['source'] : 'mixed';
             } else {
-                $remote[] = ['in' => null, 'out' => $o['time'], 'source' => $o['source']];
+                $remote[] = ['in' => null, 'out' => $o['time'], 'source' => $o['source'], 'in_from' => null, 'out_from' => $o['source']];
             }
         }
 
         $sessions = $remote;
         foreach ($blocks as $b) {
-            $sessions[] = ['in' => $b['times'][0], 'out' => count($b['times']) > 1 ? end($b['times']) : null, 'source' => $b['source']];
+            $sessions[] = ['in' => $b['times'][0], 'out' => count($b['times']) > 1 ? end($b['times']) : null, 'source' => $b['source'],
+                'in_from' => $b['in_from'], 'out_from' => count($b['times']) > 1 ? ($b['out_from'] ?? $b['in_from']) : null];
         }
         usort($sessions, fn ($a, $b) => strcmp($a['in'] ?? $a['out'], $b['in'] ?? $b['out']));
 
@@ -288,12 +308,16 @@ class AttendanceRules
         return $total;
     }
 
-    /** "09:00-14:00 machine, 20:00-23:00 HR.my": the sessions in a line, for reports and the activity log. */
+    /** "09:00-14:00 office, 20:00-23:00 remote": the sessions in a line, for reports. "(HR)" = HR changed a time. */
     public static function sessionsText(array $sessions): string
     {
-        $names = ['machine' => 'machine', 'hrmy' => 'HR.my', 'manual' => 'HR', 'mixed' => 'machine and HR.my'];
+        return implode(', ', array_map(function ($s) {
+            $where = $s['in_where'] ?? null;
+            $outWhere = $s['out_where'] ?? null;
+            $place = $where && $outWhere && $where !== $outWhere ? "$where to $outWhere" : ($where ?? $outWhere ?? '');
 
-        return implode(', ', array_map(fn ($s) => ($s['in'] ?? '?').'-'.($s['out'] ?? '?').' '.($names[$s['source']] ?? $s['source']), $sessions));
+            return trim(($s['in'] ?? '?').'-'.($s['out'] ?? '?').' '.$place.(! empty($s['edited']) ? ' (HR)' : ''));
+        }, $sessions));
     }
 
     /**

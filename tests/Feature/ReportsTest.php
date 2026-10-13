@@ -126,11 +126,20 @@ class ReportsTest extends TestCase
         }
 
         $log = $this->props('/reports/attendance-log?from=2026-05-18&to=2026-05-19')['result'];
-        $this->assertSame([['2026-05-18', '09:30-17:05 machine', 455], ['2026-05-19', '09:00-13:00 machine, 20:00-23:30 HR.my', 450]],
+        $this->assertSame([['2026-05-18', '09:30-17:05 office', 455], ['2026-05-19', '09:00-13:00 office, 20:00-23:30 remote', 450]],
             array_map(fn ($r) => [$r['date'], $r['sessions'], $r['worked']], array_values(array_filter($log['rows'], fn ($r) => $r['employee']['name'] === 'Fake Linked'))));
         $day = collect($this->props('/attendance?date=2026-05-19')['rows'])->firstWhere('employee.name', 'Fake Linked');
-        $this->assertSame([450, 2, '23:30'], [$day['worked'], count($day['sessions']), $day['out']]);
-        $this->assertStringContainsString('20:00-23:30 HR.my', $this->row($this->props('/reports/attendance-sheet?month=2026-05'), 'Fake Linked')['d19']['title']);
+        $this->assertSame([450, 2, '23:30', 'both', 'office', 'remote'], [$day['worked'], count($day['sessions']), $day['out'], $day['where'], $day['in_where'], $day['out_where']]);
+
+        // Filter by where, and count office / remote / both days in the monthly summary.
+        $both = $this->props('/attendance?date=2026-05-19&where=both');
+        $this->assertSame(['Fake Linked'], array_column(array_column($both['rows'], 'employee'), 'name'));
+        $this->assertSame(['office' => 0, 'remote' => 0, 'both' => 1], $both['places']);
+        $this->assertSame([], $this->props('/attendance?date=2026-05-19&where=remote')['rows']);
+        $row = $this->row($this->props('/reports/attendance-monthly?month=2026-05'), 'Fake Linked');
+        $this->assertSame([1, 0, 1], [$row['office_days'], $row['remote_days'], $row['split_days']]);
+        $this->assertSame(['Office', 'Office + remote'], array_column(array_values(array_filter($log['rows'], fn ($r) => $r['employee']['name'] === 'Fake Linked')), 'where'));
+        $this->assertStringContainsString('20:00-23:30 remote', $this->row($this->props('/reports/attendance-sheet?month=2026-05'), 'Fake Linked')['d19']['title']);
     }
 
     public function test_late_and_absence_lists(): void

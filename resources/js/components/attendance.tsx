@@ -1,5 +1,5 @@
 import { router } from '@inertiajs/react';
-import { RefreshCw } from 'lucide-react';
+import { Building2, House, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Field } from '@/components/field';
@@ -33,10 +33,17 @@ export type AttendanceDay = {
     schedule: string | null;
     punchTimes: string[];
     /** Stretches of work: machine blocks and HR.my In/Out pairs. More than one = a split day. */
-    sessions: { in: string | null; out: string | null; source: 'machine' | 'hrmy' | 'manual' | 'mixed'; minutes: number | null }[];
+    sessions: {
+        in: string | null; out: string | null; source: 'machine' | 'hrmy' | 'manual' | 'mixed'; minutes: number | null;
+        edited: boolean; in_where: Place | null; out_where: Place | null;
+    }[];
+    /** office = machine punches only, remote = HR.my only, both = some of each */
+    where: Place | 'both' | null;
+    in_where: Place | null;
+    out_where: Place | null;
 };
 
-const sessionSource = { machine: 'machine', hrmy: 'HR.my', manual: 'HR', mixed: 'machine and HR.my' } as const;
+export type Place = 'office' | 'remote';
 const plainTime = (t: string | null) => (t ? `${String(Number(t.slice(0, 2)) % 24).padStart(2, '0')}${t.slice(2)}` : '?');
 
 /** "09:58-14:00 machine, 20:00-23:00 HR.my" under the hours on a split day; nothing on an ordinary day. */
@@ -44,7 +51,10 @@ export function SessionsLine({ day, className }: { day: Pick<AttendanceDay, 'ses
     if (day.sessions.length < 2) return null;
     return (
         <span className={`block text-xs font-normal text-muted-foreground ${className ?? ''}`} title="Each stretch of work. The time between them isn't counted.">
-            {day.sessions.map((s) => `${plainTime(s.in)}-${plainTime(s.out)} ${sessionSource[s.source]}`).join(', ')}
+            {day.sessions.map((s) => {
+                const where = s.in_where && s.out_where && s.in_where !== s.out_where ? `${s.in_where} to ${s.out_where}` : (s.in_where ?? s.out_where ?? '');
+                return `${plainTime(s.in)}-${plainTime(s.out)} ${where}${s.edited ? ' (HR)' : ''}`.trim();
+            }).join(', ')}
         </span>
     );
 }
@@ -113,22 +123,26 @@ export function DayStatus({ day, statuses }: { day: AttendanceDay; statuses: Rec
             {day.early > 0 && <StatusPill value={`Left early ${duration(day.early)}`} tone="pending" />}
             {day.short > 0 && <StatusPill value={`Short ${duration(day.short)}`} tone="pending" />}
             {day.overtime > 0 && <StatusPill value={`Overtime ${duration(day.overtime)}`} tone="info" />}
+            {day.where === 'remote' && <StatusPill value="Remote" tone="info" />}
+            {day.where === 'both' && <StatusPill value="Office + remote" tone="info" />}
             {day.leave && <span className="text-xs text-muted-foreground">{day.leave.type}{day.leave.part !== 'full' ? `, ${day.leave.part === 'first_half' ? 'first' : 'second'} half off` : ''}</span>}
             {day.holiday && <span className="text-xs text-muted-foreground">{day.holiday}</span>}
         </span>
     );
 }
 
-/** "09:58" with a marker when HR typed it or the schedule filled it in. */
-export function TimeCell({ time, source }: { time: string | null; source: string | null }) {
+/** "09:58" with where it was punched (building = office machine, house = remote) and a marker when HR typed it. */
+export function TimeCell({ time, source, where }: { time: string | null; source: string | null; where?: Place | null }) {
     if (!time) return <span className="text-muted-foreground">-</span>;
     // Night shifts: the rules send the next morning as 24+ hours ("33:00" = 09:00 the next day).
     const [h, m] = time.split(':').map(Number);
     const nextDay = h >= 24;
     return (
-        <span className="tabular-nums">
+        <span className="whitespace-nowrap tabular-nums">
             {nextDay ? `${String(h - 24).padStart(2, '0')}:${String(m).padStart(2, '0')}` : time}
             {nextDay && <span className="ml-1 text-xs text-muted-foreground" title="The next day">+1</span>}
+            {where === 'office' && <span title="Office (attendance machine)"><Building2 className="ml-1 inline size-3.5 text-muted-foreground" aria-label="office" /></span>}
+            {where === 'remote' && <span title="Remote (HR.my)"><House className="ml-1 inline size-3.5 text-info" aria-label="remote" /></span>}
             {source === 'manual' && <span className="ml-1 text-xs text-info" title="Entered by HR">HR</span>}
             {source === 'auto' && <span className="ml-1 text-xs text-muted-foreground" title="No punch out: checked out at the end time">auto</span>}
         </span>

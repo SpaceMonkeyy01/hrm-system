@@ -154,9 +154,11 @@ class AttendanceRulesTest extends TestCase
         $s = $this->fixed(['overtime_after_minutes' => 30]);
         $d = $this->day([self::m('09:58:00'), self::m('14:00:00'), self::h('20:00:00', 'In'), self::h('23:00:00', 'Out')], $s);
 
-        $this->assertSame([['in' => '09:58', 'out' => '14:00', 'source' => 'machine', 'minutes' => 242], ['in' => '20:00', 'out' => '23:00', 'source' => 'hrmy', 'minutes' => 180]], $d['sessions']);
+        $this->assertSame([['09:58', '14:00', 'machine', 242, 'office', 'office'], ['20:00', '23:00', 'hrmy', 180, 'remote', 'remote']],
+            array_map(fn ($s) => [$s['in'], $s['out'], $s['source'], $s['minutes'], $s['in_where'], $s['out_where']], $d['sessions']));
+        $this->assertSame(['both', 'office', 'remote'], [$d['where'], $d['in_where'], $d['out_where']]);
         $this->assertSame(['Present', '09:58', '23:00', 422, 0, 0, 4], [$d['status'], $d['in'], $d['out'], $d['worked'], $d['early'], $d['overtime'], $d['punches']]);
-        $this->assertSame('09:58-14:00 machine, 20:00-23:00 HR.my', AttendanceRules::sessionsText($d['sessions']));
+        $this->assertSame('09:58-14:00 office, 20:00-23:00 remote', AttendanceRules::sessionsText($d['sessions']));
     }
 
     public function test_overtime_only_runs_on_from_the_office_session(): void
@@ -179,12 +181,27 @@ class AttendanceRulesTest extends TestCase
 
         // In at the office, out from home: one session.
         $d = $this->day([self::m('10:00:00'), self::h('18:30:00', 'Out')], $this->fixed());
-        $this->assertSame([['in' => '10:00', 'out' => '18:30', 'source' => 'mixed', 'minutes' => 510]], $d['sessions']);
+        $this->assertSame([['10:00', '18:30', 'mixed', 510]], array_map(fn ($s) => [$s['in'], $s['out'], $s['source'], $s['minutes']], $d['sessions']));
+        $this->assertSame(['both', 'office', 'remote'], [$d['where'], $d['in_where'], $d['out_where']]);
+        $this->assertSame('10:00-18:30 office to remote', AttendanceRules::sessionsText($d['sessions']));
     }
 
     public function test_hr_times_move_the_first_start_and_last_end_of_a_split_day(): void
     {
         $d = $this->day([self::m('10:20:00'), self::m('14:00:00'), self::h('20:00:00', 'In')], $this->fixed(), ['check_in' => '10:00', 'check_out' => '22:00', 'note' => 'Fixed']);
         $this->assertSame(['10:00-14:00', '20:00-22:00', 360, 0], [$d['sessions'][0]['in'].'-'.$d['sessions'][0]['out'], $d['sessions'][1]['in'].'-'.$d['sessions'][1]['out'], $d['worked'], $d['late']]);
+    }
+
+    public function test_where_the_day_was_worked(): void
+    {
+        $this->assertSame(['office', 'office', 'office'], array_values(array_intersect_key($this->day(['09:00:00', '17:00:00'], $this->fixed()), array_flip(['where', 'in_where', 'out_where']))));
+        $remote = $this->day([self::h('09:00:00', 'In'), self::h('17:00:00', 'Out')], $this->fixed());
+        $this->assertSame(['remote', 'remote', 'remote'], [$remote['where'], $remote['in_where'], $remote['out_where']]);
+        $this->assertNull($this->day([], $this->fixed())['where']);
+
+        // HR moved the times: still an office day, marked as changed by HR; times HR typed with no punch have no place.
+        $d = $this->day([self::m('10:20:00'), self::m('17:00:00')], $this->fixed(), ['check_in' => '10:00', 'check_out' => null, 'note' => 'Fixed']);
+        $this->assertSame(['office', true, '10:00-17:00 office (HR)'], [$d['where'], $d['sessions'][0]['edited'], AttendanceRules::sessionsText($d['sessions'])]);
+        $this->assertNull($this->day([], $this->fixed(), ['check_in' => '10:00', 'check_out' => '18:00', 'note' => 'Fixed'])['where']);
     }
 }

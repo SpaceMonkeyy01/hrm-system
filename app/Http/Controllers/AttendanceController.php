@@ -39,6 +39,7 @@ class AttendanceController extends Controller
             'company' => ['nullable', 'integer'],
             'department' => ['nullable', 'integer'],
             'status' => ['nullable', 'string', 'max:30'],
+            'where' => ['nullable', 'in:office,remote,both'],
             'q' => ['nullable', 'string', 'max:100'],
         ]);
         $now = CarbonImmutable::now();
@@ -68,6 +69,10 @@ class AttendanceController extends Controller
         }
         $counts = array_count_values(array_column($rows, 'status'));
         $late = count(array_filter($rows, fn ($r) => $r['late'] > 0));
+        $places = array_count_values(array_filter(array_column($rows, 'where')));
+        if ($where = $f['where'] ?? null) {
+            $rows = array_values(array_filter($rows, fn ($r) => $r['where'] === $where));
+        }
         if ($status = $f['status'] ?? null) {
             $rows = array_values(array_filter($rows, fn ($r) => $status === 'Late' ? $r['late'] > 0 : $r['status'] === $status));
         }
@@ -77,6 +82,7 @@ class AttendanceController extends Controller
             'today' => $now->toDateString(),
             'rows' => $rows,
             'counts' => $counts + ['Late' => $late],
+            'places' => ['office' => $places['office'] ?? 0, 'remote' => $places['remote'] ?? 0, 'both' => $places['both'] ?? 0],
             'filters' => $f,
             'companies' => Company::query()->orderBy('name')->with('departments:id,company_id,name')->get(['id', 'name'])
                 ->map(fn ($c) => ['id' => $c->id, 'name' => $c->name, 'departments' => $c->departments->map->only('id', 'name')->all()]),

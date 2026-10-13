@@ -73,14 +73,17 @@ class AttendanceReports
             ->column('leave', 'On leave', 'number')
             ->column('holiday', 'Holidays', 'number')
             ->column('day_off_worked', 'Worked day off', 'number')
+            ->column('office_days', 'Office days', 'number')
+            ->column('remote_days', 'Remote days', 'number')
+            ->column('split_days', 'Office + remote days', 'number')
             ->column('worked', 'Hours worked', 'minutes')
             ->column('overtime', 'Overtime', 'minutes');
 
-        $totals = ['present' => 0, 'late' => 0, 'absent' => 0, 'working_days' => 0, 'overtime' => 0];
+        $totals = ['present' => 0, 'late' => 0, 'absent' => 0, 'working_days' => 0, 'overtime' => 0, 'remote_days' => 0, 'split_days' => 0];
         foreach ($employees as $e) {
             $row = ['employee' => ReportResult::person($e), 'department' => $e->department?->name, 'source' => self::source($e),
                 'working_days' => 0, 'present' => 0, 'late' => 0, 'late_minutes' => 0, 'half_day' => 0, 'absent' => 0, 'missing' => 0,
-                'leave' => 0, 'holiday' => 0, 'day_off_worked' => 0, 'worked' => 0, 'overtime' => 0];
+                'leave' => 0, 'holiday' => 0, 'day_off_worked' => 0, 'office_days' => 0, 'remote_days' => 0, 'split_days' => 0, 'worked' => 0, 'overtime' => 0];
             foreach ($board->dates() as $date) {
                 $day = $board->day($e, $date, $now);
                 if (! $day || $day['status'] === null) {
@@ -92,6 +95,12 @@ class AttendanceReports
                 $row['late_minutes'] += $day['late'];
                 $row['worked'] += $day['worked'] ?? 0;
                 $row['overtime'] += $day['overtime'];
+                match ($day['where']) {
+                    'office' => $row['office_days']++,
+                    'remote' => $row['remote_days']++,
+                    'both' => $row['split_days']++,
+                    default => null,
+                };
                 match ($day['status']) {
                     'Present', 'In office' => $row['present']++,
                     'Half day' => $row['half_day']++,
@@ -113,12 +122,16 @@ class AttendanceReports
             ->stat('Present days', $totals['present'], 'done')
             ->stat('Late arrivals', $totals['late'], $totals['late'] ? 'pending' : null)
             ->stat('Absent days', $totals['absent'], $totals['absent'] ? 'missing' : null)
+            ->stat('Remote days', $totals['remote_days'] + $totals['split_days'])
             ->stat('Overtime', sprintf('%dh %02dm', intdiv($totals['overtime'], 60), $totals['overtime'] % 60));
-        $r->note('Covers '.CarbonImmutable::parse($from)->format('j M').' to '.CarbonImmutable::parse($to)->format('j M Y').'. Present includes late arrivals.');
+        $r->note('Covers '.CarbonImmutable::parse($from)->format('j M').' to '.CarbonImmutable::parse($to)->format('j M Y').'. Present includes late arrivals.'
+            .' Office = punched on the machine; remote = clocked in on HR.my; office + remote = both on the same day.');
         $this->notLinkedNote($r, $employees);
 
         return $r;
     }
+
+    private const WHERE = ['office' => 'Office', 'remote' => 'Remote', 'both' => 'Office + remote'];
 
     // ------------------------------------------------------------------ day-by-day sheet
 
@@ -210,15 +223,17 @@ class AttendanceReports
         $tones = config('hrm.attendance.statuses');
         $r = (new ReportResult)->column('date', 'Date', 'date')->column('employee', 'Employee', 'employee')
             ->column('department', 'Department')->column('status', 'Status', 'status', ['tones' => $tones])
-            ->column('in', 'First in')->column('out', 'Last out')->column('sessions', 'Sessions')
+            ->column('where', 'Where')->column('in', 'First in')->column('out', 'Last out')->column('sessions', 'Sessions')
             ->column('worked', 'Hours worked', 'minutes')->column('punches', 'Punches', 'number')->column('note', 'HR note');
         $people = $this->days($f, fn ($d) => $d['sessions'] !== [], $r, fn ($d) => [
-            'status' => $d['status'], 'in' => $d['in'], 'out' => $d['out'], 'sessions' => AttendanceRules::sessionsText($d['sessions']),
+            'status' => $d['status'], 'where' => self::WHERE[$d['where']] ?? null, 'in' => $d['in'], 'out' => $d['out'], 'sessions' => AttendanceRules::sessionsText($d['sessions']),
             'worked' => $d['worked'] ?? 0, 'punches' => $d['punches'], 'note' => $d['note'],
         ]);
-        $split = count(array_filter($r->rows, fn ($row) => substr_count($row['sessions'], ', ') > 0));
-        $r->stat('Days', count($r->rows))->stat('People', count($people))->stat('Split days', $split, $split ? 'info' : null)
-            ->note('Sessions: machine punches in a row are one block; each HR.my clock-in and clock-out is one session. The time between sessions is not counted as worked.');
+        $where = array_count_values(array_filter(array_column($r->rows, 'where')));
+        $both = $where[self::WHERE['both']] ?? 0;
+        $r->stat('Days', count($r->rows))->stat('People', count($people))
+            ->stat('Remote', $where[self::WHERE['remote']] ?? 0)->stat('Office + remote', $both, $both ? 'info' : null)
+            ->note('Office = the attendance machine; remote = HR.my. Machine punches in a row are one session; each HR.my clock-in and clock-out is one session. The time between sessions is not counted as worked. (HR) = HR changed the time.');
 
         return $r;
     }
