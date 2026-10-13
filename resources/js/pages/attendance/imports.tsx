@@ -43,7 +43,7 @@ function UploadForm({ maxKb }: { maxKb: number }) {
     return (
         <form onSubmit={submit} className="grid max-w-xl gap-3 rounded-lg border p-4">
             <Field label="Attendance file" htmlFor="att-file" error={error}
-                hint={`The machine's "Full day log" .xls, or HR.my's Time Clock Records export, up to ${Math.round(maxKb / 1024)} MB. The app recognises which one it is. Uploading the same days again only adds new punches.`}>
+                hint={`The machine's "Full day log" .xls, or an HR.my export (Time Clock Records or Attendance Transactions), up to ${Math.round(maxKb / 1024)} MB. The app recognises which one it is. Uploading the same days again only adds new punches.`}>
                 <Input key={key} id="att-file" type="file" accept=".xls,.xlsx" required onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
             </Field>
             <Button type="submit" className="justify-self-start" disabled={!file || busy}><Upload /> {busy ? 'Reading the file' : 'Upload punches'}</Button>

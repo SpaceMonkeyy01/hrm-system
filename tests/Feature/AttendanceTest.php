@@ -238,4 +238,30 @@ class AttendanceTest extends TestCase
             ->where('rows', fn ($rows) => ($r = collect($rows)->firstWhere('employee.id', $nightWorker->id))
                 && $r['status'] === 'Present' && $r['in'] === '21:15' && $r['out'] === '30:20' && $r['worked'] === 545 && $r['late'] === 15 && $r['early'] === 0));
     }
+
+    public function test_machine_log_with_excel_date_numbers_is_read(): void
+    {
+        $this->upload([['Fake Person', '7', '46155.4153125'], ['Fake Person', '7', '46155.7500115741']])
+            ->assertSessionHas('success', 'Attendance machine file: read 2 punches, 2 new.');
+        $this->assertSame(['2026-05-13 09:58:03', '2026-05-13 18:00:01'],
+            AttendancePunch::orderBy('punched_at')->get()->map(fn ($p) => $p->punched_at->format('Y-m-d H:i:s'))->all());
+    }
+
+    public function test_hrmy_daily_attendance_transactions_become_in_and_out_punches(): void
+    {
+        $table = [['Attendance Transactions for 2026-05-13'], [], ['Employer:', 'BCC'],
+            ['Date', 'ID', 'Name', 'Status', 'First Clock In', 'Last Clock Out', 'Duration (Hour)', 'Break (Hour)', 'Actual (Hour)', 'Overtime (Hour)', 'Remark', 'Department', 'Branch'],
+            ['2026-05-13', 'BCC-901', 'Fake Day', 'Present', '09:05 AM', '06:10 PM', '09:05', '', '09:05', '', '', 'CS', 'BCC'],
+            ['2026-05-13', 'BCC-902', 'Fake Night', 'Present', '09:15 PM', '06:20 AM (2026-05-14)', '09:05', '', '09:05', '', '', 'CS', 'BCC'],
+            ['2026-05-13', 'BCC-903', 'Fake Forgot', 'Present', '10:01 AM', '', '', '', '', '', '', 'CS', 'BCC'],
+            ['2026-05-13', 'BCC-904', 'Fake Away', 'Absent', '', '', '', '', '', '', 'Casual leave', 'CS', 'BCC']];
+        $path = XlsBuilder::save(XlsBuilder::biff2($table));
+
+        $this->actingAs($this->user('hr'))->post('/attendance/imports', ['file' => new UploadedFile($path, 'transactions.xls', null, null, true)])
+            ->assertSessionHas('success', 'HR.my file: read 5 punches, 5 new.');
+        $night = AttendancePunch::where('device_user_id', 'BCC-902')->where('method', 'Out')->sole();
+        $this->assertSame(['hrmy', '2026-05-14 06:20:00', '2026-05-13'], [$night->source, $night->punched_at->format('Y-m-d H:i:s'), $night->work_date->toDateString()]);
+        $this->assertSame(['In'], AttendancePunch::where('device_user_id', 'BCC-903')->pluck('method')->all());
+        $this->assertFalse(AttendancePunch::where('device_user_id', 'BCC-904')->exists());
+    }
 }

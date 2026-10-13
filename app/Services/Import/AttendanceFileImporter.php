@@ -17,6 +17,10 @@ use Throwable;
  *   machine  ZKTeco "Full day log": Name, No., Date/Time ("5/13/2026 9:58:03 AM"), VerifyCode
  *   hrmy     HR.my "Time Clock Records": Date (the shift's day), ID, Name, Action (In/Out),
  *            Time ("07:05 PM", or "09:51 AM (2026-10-09)" when it falls on the next day), Remark
+ *   hrmy     HR.my "Attendance Transactions" (daily): Date, ID, Name, Status, First Clock In, Last Clock Out, ...
+ *            read as an In and an Out punch per person per day
+ *
+ * The machine's Date/Time may be text or an Excel date number, depending on how the file was exported.
  *
  * The same punch is never stored twice, so an overlapping file only adds what's new. The ZKTeco "Full Report"
  * is refused: it drops punches outside fixed windows; the app works the day out from raw punches instead.
@@ -24,6 +28,8 @@ use Throwable;
 class AttendanceFileImporter
 {
     public const SOURCES = ['machine' => 'Attendance machine', 'hrmy' => 'HR.my'];
+
+    private const HRMY_DAILY = ['Date', 'ID', 'First Clock In', 'Last Clock Out'];
 
     private const MACHINE_FORMATS = ['n/j/Y g:i:s A', 'n/j/Y g:i A', 'n/j/Y H:i:s', 'n/j/Y H:i', 'Y-m-d H:i:s', 'Y-m-d H:i', 'j/n/Y H:i:s'];
 
@@ -88,8 +94,11 @@ class AttendanceFileImporter
                     return [$source, self::recordsBelow($table, $required)];
                 }
             }
+            if (! array_diff(self::HRMY_DAILY, $names)) {
+                return ['hrmy', self::dailyToPunches(self::recordsBelow($table, self::HRMY_DAILY))];
+            }
         }
-        throw ValidationException::withMessages(['file' => 'This isn\'t a file we know. Upload the machine\'s "Full day log" or HR.my\'s Time Clock Records export.']);
+        throw ValidationException::withMessages(['file' => 'This isn\'t a file we know. Upload the machine\'s "Full day log" or an HR.my export (Time Clock Records or Attendance Transactions).']);
     }
 
     /** @return array<int, array<int, string>> rows of the first sheet, 0-based columns */
@@ -134,6 +143,26 @@ class AttendanceFileImporter
         return $out;
     }
 
+    /**
+     * HR.my "Attendance Transactions": one row per person per day with First Clock In and Last Clock Out.
+     * Each becomes a punch like a Time Clock Records row; days with neither time (absent, leave) are left out.
+     *
+     * @return list<array<string, string>>
+     */
+    private static function dailyToPunches(array $records): array
+    {
+        $out = [];
+        foreach ($records as $r) {
+            foreach (['First Clock In' => 'In', 'Last Clock Out' => 'Out'] as $col => $action) {
+                if ($r[$col] !== '') {
+                    $out[] = ['Date' => $r['Date'], 'ID' => $r['ID'], 'Name' => $r['Name'] ?? '', 'Action' => $action, 'Time' => $r[$col]];
+                }
+            }
+        }
+
+        return $out;
+    }
+
     /** @return array<string, mixed>|string the row, or why it was skipped */
     private function machineRow(array $r): array|string
     {
@@ -141,7 +170,8 @@ class AttendanceFileImporter
         if ($id === '') {
             return 'no machine number';
         }
-        $at = self::parse($r['Date/Time'] ?? '', self::MACHINE_FORMATS);
+        // Some machine exports store Date/Time as an Excel date number (46307.5536921296), not text.
+        $at = is_numeric($r['Date/Time'] ?? '') ? self::excelDate((float) $r['Date/Time']) : self::parse($r['Date/Time'] ?? '', self::MACHINE_FORMATS);
         if (! $at) {
             return 'date "'.($r['Date/Time'] ?? '').'" not understood';
         }
@@ -171,6 +201,19 @@ class AttendanceFileImporter
 
         return ['device_user_id' => $id, 'device_name' => ($r['Name'] ?? '') ?: null, 'punched_at' => $at->format('Y-m-d H:i:s'),
             'work_date' => $day->format('Y-m-d'), 'method' => in_array($action, ['In', 'Out'], true) ? $action : null];
+    }
+
+    /** Excel date number (days since 1899-12-30, time as the fraction) to a date and time, to the nearest second. */
+    private static function excelDate(float $serial): ?CarbonImmutable
+    {
+        if ($serial < 20000 || $serial > 80000) {   // 1954 to 2119: anything else isn't a punch
+            return null;
+        }
+
+        // Counted in UTC: in the app's time zone, 1899 had a different offset (Karachi was +4:28) and times would shift.
+        $wall = CarbonImmutable::create(1899, 12, 30, 0, 0, 0, 'UTC')->addSeconds((int) round($serial * 86400));
+
+        return CarbonImmutable::parse($wall->format('Y-m-d H:i:s'));
     }
 
     private static function parse(string $value, array $formats): ?CarbonImmutable
