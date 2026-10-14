@@ -99,6 +99,23 @@ class ClockInTest extends TestCase
         $this->assertSame('09:05-13:00 office, 20:00-23:00 remote', AttendanceRules::sessionsText($day['sessions']));
     }
 
+    public function test_in_at_the_office_and_out_from_home_is_marked_on_each_end(): void
+    {
+        $this->press('in', '203.0.113.7');
+        $this->travelTo(CarbonImmutable::parse('2026-05-20 18:30'));
+        $this->press('out', '10.0.0.5')->assertSessionHas('success', 'Clocked out at 18:30 (remote).');
+
+        $this->assertSame([['In', 'office', '203.0.113.7'], ['Out', 'remote', '10.0.0.5']],
+            $this->punches()->map(fn ($p) => [$p->method, $p->place, $p->ip])->all());
+        $day = $this->day('2026-05-20');
+        $this->assertSame(['office', 'remote', 'both'], [$day['in_where'], $day['out_where'], $day['where']]);
+        $this->assertSame('09:05-18:30 office to remote', AttendanceRules::sessionsText($day['sessions']));
+
+        $this->actingAs($this->user('hr'))->get('/attendance/clock-ins')->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('rows.0.method', 'Out')->where('rows.0.place', 'remote')->where('rows.0.ip', '10.0.0.5')
+            ->where('rows.1.method', 'In')->where('rows.1.place', 'office'));
+    }
+
     public function test_a_second_tap_or_a_stale_button_is_refused_not_flipped(): void
     {
         $this->press('in');
