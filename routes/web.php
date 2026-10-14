@@ -25,6 +25,7 @@ use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\OrgChartController;
 use App\Http\Controllers\OverviewController;
 use App\Http\Controllers\PhotoController;
+use App\Http\Controllers\PunchLogController;
 use App\Http\Controllers\ProbationPlanController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ReviewController;
@@ -171,6 +172,8 @@ Route::middleware('auth')->group(function () {
             Route::get('attendance/requests', [AttendanceRequestController::class, 'index'])->name('attendance.requests');
             // App clock-ins: addresses and locations are personal data, so HR and admin only.
             Route::get('attendance/clock-ins', [ClockInController::class, 'index'])->name('attendance.clock-ins');
+            Route::get('attendance/punches', [PunchLogController::class, 'index'])->name('attendance.punches');
+            Route::get('attendance/punches/csv', [PunchLogController::class, 'csv'])->name('attendance.punches.csv');
             Route::post('attendance/networks', [ClockInController::class, 'storeNetwork'])->name('attendance.networks.store');
             Route::delete('attendance/networks/{network}', [ClockInController::class, 'destroyNetwork'])->name('attendance.networks.destroy');
             Route::post('attendance/requests/{correction}/approve', [AttendanceRequestController::class, 'approve'])->name('attendance.requests.approve');
