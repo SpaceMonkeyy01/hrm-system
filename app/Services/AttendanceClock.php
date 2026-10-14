@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AttendancePunch;
 use App\Models\Employee;
+use App\Models\OfficeNetwork;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Validation\ValidationException;
@@ -18,7 +19,9 @@ use Symfony\Component\HttpFoundation\IpUtils;
  *   open       the latest app punch is an In from the last max_shift_hours. An older one stays open on its day
  *              (Missing punch, HR or an "ask HR" request fixes it) and the next press starts a new day
  *   work date  an In counts on today; an Out on its In's day, so a night shift ending at 06:00 stays one day
- *   place      office when the request came from config hrm.clock.office_ips, else remote
+ *   place      office when the request came from an office network (Attendance > App clock-ins, plus any in
+ *              config hrm.clock.office_ips), else remote. Fixed when the punch is saved; adding a network later
+ *              can re-mark earlier clock-ins from it (ClockInController)
  *
  * Punches aren't edited or deleted from here: a wrong time is fixed the usual way, with an HR adjustment.
  */
@@ -31,12 +34,63 @@ class AttendanceClock
         return (bool) config('hrm.clock.enabled');
     }
 
-    /** "office" for an office IP, else "remote". */
+    /**
+     * Every office network: HR's (Attendance > App clock-ins) and any set on the server (HRM_OFFICE_IPS).
+     *
+     * @return list<array{id: ?int, name: string, address: string, server: bool}>
+     */
+    public static function officeNetworks(): array
+    {
+        $server = array_map(fn ($a) => ['id' => null, 'name' => 'Set on the server', 'address' => $a, 'server' => true],
+            config('hrm.clock.office_ips', []));
+        $hr = OfficeNetwork::query()->orderBy('name')->get(['id', 'name', 'address'])
+            ->map(fn (OfficeNetwork $n) => ['id' => $n->id, 'name' => $n->name, 'address' => $n->address, 'server' => false])->all();
+
+        return [...$hr, ...$server];
+    }
+
+    /**
+     * The office network $ip belongs to, or null.
+     *
+     * @param  list<array{name: string, address: string}>|null  $networks  officeNetworks(), when the caller already has them
+     */
+    public static function networkFor(?string $ip, ?array $networks = null): ?array
+    {
+        if (! $ip) {
+            return null;
+        }
+        foreach ($networks ?? self::officeNetworks() as $n) {
+            if (IpUtils::checkIp($ip, $n['address'])) {
+                return $n;
+            }
+        }
+
+        return null;
+    }
+
+    /** "office" for an office network, else "remote". */
     public static function placeFor(?string $ip): string
     {
-        $office = config('hrm.clock.office_ips', []);
+        return self::networkFor($ip) ? 'office' : 'remote';
+    }
 
-        return $ip && $office && IpUtils::checkIp($ip, $office) ? 'office' : 'remote';
+    /** "203.0.113.7" or "203.0.113.0/24" (IPv4 or IPv6); the error message otherwise. */
+    public static function addressError(string $address): ?string
+    {
+        [$ip, $bits] = array_pad(explode('/', $address, 2), 2, null);
+        $v4 = filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false;
+        $v6 = ! $v4 && filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false;
+        if (! $v4 && ! $v6) {
+            return 'Enter an internet address like 203.0.113.7, or a range like 203.0.113.0/24.';
+        }
+        if ($bits !== null && (! ctype_digit($bits) || (int) $bits > ($v4 ? 32 : 128) || (int) $bits < ($v4 ? 8 : 16))) {
+            return 'The part after "/" must be a number from '.($v4 ? '8 to 32' : '16 to 128').'.';
+        }
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+            return 'That is an address inside the office (like 192.168.x.x). Use the public address the internet sees: open whatismyip.com on that network.';
+        }
+
+        return null;
     }
 
     /** The open clock-in, or null. */

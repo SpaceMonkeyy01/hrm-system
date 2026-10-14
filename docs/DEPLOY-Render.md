@@ -121,10 +121,12 @@ the sync already brought in.
 
 ## 5c. Clock in on the app
 
-Staff with a login see **Clock in / Clock out** on their My page. A clock-in from the office network counts as office
-time, from anywhere else as remote. Render > Environment: `HRM_OFFICE_IPS` = the office's static IP (comma-separate
-several; `203.0.113.0/24` ranges work too). Left empty, every app clock-in counts as remote. `HRM_CLOCK_ENABLED=false`
-hides the button for everyone.
+Staff with a login see **Clock in / Clock out** on their My page. A clock-in from an office network counts as office
+time, from anywhere else as remote. HR keeps the office networks on **Attendance > App clock-ins** (no redeploy
+needed): it lists addresses people clocked in from that aren't on the list yet, with an "Add as office network"
+button, and can re-mark earlier clock-ins from a newly added address. Optionally, `HRM_OFFICE_IPS` in Render >
+Environment adds fixed ones (comma-separated; `203.0.113.0/24` ranges work too). `HRM_CLOCK_ENABLED=false` hides the
+button for everyone.
 
 ## 6. Staff logins and email
 

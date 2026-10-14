@@ -13,6 +13,7 @@ import {
     Laptop,
     ListChecks,
     LogOut,
+    MapPin,
     Network,
     Palmtree,
     ScrollText,
@@ -81,6 +82,7 @@ const groups: Group[] = [
         items: [
             { title: 'Attendance', href: '/attendance', icon: Clock, badge: 'requests' },
             { title: 'Work schedules', href: '/attendance/schedules', icon: CalendarClock },
+            { title: 'App clock-ins', href: '/attendance/clock-ins', icon: MapPin, edit: true },
             { title: 'Leave & holidays', href: '/leave', icon: Palmtree },
         ],
     },

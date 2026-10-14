@@ -8,6 +8,7 @@ use App\Http\Controllers\AttendanceUploadController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\ChecklistEntryController;
+use App\Http\Controllers\ClockInController;
 use App\Http\Controllers\ControlledDocumentController;
 use App\Http\Controllers\CronController;
 use App\Http\Controllers\DashboardController;
@@ -168,6 +169,10 @@ Route::middleware('auth')->group(function () {
             Route::post('attendance/machine/sync', [AttendanceUploadController::class, 'syncMachine'])->middleware('throttle:6,1')->name('attendance.machine.sync');
             Route::post('attendance/link', [AttendanceController::class, 'link'])->name('attendance.link');
             Route::get('attendance/requests', [AttendanceRequestController::class, 'index'])->name('attendance.requests');
+            // App clock-ins: addresses and locations are personal data, so HR and admin only.
+            Route::get('attendance/clock-ins', [ClockInController::class, 'index'])->name('attendance.clock-ins');
+            Route::post('attendance/networks', [ClockInController::class, 'storeNetwork'])->name('attendance.networks.store');
+            Route::delete('attendance/networks/{network}', [ClockInController::class, 'destroyNetwork'])->name('attendance.networks.destroy');
             Route::post('attendance/requests/{correction}/approve', [AttendanceRequestController::class, 'approve'])->name('attendance.requests.approve');
             Route::post('attendance/requests/{correction}/reject', [AttendanceRequestController::class, 'reject'])->name('attendance.requests.reject');
             Route::post('attendance/schedules', [WorkScheduleController::class, 'store'])->name('schedules.store');

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AttendancePunch;
 use App\Models\Company;
 use App\Models\Employee;
+use App\Models\OfficeNetwork;
 use App\Models\User;
 use App\Models\WorkSchedule;
 use App\Services\AttendanceBoard;
@@ -187,5 +188,80 @@ class ClockInTest extends TestCase
         $this->actingAs($this->user('hr'))->get('/attendance?date=2026-05-20')
             ->assertInertia(fn (AssertableInertia $page) => $page->where('rows.0.in', '09:05')->where('rows.0.in_where', 'office')
                 ->where('rows.0.employee.linked', true));
+    }
+
+    public function test_hr_adds_office_networks_and_can_recount_earlier_clock_ins(): void
+    {
+        config(['hrm.clock.office_ips' => []]);
+        $this->press('in', '198.51.100.40');                                  // not on any list yet: remote
+        $this->travelTo(CarbonImmutable::parse('2026-05-20 13:00'));
+        $this->press('out', '198.51.100.41');
+        $this->assertSame(['remote', 'remote'], $this->punches()->pluck('place')->all());
+
+        $hr = $this->user('hr');
+        $this->actingAs($hr)->post('/attendance/networks', ['name' => 'Main line', 'address' => '198.51.100.40', 'recount' => true])
+            ->assertSessionHas('success', 'Added Main line. Clock-ins from it now count as office time, including 1 earlier one.');
+        $this->assertSame(['office', 'remote'], $this->punches()->pluck('place')->all());
+
+        // A range, without recounting.
+        $this->actingAs($hr)->post('/attendance/networks', ['name' => 'Wi-Fi', 'address' => '198.51.100.0/24', 'recount' => false])
+            ->assertSessionHas('success', 'Added Wi-Fi. Clock-ins from it now count as office time.');
+        $this->assertSame(['office', 'remote'], $this->punches()->pluck('place')->all());
+
+        // New clock-ins from the range count as office.
+        $this->travelTo(CarbonImmutable::parse('2026-05-20 14:00'));
+        $this->press('in', '198.51.100.99')->assertSessionHas('success', 'Clocked in at 14:00 (at the office).');
+
+        // Removing keeps history.
+        $this->actingAs($hr)->delete('/attendance/networks/'.OfficeNetwork::where('name', 'Wi-Fi')->value('id'))->assertSessionHasNoErrors();
+        $this->assertSame('office', $this->punches()->last()->place);
+        $this->assertSame(1, OfficeNetwork::count());
+    }
+
+    public function test_network_addresses_are_checked(): void
+    {
+        $hr = $this->user('hr');
+        foreach (['not an ip', '192.168.1.10', '10.0.0.0/8', '198.51.100.0/40', '198.51.100.0/4', '127.0.0.1'] as $bad) {
+            $this->actingAs($hr)->post('/attendance/networks', ['name' => 'X', 'address' => $bad])->assertSessionHasErrors('address');
+        }
+        $this->actingAs($hr)->post('/attendance/networks', ['name' => 'V6', 'address' => '2001:db8::/48'])->assertSessionHasNoErrors();
+        $this->actingAs($hr)->post('/attendance/networks', ['name' => 'Again', 'address' => '2001:db8::/48'])
+            ->assertSessionHasErrors(['address' => 'That address is already on the list.']);
+        $this->assertSame(1, OfficeNetwork::count());
+    }
+
+    public function test_clock_ins_page_lists_addresses_and_suggests_unlisted_ones(): void
+    {
+        config(['hrm.clock.office_ips' => ['203.0.113.7']]);
+        $colleague = $this->employee($this->company, ['full_name' => 'Fake Colleague', 'start_date' => '2025-01-01']);
+        $this->press('in', '203.0.113.7');                                  // the server-set office IP
+        AttendancePunch::create(['source' => 'app', 'device_user_id' => (string) $colleague->id, 'punched_at' => '2026-05-20 09:01:00',
+            'work_date' => '2026-05-20', 'method' => 'In', 'place' => 'remote', 'ip' => '198.18.0.9', 'latitude' => 31.5, 'longitude' => 74.3, 'accuracy' => 15]);
+        AttendancePunch::create(['source' => 'app', 'device_user_id' => (string) $this->me->id, 'punched_at' => '2026-05-19 09:00:00',
+            'work_date' => '2026-05-19', 'method' => 'In', 'place' => 'remote', 'ip' => '198.18.0.9']);
+
+        $this->actingAs($this->user('hr'))->withServerVariables(['REMOTE_ADDR' => '198.18.0.9'])->get('/attendance/clock-ins')
+            ->assertOk()->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('attendance/clock-ins')
+                ->where('filters.from', '2026-05-14')
+                ->has('rows', 3)
+                ->where('rows.0.employee.name', 'Fake Me')->where('rows.0.network', 'Set on the server')->where('rows.0.place', 'office')
+                ->where('rows.1.location.accuracy', 15)
+                ->has('unlisted', 1)->where('unlisted.0.address', '198.18.0.9')->where('unlisted.0.clockIns', 2)->has('unlisted.0.people', 2)
+                ->where('you.ip', '198.18.0.9')->where('you.network', null)
+                ->where('networks.0.server', true));
+
+        $this->actingAs($this->user('hr'))->get('/attendance/clock-ins?unlisted=1&from=2026-05-20&to=2026-05-20')
+            ->assertInertia(fn (AssertableInertia $page) => $page->has('rows', 1)->where('rows.0.ip', '198.18.0.9'));
+    }
+
+    public function test_only_hr_and_admin_see_clock_ins_and_change_networks(): void
+    {
+        foreach ([$this->user('viewer'), $this->login] as $who) {
+            $this->actingAs($who)->get('/attendance/clock-ins')->assertForbidden();
+            $this->actingAs($who)->post('/attendance/networks', ['name' => 'X', 'address' => '198.51.100.1'])->assertForbidden();
+        }
+        $this->actingAs($this->user('admin'))->get('/attendance/clock-ins')->assertOk();
+        $this->assertSame(0, OfficeNetwork::count());
     }
 }
