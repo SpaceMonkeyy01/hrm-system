@@ -119,6 +119,13 @@ The Attendance page shows when the machine was last synced, and warns when the m
 off (set it under the machine's *Date/Time* menu). Uploading a Full day log still works and never doubles punches
 the sync already brought in.
 
+## 5c. Clock in on the app
+
+Staff with a login see **Clock in / Clock out** on their My page. A clock-in from the office network counts as office
+time, from anywhere else as remote. Render > Environment: `HRM_OFFICE_IPS` = the office's static IP (comma-separate
+several; `203.0.113.0/24` ranges work too). Left empty, every app clock-in counts as remote. `HRM_CLOCK_ENABLED=false`
+hides the button for everyone.
+
 ## 6. Staff logins and email
 
 Logins for staff (Settings > Users > Create staff logins) send each person a link to choose their password. That needs the `MAIL_*` settings from step 3. With Gmail: turn on 2-step verification, create an **app password**, then `MAIL_HOST=smtp.gmail.com`, `MAIL_PORT=587`, `MAIL_USERNAME` = the Gmail address, `MAIL_PASSWORD` = the app password, `MAIL_FROM_ADDRESS` = the same address.

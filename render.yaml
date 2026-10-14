@@ -75,6 +75,9 @@ services:
         value: "4370"
       - key: ZK_COMM_KEY        # Comm. > Comm Key on the machine
         sync: false
+      # Clock in on the My page: a clock-in from these IPs is office time (the office static IP; comma-separated)
+      - key: HRM_OFFICE_IPS
+        sync: false
 
       # Secret for the daily reminder URL that cron-job.org opens: /cron/reminders/<CRON_TOKEN>
       - key: CRON_TOKEN

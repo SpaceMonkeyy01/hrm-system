@@ -6,6 +6,7 @@ use App\Models\AssetAssignment;
 use App\Models\AttendanceRequest;
 use App\Models\Employee;
 use App\Models\Review;
+use App\Services\AttendanceClock;
 use App\Services\EmployeeRecords;
 use App\Services\HrRules;
 use App\Services\ReviewRules;
@@ -18,8 +19,8 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * My page: a login linked to an employee sees their own record, attendance and leave, updates their contact
- * details and asks HR to fix a day. Every query here starts from $request->user()->employee_id, never from
+ * My page: a login linked to an employee sees their own record, attendance and leave, clocks in and out,
+ * updates their contact details and asks HR to fix a day. Every query here starts from $request->user()->employee_id, never from
  * an id in the URL, so nobody can open someone else's record.
  */
 class MeController extends Controller
@@ -66,6 +67,7 @@ class MeController extends Controller
             'documents' => $board->items['document']->map(fn ($i) => [
                 'label' => $i->label, 'status' => $docs[$i->key] ?? null, 'done' => HrRules::isDone($docs[$i->key] ?? null, 'document'),
             ])->values(),
+            'clock' => AttendanceClock::state($employee, now(), $request->ip()),
             'attendance' => EmployeeRecords::attendanceMonth($employee, $request->input('month')),
             'attendanceYear' => fn () => EmployeeRecords::attendanceYear($employee),
             'leave' => EmployeeRecords::leaveYear($employee),
@@ -89,6 +91,22 @@ class MeController extends Controller
             ],
             'today' => CarbonImmutable::today()->toDateString(),
         ]);
+    }
+
+    /** Clock in or out. "action" is the button the page showed, so a second tap or a stale tab can't flip it. */
+    public function clock(Request $request): RedirectResponse
+    {
+        $employee = $this->employee($request);
+        $data = $request->validate([
+            'action' => ['required', 'in:in,out'],
+            'latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
+            'accuracy' => ['nullable', 'numeric', 'min:0', 'max:1000000'],
+        ]);
+        $punch = AttendanceClock::press($employee, $data['action'], $request->ip(), $data, now());
+        $where = $punch->place === 'office' ? 'at the office' : 'remote';
+
+        return back()->with('success', ($punch->method === 'In' ? 'Clocked in' : 'Clocked out').' at '.$punch->punched_at->format('H:i')." ($where).");
     }
 
     public function updateContact(Request $request): RedirectResponse

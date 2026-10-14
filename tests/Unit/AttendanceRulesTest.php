@@ -69,7 +69,7 @@ class AttendanceRulesTest extends TestCase
         $this->assertSame('Missing punch', $this->day(['19:00:00'], $this->fixed(['missing_checkout' => 'auto']))['status']);
         // Today the person may still be in.
         $today = CarbonImmutable::parse('2026-05-13 15:00');
-        $this->assertSame('In office', $this->day(['10:00:00'], $this->fixed(['missing_checkout' => 'auto']), null, '2026-05-13', $today)['status']);
+        $this->assertSame('At work', $this->day(['10:00:00'], $this->fixed(['missing_checkout' => 'auto']), null, '2026-05-13', $today)['status']);
     }
 
     public function test_hr_times_override_the_punches(): void

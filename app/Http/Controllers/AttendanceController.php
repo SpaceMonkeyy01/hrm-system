@@ -61,7 +61,7 @@ class AttendanceController extends Controller
             }
             $rows[] = [
                 'employee' => ['id' => $e->id, 'code' => $e->employee_code, 'name' => $e->full_name, 'department' => $e->department?->name, 'photo' => $e->photoUrl(),
-                    'linked' => (bool) ($e->attendance_machine_id || $e->hr_portal_id)],
+                    'linked' => $board->isLinked($e)],
                 'schedule' => $day['schedule_id'] ? $board->schedules->get($day['schedule_id'])?->name : null,
                 'punchTimes' => array_map(fn ($t) => substr($t, 0, 5), $board->punchesOn($e->id, $date)),
                 ...$day,

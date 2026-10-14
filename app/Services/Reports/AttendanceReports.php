@@ -20,7 +20,7 @@ class AttendanceReports
     /** Sheet codes. Late is Present with late minutes. */
     public const CODES = [
         'Present' => 'P', 'Late' => 'L', 'Half day' => 'HD', 'Absent' => 'A', 'Missing punch' => 'MP', 'On leave' => 'LV',
-        'Holiday' => 'H', 'Day off' => 'O', 'Worked day off' => 'W', 'In office' => 'IN', 'Not in yet' => '', 'No punches' => '?',
+        'Holiday' => 'H', 'Day off' => 'O', 'Worked day off' => 'W', 'At work' => 'IN', 'Not in yet' => '', 'No punches' => '?',
         'Not linked' => 'NL', 'No data' => '-',
     ];
 
@@ -102,7 +102,7 @@ class AttendanceReports
                     default => null,
                 };
                 match ($day['status']) {
-                    'Present', 'In office' => $row['present']++,
+                    'Present', 'At work' => $row['present']++,
                     'Half day' => $row['half_day']++,
                     'Absent' => $row['absent']++,
                     'Missing punch' => $row['missing']++,
@@ -166,7 +166,7 @@ class AttendanceReports
                     : ($day['in'] ? " {$day['in']}".($day['out'] ? "-{$day['out']}" : '') : ''))
                     .($day['late'] ? ", late {$day['late']} min" : '').($day['leave'] ? ", {$day['leave']['type']}" : '').($day['holiday'] ? ", {$day['holiday']}" : '');
                 $row[$key] = ['code' => self::CODES[$status] ?? '?', 'tone' => $tones[$status] ?? 'neutral', 'title' => $title];
-                $row['p'] += in_array($status, ['Present', 'Late', 'In office'], true) ? 1 : 0;
+                $row['p'] += in_array($status, ['Present', 'Late', 'At work'], true) ? 1 : 0;
                 $row['l'] += $status === 'Late' ? 1 : 0;
                 $row['a'] += $status === 'Absent' ? 1 : 0;
                 $row['lv'] += $status === 'On leave' ? 1 : 0;

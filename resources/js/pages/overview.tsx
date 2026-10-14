@@ -30,7 +30,7 @@ export default function Overview(props: Props) {
     const { tiles: t, attendance: a, documents: d, onboarding: o } = props;
     const change = t.headcount - t.yearAgo;
     const s = a.statuses;
-    const present = (s['Present'] ?? 0) + (s['In office'] ?? 0);
+    const present = (s['Present'] ?? 0) + (s['At work'] ?? 0);
     const absent = s['Absent'] ?? 0;
     const shownDepartments = props.departments.slice(0, 12);
     const rest = props.departments.slice(12).reduce((n, x) => n + x.count, 0);

@@ -83,7 +83,7 @@ class RouteAccessTest extends TestCase
             }
         }
         $expected = ['/', 'account', 'cron/reminders/{token}', 'cron/machine/{token}', 'login', 'logout', 'forgot-password', 'reset-password', 'reset-password/{token}', 'me', 'me/contact', 'me/requests', 'me/requests/{correction}',
-            'me/reviews/{review}', 'me/reviews/{review}/acknowledge', 'me/photo', 'employees/{employee}/photo', 'storage/{path}', 'up'];
+            'me/reviews/{review}', 'me/clock', 'me/reviews/{review}/acknowledge', 'me/photo', 'employees/{employee}/photo', 'storage/{path}', 'up'];
         $this->assertSame([], array_values(array_diff(array_unique($open), $expected)));
     }
 

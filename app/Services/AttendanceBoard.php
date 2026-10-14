@@ -22,7 +22,8 @@ use Illuminate\Support\Collection;
  *
  * "No data": attendance arrives as uploaded files, so a day nobody's file covers can't be called absent.
  * A day counts as covered for a person when anyone at all punched that day in a source the person uses
- * (machine and/or HR.my). Otherwise Absent and Not in yet read "No data".
+ * (machine and/or HR.my). Otherwise Absent and Not in yet read "No data". The app's own clock-in is live, not a
+ * file: anyone who has ever clocked in on the app counts as covered every day (and as linked).
  */
 class AttendanceBoard
 {
@@ -34,7 +35,7 @@ class AttendanceBoard
     /** @var array<int, list<array{from: string, schedule: int}>> employee id => assignments, newest first */
     private array $assignments = [];
 
-    /** @var array<int, array<string, list<array{time: string, source: string, method: ?string}>>> employee id => date => punches */
+    /** @var array<int, array<string, list<array{time: string, source: string, method: ?string, place: ?string}>>> employee id => date => punches */
     private array $punches = [];
 
     /** @var array<int, array<string, array>> employee id => date => adjustment */
@@ -48,6 +49,9 @@ class AttendanceBoard
 
     /** @var array<string, array<string, true>> source => date => anyone punched that day */
     private array $covered = ['machine' => [], 'hrmy' => []];
+
+    /** @var array<int, true> employee ids that have ever clocked in on the app */
+    private array $appUsers = [];
 
     /**
      * @param  Collection<int, Employee>  $employees  with id, start_date, exit_date, attendance_machine_id, hr_portal_id
@@ -63,8 +67,9 @@ class AttendanceBoard
             $this->assignments[$a->employee_id][] = ['from' => $a->starts_on->toDateString(), 'schedule' => $a->work_schedule_id];
         }
 
-        // Device ids => employee. Machine punches link by attendance_machine_id, HR.my punches by hr_portal_id.
-        $byDevice = ['machine' => [], 'hrmy' => []];
+        // Device ids => employee. Machine punches link by attendance_machine_id, HR.my punches by hr_portal_id,
+        // app clock-ins by the employee id itself.
+        $byDevice = ['machine' => [], 'hrmy' => [], AttendanceClock::SOURCE => []];
         foreach ($employees as $e) {
             if ($e->attendance_machine_id) {
                 $byDevice['machine'][$e->attendance_machine_id] = $e->id;
@@ -72,23 +77,29 @@ class AttendanceBoard
             if ($e->hr_portal_id) {
                 $byDevice['hrmy'][$e->hr_portal_id] = $e->id;
             }
+            $byDevice[AttendanceClock::SOURCE][(string) $e->id] = $e->id;
         }
         $query = AttendancePunch::query()
             ->whereBetween('work_date', [$from, $to])
             ->where(fn ($q) => $q
                 ->where(fn ($m) => $m->where('source', 'machine')->whereIn('device_user_id', array_map('strval', array_keys($byDevice['machine']))))
-                ->orWhere(fn ($h) => $h->where('source', 'hrmy')->whereIn('device_user_id', array_map('strval', array_keys($byDevice['hrmy'])))));
-        foreach ($query->toBase()->get(['source', 'device_user_id', 'punched_at', 'work_date', 'method']) as $p) {
+                ->orWhere(fn ($h) => $h->where('source', 'hrmy')->whereIn('device_user_id', array_map('strval', array_keys($byDevice['hrmy']))))
+                ->orWhere(fn ($a) => $a->where('source', AttendanceClock::SOURCE)->whereIn('device_user_id', array_map('strval', $ids))));
+        foreach ($query->toBase()->get(['source', 'device_user_id', 'punched_at', 'work_date', 'method', 'place']) as $p) {
             $employeeId = $byDevice[$p->source][$p->device_user_id] ?? null;
             if ($employeeId) {
                 $at = CarbonImmutable::parse($p->punched_at);
                 $day = substr((string) $p->work_date, 0, 10);
                 // A punch the next morning on a night shift: 09:00 the day after reads "33:00:00".
                 $hours = (int) $at->format('H') + 24 * (int) CarbonImmutable::parse($day)->diffInDays($at->startOfDay());
-                $this->punches[$employeeId][$day][] = ['time' => sprintf('%02d', $hours).$at->format(':i:s'), 'source' => $p->source, 'method' => $p->method];
+                $this->punches[$employeeId][$day][] = ['time' => sprintf('%02d', $hours).$at->format(':i:s'), 'source' => $p->source, 'method' => $p->method, 'place' => $p->place];
             }
         }
 
+        foreach (AttendancePunch::query()->where('source', AttendanceClock::SOURCE)->whereIn('device_user_id', array_map('strval', $ids))
+            ->distinct()->pluck('device_user_id') as $id) {
+            $this->appUsers[(int) $id] = true;
+        }
         foreach (AttendancePunch::query()->whereBetween('work_date', [$from, $to])->distinct()->toBase()->get(['source', 'work_date']) as $c) {
             $this->covered[$c->source][substr((string) $c->work_date, 0, 10)] = true;
         }
@@ -150,8 +161,8 @@ class AttendanceBoard
             'holiday' => $this->holidayFor($e->company_id, $date),
             'leave' => $this->leaveFor($e->id, $date),
         ]);
-        // No machine or HR.my number: there can't be punches, so "absent" would be a guess.
-        if (! $e->attendance_machine_id && ! $e->hr_portal_id && in_array($day['status'], ['Absent', 'Not in yet', 'No punches'], true)) {
+        // No machine or HR.my number and never clocked in on the app: there can't be punches, so "absent" would be a guess.
+        if (! $this->isLinked($e) && in_array($day['status'], ['Absent', 'Not in yet', 'No punches'], true)) {
             $day['status'] = 'Not linked';
         } elseif (in_array($day['status'], ['Absent', 'Not in yet'], true) && ! $this->isCovered($e, $date)) {
             // No file loaded for that day yet: nobody knows whether they came in.
@@ -185,13 +196,20 @@ class AttendanceBoard
         }
 
         return ['statuses' => $statuses, 'late' => $late, 'working_days' => $working, 'people' => $this->employees->count(),
-            'linked' => $this->employees->filter(fn ($e) => $e->attendance_machine_id || $e->hr_portal_id)->count()];
+            'linked' => $this->employees->filter(fn ($e) => $this->isLinked($e))->count()];
     }
 
-    /** Anyone punched on $date in a source this person uses. */
+    /** A machine number, an HR.my ID, or clock-ins on the app: punches can reach this person. */
+    public function isLinked(Employee $e): bool
+    {
+        return $e->attendance_machine_id || $e->hr_portal_id || isset($this->appUsers[$e->id]);
+    }
+
+    /** Anyone punched on $date in a source this person uses (the app's clock-in always counts: it's live). */
     public function isCovered(Employee $e, string $date): bool
     {
-        return ($e->attendance_machine_id && isset($this->covered['machine'][$date]))
+        return isset($this->appUsers[$e->id])
+            || ($e->attendance_machine_id && isset($this->covered['machine'][$date]))
             || ($e->hr_portal_id && isset($this->covered['hrmy'][$date]));
     }
 

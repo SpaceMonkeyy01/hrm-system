@@ -166,7 +166,7 @@ export default function Dashboard(props: Props) {
         ...props.celebrations.map((c) => ({ ...c, key: `${c.kind}-${c.id}-${c.date}` })),
         ...props.holidays.map((h) => ({ key: `holiday-${h.date}-${h.name}`, id: null, name: h.company ? `${h.name} (${h.company})` : h.name, date: h.date, kind: 'holiday' as const, years: null })),
     ].sort((x, y) => x.date.localeCompare(y.date)).slice(0, 10);
-    const count = (key: string) => !att ? 0 : key === 'Late' ? att.late : key === 'Present' ? (att.statuses.Present ?? 0) + (att.statuses['In office'] ?? 0) : att.statuses[key] ?? 0;
+    const count = (key: string) => !att ? 0 : key === 'Late' ? att.late : key === 'Present' ? (att.statuses.Present ?? 0) + (att.statuses['At work'] ?? 0) : att.statuses[key] ?? 0;
 
     return (
         <>

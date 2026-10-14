@@ -32,12 +32,12 @@ export type AttendanceDay = {
     note: string | null;
     schedule: string | null;
     punchTimes: string[];
-    /** Stretches of work: machine blocks and HR.my In/Out pairs. More than one = a split day. */
+    /** Stretches of work: machine blocks and HR.my / app In/Out pairs. More than one = a split day. */
     sessions: {
-        in: string | null; out: string | null; source: 'machine' | 'hrmy' | 'manual' | 'mixed'; minutes: number | null;
+        in: string | null; out: string | null; source: 'machine' | 'hrmy' | 'app' | 'manual' | 'mixed'; minutes: number | null;
         edited: boolean; in_where: Place | null; out_where: Place | null;
     }[];
-    /** office = machine punches only, remote = HR.my only, both = some of each */
+    /** office = machine punches or app clock-ins from the office network, remote = HR.my or the app elsewhere, both = some of each */
     where: Place | 'both' | null;
     in_where: Place | null;
     out_where: Place | null;
@@ -131,7 +131,7 @@ export function DayStatus({ day, statuses }: { day: AttendanceDay; statuses: Rec
     );
 }
 
-/** "09:58" with where it was punched (building = office machine, house = remote) and a marker when HR typed it. */
+/** "09:58" with where it was punched (building = office, house = remote) and a marker when HR typed it. */
 export function TimeCell({ time, source, where }: { time: string | null; source: string | null; where?: Place | null }) {
     if (!time) return <span className="text-muted-foreground">-</span>;
     // Night shifts: the rules send the next morning as 24+ hours ("33:00" = 09:00 the next day).
@@ -141,8 +141,8 @@ export function TimeCell({ time, source, where }: { time: string | null; source:
         <span className="whitespace-nowrap tabular-nums">
             {nextDay ? `${String(h - 24).padStart(2, '0')}:${String(m).padStart(2, '0')}` : time}
             {nextDay && <span className="ml-1 text-xs text-muted-foreground" title="The next day">+1</span>}
-            {where === 'office' && <span title="Office (attendance machine)"><Building2 className="ml-1 inline size-3.5 text-muted-foreground" aria-label="office" /></span>}
-            {where === 'remote' && <span title="Remote (HR.my)"><House className="ml-1 inline size-3.5 text-info" aria-label="remote" /></span>}
+            {where === 'office' && <span title="Office (attendance machine or clocked in on the office network)"><Building2 className="ml-1 inline size-3.5 text-muted-foreground" aria-label="office" /></span>}
+            {where === 'remote' && <span title="Remote (HR.my, or clocked in on the app away from the office)"><House className="ml-1 inline size-3.5 text-info" aria-label="remote" /></span>}
             {source === 'manual' && <span className="ml-1 text-xs text-info" title="Entered by HR">HR</span>}
             {source === 'auto' && <span className="ml-1 text-xs text-muted-foreground" title="No punch out: checked out at the end time">auto</span>}
         </span>

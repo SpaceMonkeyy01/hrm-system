@@ -34,14 +34,14 @@ class EmployeeRecords
             'counts' => array_count_values(array_column($days, 'status')) + ['Late' => count(array_filter($days, fn ($d) => $d['late'] > 0))],
             'worked' => array_sum(array_column($days, 'worked')),
             'schedule' => $current ? ['name' => $current->name, 'summary' => $current->summary()] : null,
-            'linked' => (bool) ($employee->attendance_machine_id || $employee->hr_portal_id),
+            'linked' => $board->isLinked($employee),
             'statuses' => config('hrm.attendance.statuses'),
         ];
     }
 
     /** Heatmap codes: one letter per day keeps a year of days small. */
     public const YEAR_CODES = [
-        'Present' => 'P', 'In office' => 'P', 'Late' => 'L', 'Half day' => 'H', 'Absent' => 'A', 'Missing punch' => 'M',
+        'Present' => 'P', 'At work' => 'P', 'Late' => 'L', 'Half day' => 'H', 'Absent' => 'A', 'Missing punch' => 'M',
         'On leave' => 'V', 'Holiday' => 'O', 'Day off' => 'O', 'Worked day off' => 'W', 'Not in yet' => 'N', 'No data' => 'N',
         'Not linked' => 'N', 'No punches' => 'N',
     ];

@@ -67,6 +67,18 @@ return [
         'clock_warn_seconds' => 60,
     ],
 
+    // Clock in / out on the My page (a punch with source "app"). A clock-in from one of the office IPs counts as office
+    // time, from anywhere else as remote. Comma-separated, CIDR allowed: "203.0.113.7,198.51.100.0/24". Empty = all remote.
+    'clock' => [
+        'enabled' => (bool) env('HRM_CLOCK_ENABLED', true),
+        'office_ips' => array_values(array_filter(array_map('trim', explode(',', (string) env('HRM_OFFICE_IPS', ''))))),
+        // A clock-out this long after an open clock-in still closes it (night shifts end the next morning).
+        // Past this the clock-in is left open (Missing punch) and the next press starts a new day.
+        'max_shift_hours' => 18,
+        // A second press this soon after the last one is ignored (a double tap).
+        'double_tap_seconds' => 60,
+    ],
+
     // Self-service (My page)
     'self_service' => [
         // How far back someone can ask HR to fix a day.
@@ -153,7 +165,7 @@ return [
             'Missing punch' => 'pending',
             'Worked day off' => 'info',
             'Day off' => 'neutral',
-            'In office' => 'info',
+            'At work' => 'info',
             'Not in yet' => 'neutral',
             'On leave' => 'muted',
             'Holiday' => 'neutral',

@@ -5,6 +5,8 @@ import { DayStatus, duration, SessionsLine, TimeCell } from '@/components/attend
 import { AttendanceHeatmap } from '@/components/attendance-heatmap';
 import type { AttendanceYear } from '@/components/attendance-heatmap';
 import type { AttendanceDay } from '@/components/attendance';
+import { ClockCard } from '@/components/clock-card';
+import type { ClockState } from '@/components/clock-card';
 import { EmptyState } from '@/components/empty-state';
 import { PhotoEditor } from '@/components/photo-editor';
 import { Detail, Field } from '@/components/field';
@@ -46,6 +48,7 @@ type FixRequest = {
 type Props = {
     employee: Me | null;
     documents?: { label: string; status: string | null; done: boolean }[];
+    clock?: ClockState;
     attendance?: AttendanceMonth;
     attendanceYear?: AttendanceYear;
     leave?: { year: number; records: LeaveRecordRow[]; totals: Record<string, number> };
@@ -58,7 +61,7 @@ type Props = {
 };
 
 /** Days worth asking HR about: something is missing or off. */
-const askable = (d: AttendanceDay) => ['Absent', 'Missing punch', 'Half day', 'Not linked', 'In office'].includes(d.status) || d.late > 0 || d.early > 0;
+const askable = (d: AttendanceDay) => ['Absent', 'Missing punch', 'Half day', 'Not linked', 'At work'].includes(d.status) || d.late > 0 || d.early > 0;
 
 const requestTone: Record<FixRequest['status'], Tone> = { pending: 'pending', approved: 'done', rejected: 'missing', cancelled: 'neutral' };
 
@@ -171,6 +174,7 @@ export default function MyPage(props: Props) {
                 description={[me.role_title, me.department, me.company].filter(Boolean).join(', ') || 'Your own record, attendance and leave.'}
                 actions={<Button onClick={() => setAsking({ day: null, date: today })}><Send /> Ask HR to fix a day</Button>}
             />
+            {props.clock?.enabled && <div className="max-w-4xl px-4 pt-6 md:px-6"><ClockCard clock={props.clock} today={today} /></div>}
             {/* Opens on a #tab link, else on Reviews when there is one to do, else Attendance. */}
             <Tabs defaultValue={(typeof window !== 'undefined' && window.location.hash.slice(1)) || (yourTurn ? 'reviews' : 'attendance')} className="px-4 py-6 md:px-6">
                 <TabsList className="mb-4">
@@ -192,7 +196,7 @@ export default function MyPage(props: Props) {
                         <div className="flex flex-wrap items-end justify-between gap-3">
                             <div className="text-sm">
                                 <p><span className="text-muted-foreground">Work schedule:</span> {a.schedule ? <><span className="font-semibold">{a.schedule.name}</span> ({a.schedule.summary})</> : 'None'}</p>
-                                {!a.linked && <p className="text-muted-foreground">Your machine number or HR.my ID isn't linked yet, so no punches show. HR links it.</p>}
+                                {!a.linked && <p className="text-muted-foreground">Your machine number or HR.my ID isn't linked yet, so machine punches don't show. HR links it. Clocking in here works straight away.</p>}
                             </div>
                             <Input type="month" className="w-44" value={a.month} max={today.slice(0, 7)} aria-label="Month"
                                 onChange={(ev) => ev.target.value && router.get('/me', { month: ev.target.value }, { only: ['attendance'], preserveState: true, preserveScroll: true, replace: true })} />

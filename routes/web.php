@@ -77,6 +77,7 @@ Route::middleware('auth')->group(function () {
     Route::middleware('can:self-service')->group(function () {
         Route::put('me/contact', [MeController::class, 'updateContact'])->name('me.contact');
         Route::post('me/photo', [PhotoController::class, 'updateMine'])->name('me.photo');
+        Route::post('me/clock', [MeController::class, 'clock'])->middleware('throttle:20,1')->name('me.clock');
         Route::post('me/requests', [MeController::class, 'storeRequest'])->name('me.requests.store');
         Route::delete('me/requests/{correction}', [MeController::class, 'cancelRequest'])->name('me.requests.cancel');
         Route::put('me/reviews/{review}', [MeController::class, 'saveSelfReview'])->name('me.reviews.save');
