@@ -13,8 +13,9 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->app->bind(AttendanceMachine::class, fn () => new ZkClient(
-            (string) config('hrm.machine.host'), (int) config('hrm.machine.port'), (int) config('hrm.machine.comm_key'), (int) config('hrm.machine.timeout'),
+        // One connection per device (Attendance > Devices): MachineSyncer::connection() passes the device.
+        $this->app->bind(AttendanceMachine::class, fn ($app, array $p) => new ZkClient(
+            $p['device']->host, $p['device']->port, (int) $p['device']->comm_key, $p['device']->timeout_seconds,
         ));
     }
 

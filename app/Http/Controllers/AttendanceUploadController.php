@@ -80,14 +80,15 @@ class AttendanceUploadController extends Controller
         return redirect()->route('attendance.imports')->with('success', 'Imported. '.implode('; ', $done).'.');
     }
 
-    /** "Sync now": read the attendance machine straight away. */
+    /** "Sync now": read every active attendance device straight away. */
     public function syncMachine(Request $request, MachineSyncer $syncer): RedirectResponse
     {
         abort_unless(MachineSyncer::configured(), 404);
         set_time_limit(180);
-        $sync = $syncer->run('manual', $request->user()->id);
+        $syncs = $syncer->runAll('manual', $request->user()->id);
+        $failed = array_filter($syncs, fn ($s) => ! $s->ok);
 
-        return back()->with($sync->ok ? 'success' : 'error', MachineSyncer::summary($sync));
+        return back()->with($failed ? 'error' : 'success', MachineSyncer::summaries($syncs, ' '));
     }
 
     public function discard(Request $request): RedirectResponse

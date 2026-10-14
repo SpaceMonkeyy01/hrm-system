@@ -68,7 +68,8 @@ services:
       - key: MAIL_FROM_NAME
         value: HRM System
 
-      # Attendance machine (ZKTeco), read through the office router's port forward. Leave ZK_HOST empty until set up.
+      # Attendance machines are kept in the app (Attendance > Devices). ZK_* only seed the first device once, on upgrade
+      # from the single-machine version; new installs leave them empty.
       - key: ZK_HOST            # the office's static IP
         sync: false
       - key: ZK_PORT

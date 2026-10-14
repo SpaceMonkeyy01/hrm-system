@@ -15,7 +15,7 @@ class AttendancePunch extends Model
     public const UPDATED_AT = null;
 
     protected $fillable = ['source', 'device_user_id', 'device_name', 'punched_at', 'work_date', 'method', 'attendance_import_id',
-        'place', 'ip', 'latitude', 'longitude', 'accuracy'];
+        'attendance_device_id', 'place', 'ip', 'latitude', 'longitude', 'accuracy'];
 
     protected function casts(): array
     {

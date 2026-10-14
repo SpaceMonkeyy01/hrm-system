@@ -1,4 +1,4 @@
-import { router } from '@inertiajs/react';
+import { Link, router } from '@inertiajs/react';
 import { Building2, House, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
@@ -59,50 +59,80 @@ export function SessionsLine({ day, className }: { day: Pick<AttendanceDay, 'ses
     );
 }
 
-/** app/Services/Import/MachineSyncer.php status() */
-export type MachineStatus = {
-    configured: boolean;
-    last?: { at: string; ok: boolean | null; added: number; error: string | null } | null;
-    last_ok_at?: string | null;
-    clock_offset?: number | null;
-    clock_wrong?: boolean;
-    recent?: { at: string; ok: boolean | null; added: number; checked: number; trigger: string; error: string | null }[];
+/** app/Services/Import/MachineSyncer.php deviceStatus() */
+export type DeviceStatus = {
+    id: number;
+    name: string;
+    last: { at: string; ok: boolean | null; added: number; error: string | null } | null;
+    last_ok_at: string | null;
+    clock_offset: number | null;
+    clock_wrong: boolean;
+    recent: { at: string; ok: boolean | null; added: number; checked: number; trigger: string; error: string | null }[];
 };
 
-/** "Machine synced 4 minutes ago, 3 new punches" with Sync now; the error when the last try failed. */
+/** app/Services/Import/MachineSyncer.php status(): every active device */
+export type MachineStatus = { configured: boolean; devices?: DeviceStatus[] };
+
+/** "Synced 4 minutes ago, 3 new punches", or the error when the last try failed. */
+export function deviceLine(d: DeviceStatus) {
+    const last = d.last;
+    if (!last) return 'Not synced yet.';
+    if (last.ok) return `Synced ${timeAgo(last.at)}${last.added ? `, ${last.added} new ${last.added === 1 ? 'punch' : 'punches'}` : ', nothing new'}.`;
+    if (last.ok === null) return `Syncing since ${timeAgo(last.at)}.`;
+    return `Last try ${timeAgo(last.at)} failed: ${last.error}${d.last_ok_at ? ` Last good sync ${timeAgo(d.last_ok_at)}.` : ''}`;
+}
+
+export function ClockWarning({ offset }: { offset: number }) {
+    return (
+        <p className="text-pending">
+            The machine's clock is {Math.abs(offset) < 120 ? `${Math.abs(offset)} seconds` : duration(Math.round(Math.abs(offset) / 60))} {offset > 0 ? 'fast' : 'slow'}, so its punches are off by that much. Set the time on the machine (Menu, Date/Time).
+        </p>
+    );
+}
+
+export function RecentSyncs({ recent }: { recent: DeviceStatus['recent'] }) {
+    if (recent.length === 0) return null;
+    return (
+        <ul className="grid gap-0.5 text-xs text-muted-foreground">
+            {recent.map((r) => (
+                <li key={r.at}>
+                    {formatDateTime(r.at)}, {r.trigger === 'cron' ? 'automatic' : r.trigger === 'manual' ? 'Sync now' : r.trigger}:{' '}
+                    {r.ok ? `${r.added} new of ${r.checked} recent` : r.ok === false ? <span className="text-missing">{r.error}</span> : 'did not finish'}
+                </li>
+            ))}
+        </ul>
+    );
+}
+
+/** Each attendance device's last sync with Sync now (all devices); the error when a device's last try failed. */
 export function MachineSyncBar({ machine, canSync, showRecent }: { machine: MachineStatus; canSync: boolean; showRecent?: boolean }) {
     const [busy, setBusy] = useState(false);
-    if (!machine.configured) return null;
-    const last = machine.last;
+    if (!machine.configured || !machine.devices) return null;
+    const devices = machine.devices;
+    const failing = devices.some((d) => d.last?.ok === false);
     const sync = () => router.post('/attendance/machine/sync', {}, { preserveScroll: true, onStart: () => setBusy(true), onFinish: () => setBusy(false) });
-    const offset = machine.clock_offset ?? 0;
     return (
-        <div className={`grid gap-2 rounded-lg border px-4 py-3 text-sm ${last && last.ok === false ? 'border-[#f0b8b8] bg-missing-soft' : ''}`}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                <p>
-                    <span className="font-semibold">Attendance machine. </span>
-                    {!last && 'Not synced yet.'}
-                    {last?.ok && `Synced ${timeAgo(last.at)}${last.added ? `, ${last.added} new ${last.added === 1 ? 'punch' : 'punches'}` : ', nothing new'}.`}
-                    {last && last.ok === false && <>Last try {timeAgo(last.at)} failed: {last.error}{machine.last_ok_at ? ` Last good sync ${timeAgo(machine.last_ok_at)}.` : ''}</>}
-                    {last && last.ok === null && `Syncing since ${timeAgo(last.at)}.`}
-                </p>
-                {canSync && <Button variant="outline" size="sm" disabled={busy} onClick={sync}><RefreshCw className={busy ? 'animate-spin' : ''} /> {busy ? 'Reading the machine' : 'Sync now'}</Button>}
-            </div>
-            {machine.clock_wrong && (
-                <p className="text-pending">
-                    The machine's clock is {Math.abs(offset) < 120 ? `${Math.abs(offset)} seconds` : duration(Math.round(Math.abs(offset) / 60))} {offset > 0 ? 'fast' : 'slow'}, so its punches are off by that much. Set the time on the machine (Menu, Date/Time).
-                </p>
-            )}
-            {showRecent && machine.recent && machine.recent.length > 0 && (
-                <ul className="grid gap-0.5 text-xs text-muted-foreground">
-                    {machine.recent.map((r) => (
-                        <li key={r.at}>
-                            {formatDateTime(r.at)}, {r.trigger === 'cron' ? 'automatic' : r.trigger === 'manual' ? 'Sync now' : r.trigger}:{' '}
-                            {r.ok ? `${r.added} new of ${r.checked} recent` : r.ok === false ? <span className="text-missing">{r.error}</span> : 'did not finish'}
-                        </li>
+        <div className={`grid gap-2 rounded-lg border px-4 py-3 text-sm ${failing ? 'border-[#f0b8b8] bg-missing-soft' : ''}`}>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="grid gap-1">
+                    {devices.map((d) => (
+                        <p key={d.id}><span className="font-semibold">{devices.length === 1 ? 'Attendance machine' : d.name}. </span>{deviceLine(d)}</p>
                     ))}
-                </ul>
-            )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    {canSync && <Button variant="ghost" size="sm" asChild><Link href="/attendance/devices">Devices</Link></Button>}
+                    {canSync && <Button variant="outline" size="sm" disabled={busy} onClick={sync}><RefreshCw className={busy ? 'animate-spin' : ''} /> {busy ? 'Reading' : 'Sync now'}</Button>}
+                </div>
+            </div>
+            {devices.filter((d) => d.clock_wrong).map((d) => (
+                <div key={d.id}>{devices.length > 1 && <span className="font-semibold">{d.name}: </span>}<ClockWarning offset={d.clock_offset ?? 0} /></div>
+            ))}
+            {showRecent && devices.map((d) => (
+                <div key={d.id} className="grid gap-0.5">
+                    {devices.length > 1 && d.recent.length > 0 && <span className="text-xs font-semibold">{d.name}</span>}
+                    <RecentSyncs recent={d.recent} />
+                </div>
+            ))}
         </div>
     );
 }

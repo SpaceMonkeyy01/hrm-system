@@ -53,8 +53,9 @@ return [
     // Empty = the URL doesn't exist. Make it long and random: anyone with it can trigger the daily email.
     'cron_token' => env('CRON_TOKEN', ''),
 
-    // The ZKTeco attendance machine, read over the internet (port forward to its port 4370). Empty host = not set up.
-    // The app only reads: punches, the user list, the clock. Restrict the port forward to the server's outbound IPs.
+    // Attendance machines are kept in the app (Attendance > Devices, attendance_devices), each with its own settings.
+    // These ZK_* values only seed the first device once, when upgrading from the single-machine version; the rest
+    // are the defaults for a new device.
     'machine' => [
         'host' => env('ZK_HOST', ''),
         'port' => (int) env('ZK_PORT', 4370),

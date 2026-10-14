@@ -2,26 +2,38 @@
 
 namespace App\Console\Commands;
 
+use App\Models\AttendanceDevice;
 use App\Services\Import\MachineSyncer;
 use Illuminate\Console\Command;
 
-/** Reads the attendance machine now. On Render free the same runs from /cron/machine/{CRON_TOKEN}. */
+/** Reads the attendance devices now. On Render free the same runs from /cron/machine/{CRON_TOKEN}. */
 class SyncMachine extends Command
 {
-    protected $signature = 'hr:sync-machine';
+    protected $signature = 'hr:sync-machine {device? : device id (default: every active device)}';
 
-    protected $description = 'Read new punches from the attendance machine (read only)';
+    protected $description = 'Read new punches from the attendance devices (read only)';
 
     public function handle(MachineSyncer $syncer): int
     {
-        if (! MachineSyncer::configured()) {
-            $this->error('No machine set up: set ZK_HOST (and ZK_PORT, ZK_COMM_KEY).');
+        if ($id = $this->argument('device')) {
+            $device = AttendanceDevice::find($id);
+            if (! $device) {
+                $this->error("No attendance device $id.");
+
+                return self::FAILURE;
+            }
+            $syncs = [$syncer->run($device, 'command')];
+        } else {
+            $syncs = $syncer->runAll('command');
+        }
+        if (! $syncs) {
+            $this->error('No active attendance device: add one on Attendance > Devices.');
 
             return self::FAILURE;
         }
-        $sync = $syncer->run('command');
-        $sync->ok ? $this->info(MachineSyncer::summary($sync)) : $this->error(MachineSyncer::summary($sync));
+        $ok = ! array_filter($syncs, fn ($s) => ! $s->ok);
+        $ok ? $this->info(MachineSyncer::summaries($syncs)) : $this->error(MachineSyncer::summaries($syncs));
 
-        return $sync->ok ? self::SUCCESS : self::FAILURE;
+        return $ok ? self::SUCCESS : self::FAILURE;
     }
 }

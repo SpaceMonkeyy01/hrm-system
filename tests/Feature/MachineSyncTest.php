@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ActivityLog;
+use App\Models\AttendanceDevice;
 use App\Models\AttendanceImport;
 use App\Models\AttendancePunch;
 use App\Models\MachineSync;
@@ -21,12 +22,15 @@ class MachineSyncTest extends TestCase
 
     private FakeMachine $machine;
 
+    private AttendanceDevice $device;
+
     protected function setUp(): void
     {
         parent::setUp();
         $this->baseData();
         $this->travelTo(CarbonImmutable::parse('2026-10-13 16:00'));
-        config(['hrm.machine.host' => '203.0.113.10', 'hrm.cron_token' => 'secret-token']);
+        config(['hrm.cron_token' => 'secret-token']);
+        $this->device = AttendanceDevice::create(['name' => 'Main office', 'host' => '203.0.113.10', 'comm_key' => '4321']);
         $this->machine = new FakeMachine([
             ['user_id' => '2', 'time' => '2026-05-13 09:58:03', 'method' => 'FACE'],
             ['user_id' => '2', 'time' => '2026-10-13 09:01:00', 'method' => 'FACE'],
@@ -37,7 +41,7 @@ class MachineSyncTest extends TestCase
 
     public function test_first_sync_saves_everything_then_only_what_is_new(): void
     {
-        $sync = app(MachineSyncer::class)->run('command');
+        $sync = app(MachineSyncer::class)->run($this->device, 'command');
         $this->assertTrue($sync->ok);
         $this->assertSame([3, 3], [$sync->checked, $sync->added]);
         $this->assertSame(['Fake Person', null], [AttendancePunch::where('device_user_id', '2')->value('device_name'), AttendancePunch::where('device_user_id', '7')->value('device_name')]);
@@ -47,7 +51,7 @@ class MachineSyncTest extends TestCase
 
         // Nothing new: no import row, nothing in the activity log.
         $activity = ActivityLog::count();
-        $sync = app(MachineSyncer::class)->run('cron');
+        $sync = app(MachineSyncer::class)->run($this->device, 'cron');
         $this->assertSame([true, 0], [$sync->ok, $sync->added]);
         $this->assertSame(2, $sync->checked, 'only the last days before our latest punch are compared');
         $this->assertSame(1, AttendanceImport::count());
@@ -55,28 +59,29 @@ class MachineSyncTest extends TestCase
 
         // A new punch arrives.
         $this->machine->punches[] = ['user_id' => '7', 'time' => '2026-10-13 15:59:00', 'method' => 'FP'];
-        $this->assertSame(1, app(MachineSyncer::class)->run('cron')->added);
+        $this->assertSame(1, app(MachineSyncer::class)->run($this->device, 'cron')->added);
         $this->assertSame(4, AttendancePunch::count());
     }
 
     public function test_punches_already_uploaded_from_a_file_are_not_added_twice(): void
     {
         AttendancePunch::create(['source' => 'machine', 'device_user_id' => '2', 'punched_at' => '2026-10-13 09:01:00', 'work_date' => '2026-10-13']);
-        $this->assertSame(2, app(MachineSyncer::class)->run('command')->added);
+        $this->assertSame(2, app(MachineSyncer::class)->run($this->device, 'command')->added);
         $this->assertSame(3, AttendancePunch::count());
     }
 
     public function test_failures_and_a_wrong_clock_are_recorded_and_shown(): void
     {
         $this->machine->clock = '2026-10-13 15:58:30';   // 90 seconds slow
-        app(MachineSyncer::class)->run('cron');
+        app(MachineSyncer::class)->run($this->device, 'cron');
         $this->machine->fail = "Couldn't reach the machine at 203.0.113.10:4370 (timed out).";
-        $failed = app(MachineSyncer::class)->run('cron');
+        $failed = app(MachineSyncer::class)->run($this->device, 'cron');
         $this->assertSame([false, "Couldn't reach the machine at 203.0.113.10:4370 (timed out)."], [$failed->ok, $failed->error]);
 
         $this->actingAs($this->user('hr'))->get('/attendance/imports')->assertInertia(fn (AssertableInertia $p) => $p
-            ->where('machine.configured', true)->where('machine.last.ok', false)->where('machine.clock_offset', -90)->where('machine.clock_wrong', true)
-            ->has('machine.recent', 2));
+            ->where('machine.configured', true)->where('machine.devices.0.name', 'Main office')->where('machine.devices.0.last.ok', false)
+            ->where('machine.devices.0.clock_offset', -90)->where('machine.devices.0.clock_wrong', true)
+            ->has('machine.devices.0.recent', 2));
     }
 
     public function test_cron_link_needs_the_token_and_reports_failure_as_500(): void
@@ -104,11 +109,11 @@ class MachineSyncTest extends TestCase
         $this->assertSame($hr->id, AttendanceImport::sole()->uploaded_by);
     }
 
-    public function test_nothing_shows_when_no_machine_is_set_up(): void
+    public function test_nothing_shows_when_no_device_is_switched_on(): void
     {
-        config(['hrm.machine.host' => '']);
+        $this->device->update(['is_active' => false]);
         $this->actingAs($this->user('hr'))->post('/attendance/machine/sync')->assertNotFound();
-        $this->get('/cron/machine/secret-token')->assertOk()->assertSee('No machine set up');
+        $this->get('/cron/machine/secret-token')->assertOk()->assertSee('No attendance device to sync');
         $this->assertSame(0, $this->machine->connects);
         $this->actingAs($this->user('hr'))->get('/attendance')->assertInertia(fn (AssertableInertia $p) => $p->where('machine', ['configured' => false]));
     }

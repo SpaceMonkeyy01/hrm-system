@@ -152,6 +152,7 @@ class RouteAccessTest extends TestCase
             'cycle' => $cycle = ReviewCycle::create(['name' => 'Test cycle', 'period_start' => '2026-01-01', 'period_end' => '2026-06-30', 'criteria' => config('hrm.reviews.default_criteria')])->id,
             'review' => Review::create(['review_cycle_id' => $cycle, 'employee_id' => $e->id])->id,
             'network' => \App\Models\OfficeNetwork::create(['name' => 'Test line', 'address' => '198.51.100.1'])->id,
+            'device' => \App\Models\AttendanceDevice::create(['name' => 'Test machine', 'host' => '203.0.113.10'])->id,
         ];
         $out = [];
         foreach (Route::getRoutes() as $route) {

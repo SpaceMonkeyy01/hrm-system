@@ -16,7 +16,7 @@ type Row = {
     id: number; at: string; date: string; time: string; work_date: string;
     employee: { id: number; code: string; name: string; department: string | null; deleted: boolean } | null;
     source: 'machine' | 'hrmy' | 'app'; source_label: string; device_user_id: string; device_name: string | null; method: string | null;
-    place: 'office' | 'remote' | null; ip: string | null; location: { lat: number; lng: number; accuracy: number | null } | null; via: string;
+    place: 'office' | 'remote' | null; ip: string | null; location: { lat: number; lng: number; accuracy: number | null } | null; device: string | null; via: string;
 };
 type Filters = { from: string; to: string; source: string | null; q: string | null; place: string | null; linked: string | null };
 type Props = { filters: Filters; punches: Paginated<Row>; counts: Record<string, number>; sources: Record<string, string>; today: string };
@@ -110,7 +110,7 @@ export default function PunchLog({ filters: f, punches, counts, sources, today }
                                                     className="flex items-center gap-1 text-xs text-info hover:underline"><MapPin className="size-3" /> Map{r.location.accuracy ? ` (±${r.location.accuracy} m)` : ''}</a>
                                             )}
                                         </td>
-                                        <td className="px-3 py-2 text-xs text-muted-foreground">{r.via}</td>
+                                        <td className="px-3 py-2 text-xs text-muted-foreground">{r.via}{r.device && <span className="block">{r.device}</span>}</td>
                                     </tr>
                                 ))}
                             </tbody>

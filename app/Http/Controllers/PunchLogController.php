@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AttendanceDevice;
 use App\Models\AttendanceImport;
 use App\Models\AttendancePunch;
 use App\Models\Employee;
@@ -35,6 +36,9 @@ class PunchLogController extends Controller
     /** @var array<int, string> attendance_imports.id => file name ("Machine sync" for a sync) */
     private array $imports;
 
+    /** @var array<int, string> attendance_devices.id => name */
+    private array $devices;
+
     public function index(Request $request): Response
     {
         $f = $this->filters($request);
@@ -64,14 +68,14 @@ class PunchLogController extends Controller
                     $r = $this->row($p, $people);
                     yield [$r['date'], $r['time'], $r['work_date'], $r['employee']['code'] ?? '', $r['employee']['name'] ?? '',
                         $r['employee'] ? 'Yes' : 'No', $r['source_label'], $r['device_user_id'], $r['device_name'], $r['method'],
-                        $r['place'], $r['ip'], $r['location']['lat'] ?? '', $r['location']['lng'] ?? '', $r['location']['accuracy'] ?? '', $r['via']];
+                        $r['place'], $r['ip'], $r['location']['lat'] ?? '', $r['location']['lng'] ?? '', $r['location']['accuracy'] ?? '', $r['device'] ?? '', $r['via']];
                 }
             }
         };
 
         return Csv::download("punch-log-{$f['from']}-to-{$f['to']}.csv",
             ['Date', 'Time', 'Counts on', 'Employee code', 'Employee', 'Linked', 'Source', 'Device ID', 'Name on device', 'Type',
-                'Counted as', 'Address', 'Latitude', 'Longitude', 'Accuracy (m)', 'Brought in by'],
+                'Counted as', 'Address', 'Latitude', 'Longitude', 'Accuracy (m)', 'Device', 'Brought in by'],
             $rows());
     }
 
@@ -179,6 +183,7 @@ class PunchLogController extends Controller
             'place' => $p->place ?? AttendanceRules::PLACES[$p->source] ?? null,
             'ip' => $p->ip,
             'location' => $p->latitude !== null ? ['lat' => $p->latitude, 'lng' => $p->longitude, 'accuracy' => $p->accuracy] : null,
+            'device' => $p->attendance_device_id ? (($this->devices ??= AttendanceDevice::query()->pluck('name', 'id')->all())[$p->attendance_device_id] ?? null) : null,
             // Where the punch came into the app: a machine sync, an uploaded file, or a press on My page.
             'via' => $p->source === AttendanceClock::SOURCE ? 'Clock-in on My page'
                 : (($this->imports ??= AttendanceImport::query()->pluck('original_name', 'id')->all())[$p->attendance_import_id] ?? 'Unknown'),

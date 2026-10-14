@@ -3,6 +3,7 @@
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\AssetController;
 use App\Http\Controllers\AttendanceController;
+use App\Http\Controllers\AttendanceDeviceController;
 use App\Http\Controllers\AttendanceRequestController;
 use App\Http\Controllers\AttendanceUploadController;
 use App\Http\Controllers\Auth\LoginController;
@@ -173,6 +174,12 @@ Route::middleware('auth')->group(function () {
             // App clock-ins: addresses and locations are personal data, so HR and admin only.
             Route::get('attendance/clock-ins', [ClockInController::class, 'index'])->name('attendance.clock-ins');
             Route::get('attendance/punches', [PunchLogController::class, 'index'])->name('attendance.punches');
+            Route::get('attendance/devices', [AttendanceDeviceController::class, 'index'])->name('attendance.devices');
+            Route::post('attendance/devices', [AttendanceDeviceController::class, 'store'])->name('attendance.devices.store');
+            Route::put('attendance/devices/{device}', [AttendanceDeviceController::class, 'update'])->name('attendance.devices.update');
+            Route::delete('attendance/devices/{device}', [AttendanceDeviceController::class, 'destroy'])->name('attendance.devices.destroy');
+            Route::post('attendance/devices/{device}/test', [AttendanceDeviceController::class, 'test'])->middleware('throttle:10,1')->name('attendance.devices.test');
+            Route::post('attendance/devices/{device}/sync', [AttendanceDeviceController::class, 'sync'])->middleware('throttle:6,1')->name('attendance.devices.sync');
             Route::get('attendance/punches/csv', [PunchLogController::class, 'csv'])->name('attendance.punches.csv');
             Route::post('attendance/networks', [ClockInController::class, 'storeNetwork'])->name('attendance.networks.store');
             Route::delete('attendance/networks/{network}', [ClockInController::class, 'destroyNetwork'])->name('attendance.networks.destroy');

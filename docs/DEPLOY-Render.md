@@ -101,17 +101,22 @@ Keep the link private: anyone with it can trigger the email (only to HR and admi
 
 ## 5b. Attendance machine sync
 
-The app reads the ZKTeco machine over the internet: new punches, the user list and its clock. It never changes,
-clears or restarts anything on the machine.
+The app reads ZKTeco machines over the internet: new punches, the user list and the clock. It never changes,
+clears or restarts anything on a machine. Machines are kept on **Attendance > Devices** (address, port, Comm Key,
+switched on, automatic sync, timeout, re-check days, clock warning), one row per machine. Enrol each person under
+the same number on every machine: one machine number links a person on all of them.
 
 1. On the machine: set a **Comm Key** that isn't a default like 123456 (*Comm. > Comm Key*).
 2. On the office router: port forward the static IP's port 4370 to the machine. **Allow only Render's outbound IPs**
    (Render dashboard > your service > *Connect* > *Outbound*), so nobody else on the internet can reach the machine.
-3. Render > Environment: `ZK_HOST` = the static IP, `ZK_PORT` = 4370, `ZK_COMM_KEY` = the key.
-4. Attendance > Upload attendance file > **Sync now**. The first sync brings in everything stored on the machine
+3. Attendance > Devices > **Add device**: the static IP, port 4370 and the Comm Key, then **Test connection**.
+   (Older installs that had `ZK_HOST` / `ZK_PORT` / `ZK_COMM_KEY` set got that machine added here automatically on
+   upgrade; those settings aren't used after that and can be removed from Render.)
+4. **Sync now** on the device. The first sync brings in everything stored on the machine
    (about 6 seconds for 20,000 punches); after that each sync only compares the last 3 days.
 5. cron-job.org > **Create cronjob**:
-   - URL: `https://hrm-system.onrender.com/cron/machine/THE-CRON-TOKEN` (same token as the reminders)
+   - URL: `https://hrm-system.onrender.com/cron/machine/THE-CRON-TOKEN` (same token as the reminders; reads every
+     device that is switched on with automatic sync on)
    - Schedule: every 10 minutes (every 5 is fine too)
    - Turn on "notify on failure": a failed sync answers with an error, e.g. "Sync failed: Couldn't reach the machine".
 

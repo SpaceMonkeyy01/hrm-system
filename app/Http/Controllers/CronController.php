@@ -28,18 +28,19 @@ class CronController extends Controller
         return response(trim(Artisan::output()) ?: 'Done.', 200, ['Content-Type' => 'text/plain']);
     }
 
-    /** Opened every few minutes by the cron service: reads new punches from the attendance machine. */
+    /** Opened every few minutes by the cron service: reads new punches from each device with automatic sync on. */
     public function machine(string $token, MachineSyncer $syncer): Response
     {
         $secret = (string) config('hrm.cron_token');
         abort_if($secret === '' || ! hash_equals($secret, $token), 404);
-        if (! MachineSyncer::configured()) {
-            return response('No machine set up (ZK_HOST is empty).', 200, ['Content-Type' => 'text/plain']);
-        }
         set_time_limit(180);
-        $sync = $syncer->run('cron');
+        $syncs = $syncer->runAll('cron');
+        if (! $syncs) {
+            return response('No attendance device to sync (Attendance > Devices).', 200, ['Content-Type' => 'text/plain']);
+        }
+        $failed = array_filter($syncs, fn ($s) => ! $s->ok);
 
-        // A failure answers 500 so the cron service shows it as failed and can email you.
-        return response(MachineSyncer::summary($sync), $sync->ok ? 200 : 500, ['Content-Type' => 'text/plain']);
+        // Any failure answers 500 so the cron service shows it as failed and can email you.
+        return response(MachineSyncer::summaries($syncs), $failed ? 500 : 200, ['Content-Type' => 'text/plain']);
     }
 }
