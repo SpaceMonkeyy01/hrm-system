@@ -52,16 +52,11 @@ services:
       - key: HRM_FILES_DISK
         value: local
 
-      # Email (reminders, staff login invites, forgotten passwords)
+      # Email (reminders, staff login invites, forgotten passwords) through Resend's web API: Render free blocks the
+      # SMTP ports. RESEND_API_KEY from resend.com > API Keys; MAIL_FROM_ADDRESS on the domain verified there.
       - key: MAIL_MAILER
-        value: smtp
-      - key: MAIL_HOST
-        sync: false
-      - key: MAIL_PORT
-        value: "587"
-      - key: MAIL_USERNAME
-        sync: false
-      - key: MAIL_PASSWORD
+        value: resend
+      - key: RESEND_API_KEY
         sync: false
       - key: MAIL_FROM_ADDRESS
         sync: false

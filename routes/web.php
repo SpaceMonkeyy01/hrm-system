@@ -35,6 +35,7 @@ use App\Http\Controllers\SpreadsheetImportController;
 use App\Http\Controllers\Settings\ChecklistItemController;
 use App\Http\Controllers\Settings\StaffLoginController;
 use App\Http\Controllers\Settings\StructureController;
+use App\Http\Controllers\Settings\TestEmailController;
 use App\Http\Controllers\Settings\UserController;
 use App\Http\Controllers\WorkScheduleController;
 use Illuminate\Http\Request;
@@ -245,6 +246,7 @@ Route::middleware('auth')->group(function () {
         // Settings (admin)
         Route::prefix('settings')->name('settings.')->middleware('can:admin')->group(function () {
             Route::get('users', [UserController::class, 'index'])->name('users.index');
+            Route::post('test-email', TestEmailController::class)->middleware('throttle:5,1')->name('test-email');
             Route::post('users', [UserController::class, 'store'])->name('users.store');
             Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
         Route::post('users/staff-logins', [StaffLoginController::class, 'store'])->name('users.staff-logins');

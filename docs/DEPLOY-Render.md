@@ -7,7 +7,7 @@ What runs where:
 | The app | Render free web service, from the `Dockerfile` and `render.yaml` in this repo | Free |
 | The database | A free Postgres that doesn't expire: [Neon](https://neon.tech) or [Supabase](https://supabase.com) | Free |
 | Daily reminder email | [cron-job.org](https://cron-job.org) opens a secret link every morning | Free |
-| Email sending | Any SMTP mailbox (your domain's mail, Gmail with an app password, Brevo, ...) | Free tiers exist |
+| Email sending | [Resend](https://resend.com) (web API; Render free blocks the SMTP ports) with your company domain | Free: 3,000 a month, 100 a day |
 
 Things to know about the free plan:
 
@@ -58,7 +58,7 @@ The repository never contains real HR data: `.gitignore` keeps out `.env`, the S
    | `APP_KEY` | the line from step 1 |
    | `APP_URL` | `https://hrm-system.onrender.com` (the name Render shows; change it later if you add your own domain) |
    | `DB_URL` | the Neon connection string |
-   | `MAIL_HOST`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS` | your SMTP mailbox. Leave them for later if you don't have one yet; the app works, it just can't send email. |
+   | `RESEND_API_KEY`, `MAIL_FROM_ADDRESS` | see step 6. Leave them for later if you like; the app works, it just can't send email. |
 
 4. **Apply**. The first build takes 5 to 10 minutes. On every start the app runs its database migrations, so the Neon database gets all the tables by itself.
 5. Open the Render URL. You should see the login page. (Your local admin login won't work yet: the database is still empty.)
@@ -135,7 +135,20 @@ button for everyone.
 
 ## 6. Staff logins and email
 
-Logins for staff (Settings > Users > Create staff logins) send each person a link to choose their password. That needs the `MAIL_*` settings from step 3. With Gmail: turn on 2-step verification, create an **app password**, then `MAIL_HOST=smtp.gmail.com`, `MAIL_PORT=587`, `MAIL_USERNAME` = the Gmail address, `MAIL_PASSWORD` = the app password, `MAIL_FROM_ADDRESS` = the same address.
+Logins for staff (Settings > Users > Create staff logins) send each person a link to choose their password; welcome
+emails, password resets and the daily reminder go out the same way. Render's free plan blocks the ports normal email
+servers use (SMTP: 25, 465, 587), so Gmail settings won't work there. The app sends through **Resend's web API**:
+
+1. Sign up at resend.com, then **Domains > Add domain**: your company domain (or a subdomain like `mail.yourcompany.com`).
+2. Add the DNS records Resend shows (at whoever runs the domain's DNS) and wait until the domain shows **Verified**.
+3. **API Keys > Create API key** (permission "Sending access" is enough).
+4. Render > Environment: `MAIL_MAILER` = `resend`, `RESEND_API_KEY` = the key, `MAIL_FROM_ADDRESS` = an address on the
+   verified domain, e.g. `hr@yourcompany.com` (it doesn't need to be a real mailbox). Save; Render redeploys.
+5. Settings > Users > **Send a test email**: it goes to your own login's address, or shows Resend's error (an unverified
+   domain or a wrong key say so).
+
+On a paid Render plan, ordinary SMTP works too (`MAIL_MAILER=smtp` with `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`,
+`MAIL_PASSWORD`).
 
 After changing environment values, Render restarts the app by itself.
 
@@ -172,5 +185,5 @@ Files are only ever served through the app to HR and admin logins, never from a 
 | "Server error" page | Render > Logs (the app logs to there). Most often `APP_KEY` or `DB_URL` is wrong or missing |
 | Login page, but the admin login fails | Step 4 hasn't run yet, or ran against a different database |
 | Pages load very slowly the first time | The free instance was asleep. Normal |
-| No reminder email | cron-job.org > the job's history (the response text says what happened), then the `MAIL_*` settings |
+| No reminder email | cron-job.org > the job's history (the response text says what happened), then Settings > Users > Send a test email |
 | Links in emails point to the wrong address | `APP_URL` |

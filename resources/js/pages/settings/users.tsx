@@ -1,5 +1,5 @@
 import { Head, router, useForm, usePage } from '@inertiajs/react';
-import { MailPlus, Plus } from 'lucide-react';
+import { Mail, MailPlus, Plus } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Field } from '@/components/field';
@@ -70,7 +70,10 @@ export default function Users({ users, roles, employees, staffLogins }: { users:
         <>
             <Head title="Users" />
             <PageHeader title="Users" description="Who can log in and what they can do. There is no public sign-up: add each person here."
-                actions={<Button onClick={() => setOpen(true)}><Plus /> Add login</Button>}>
+                actions={<>
+                    <Button variant="outline" onClick={() => router.post('/settings/test-email', {}, { preserveScroll: true })}><Mail /> Send a test email</Button>
+                    <Button onClick={() => setOpen(true)}><Plus /> Add login</Button>
+                </>}>
                 <ul className="grid gap-1 text-sm text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
                     {Object.entries(roles).map(([k, v]) => <li key={k}>{v}</li>)}
                 </ul>
