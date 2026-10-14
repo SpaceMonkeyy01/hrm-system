@@ -199,6 +199,12 @@ class AttendanceBoard
             'linked' => $this->employees->filter(fn ($e) => $this->isLinked($e))->count()];
     }
 
+    /** Has clocked in on the app at least once. */
+    public function usesApp(Employee $e): bool
+    {
+        return isset($this->appUsers[$e->id]);
+    }
+
     /** A machine number, an HR.my ID, or clock-ins on the app: punches can reach this person. */
     public function isLinked(Employee $e): bool
     {

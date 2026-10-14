@@ -105,6 +105,42 @@ class ReportsTest extends TestCase
         $this->assertNull($this->row($props, 'Fake Leaver'), 'left in April');
     }
 
+    public function test_daily_report_shows_everyone_on_the_day(): void
+    {
+        $props = $this->props('/reports/attendance-daily?day=2026-05-18');
+        $this->assertSame('2026-05-18', $props['filters']['day']);
+        $linked = $this->row($props, 'Fake Linked');
+        $this->assertSame(['Late', '09:30', '17:05', 30, 455, 'Office'], [$linked['status'], $linked['in'], $linked['out'], $linked['late'], $linked['worked'], $linked['where']]);
+        $this->assertSame('Not linked', $this->row($props, 'Fake Joiner')['status']);
+        $this->assertNull($this->row($props, 'Fake Leaver'), 'left in April');
+        $stats = collect($props['result']['summary'])->pluck('value', 'label');
+        $this->assertSame([2, 1, 1, 0], [$stats['People'], $stats['Present'], $stats['Late'], $stats['Absent']]);
+
+        $this->assertSame('Absent', $this->row($this->props('/reports/attendance-daily?day=2026-05-19'), 'Fake Linked')['status']);
+        // Never past today.
+        $this->assertSame('2026-05-20', $this->props('/reports/attendance-daily?day=2026-06-01')['filters']['day']);
+    }
+
+    public function test_weekly_report_runs_monday_to_sunday(): void
+    {
+        // Any day picks its week: Wednesday 20 May is in the week of Monday 18 May.
+        $props = $this->props('/reports/attendance-weekly?week=2026-05-20');
+        $this->assertSame('2026-05-18', $props['filters']['week']);
+        $this->assertSame(['18 May', '24 May'], [collect($props['result']['columns'])->firstWhere('key', 'd20260518')['label'],
+            collect($props['result']['columns'])->firstWhere('key', 'd20260524')['label']]);
+        $linked = $this->row($props, 'Fake Linked');
+        // Monday late, Tuesday absent, today no data yet (nobody has punched), Saturday still to come.
+        $this->assertSame(['L', 'A', '-', ''], [$linked['d20260518']['code'], $linked['d20260519']['code'],
+            $linked['d20260520']['code'], $linked['d20260523']['code']]);
+        $this->assertSame([1, 1, 30, 1, 455], [$linked['present'], $linked['late'], $linked['late_minutes'], $linked['absent'], $linked['worked']]);
+
+        // The week before: Monday 11 to Sunday 17 May, five working days absent, the weekend off.
+        $before = $this->row($this->props('/reports/attendance-weekly?week=2026-05-11'), 'Fake Linked');
+        $this->assertSame([5, 'O'], [$before['absent'], $before['d20260517']['code']]);
+        // A future week falls back to the current one.
+        $this->assertSame('2026-05-18', $this->props('/reports/attendance-weekly?week=2026-06-08')['filters']['week']);
+    }
+
     public function test_days_without_any_file_are_no_data_not_absent(): void
     {
         $sheet = $this->row($this->props('/reports/attendance-sheet?month=2026-04'), 'Fake Linked');

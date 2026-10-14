@@ -44,6 +44,7 @@ class ReportController extends Controller
             'filters' => [
                 'month' => $filters->month, 'from' => $filters->from, 'to' => $filters->to, 'year' => $filters->year,
                 'date' => $filters->date, 'within' => $filters->within, 'company' => $filters->company, 'department' => $filters->department,
+                'day' => $filters->day, 'week' => $filters->week,
             ],
             'today' => $filters->today->toDateString(),
             'companies' => Company::query()->orderBy('name')->with('departments:id,company_id,name')->get(['id', 'name'])
@@ -58,6 +59,8 @@ class ReportController extends Controller
         [$header, $rows] = $this->run($def, $filters)->toCsv();
         $period = match (true) {
             in_array('month', $def['filters'], true) => $filters->month,
+            in_array('day', $def['filters'], true) => $filters->day,
+            in_array('week', $def['filters'], true) => "week-of-{$filters->week}",
             in_array('range', $def['filters'], true) => "{$filters->from}-to-{$filters->to}",
             in_array('year', $def['filters'], true) => (string) $filters->year,
             default => $filters->today->toDateString(),
@@ -87,6 +90,8 @@ class ReportController extends Controller
             'year' => ['nullable', 'integer', 'between:2000,2100'],
             'date' => ['nullable', 'date_format:Y-m-d'],
             'within' => ['nullable', 'integer', 'between:0,730'],
+            'day' => ['nullable', 'date_format:Y-m-d'],
+            'week' => ['nullable', 'date_format:Y-m-d'],
             'company' => ['nullable', 'integer'],
             'department' => ['nullable', 'integer'],
         ], ['month.regex' => 'Pick a month like 2026-10.']);
@@ -96,6 +101,10 @@ class ReportController extends Controller
         if ($month > $today->format('Y-m')) {
             $month = $today->format('Y-m');
         }
+        // Any day picked for the week means its Monday; never past the current week (nor a day past today).
+        $week = CarbonImmutable::parse($f['week'] ?? $today->toDateString())->startOfWeek(CarbonImmutable::MONDAY)
+            ->min($today->startOfWeek(CarbonImmutable::MONDAY))->toDateString();
+        $day = min($f['day'] ?? $today->toDateString(), $today->toDateString());
         $from = $f['from'] ?? $today->startOfMonth()->toDateString();
         $to = $f['to'] ?? $today->toDateString();
         if ($to < $from) {
@@ -113,6 +122,8 @@ class ReportController extends Controller
             year: (int) ($f['year'] ?? $today->year),
             date: $f['date'] ?? $today->toDateString(),
             within: (int) ($f['within'] ?? 60),
+            day: $day,
+            week: $week,
             company: isset($f['company']) ? (int) $f['company'] : null,
             department: isset($f['department']) ? (int) $f['department'] : null,
         )];

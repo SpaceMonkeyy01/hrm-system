@@ -17,6 +17,8 @@ final class ReportFilters
         public readonly int $year,
         public readonly string $date,       // Y-m-d, "as of"
         public readonly int $within,        // days ahead
+        public readonly string $day = '',   // Y-m-d, a single day (daily report)
+        public readonly string $week = '',  // Y-m-d, the Monday that starts the week (weekly report)
         public readonly ?int $company = null,
         public readonly ?int $department = null,
     ) {}
@@ -30,6 +32,17 @@ final class ReportFilters
     public function monthEnd(): CarbonImmutable
     {
         return $this->monthStart()->endOfMonth()->min($this->today);
+    }
+
+    public function weekStart(): CarbonImmutable
+    {
+        return CarbonImmutable::parse($this->week);
+    }
+
+    /** Sunday: the whole week, days after today show as not yet. */
+    public function weekEnd(): CarbonImmutable
+    {
+        return $this->weekStart()->addDays(6);
     }
 
     /** Employees in the chosen company / department. */

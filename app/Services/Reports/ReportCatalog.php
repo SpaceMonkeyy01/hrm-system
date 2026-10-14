@@ -19,6 +19,12 @@ final class ReportCatalog
         $org = ['company', 'department'];
 
         return [
+            'attendance-daily' => ['group' => 'attendance', 'title' => 'Daily attendance',
+                'description' => 'Everyone on one day: status, check-in and check-out, hours, late, left early and where they worked.',
+                'filters' => ['day', ...$org], 'run' => [AttendanceReports::class, 'daily']],
+            'attendance-weekly' => ['group' => 'attendance', 'title' => 'Weekly attendance',
+                'description' => 'One line per person for a week, Monday to Sunday: a code for each day plus present, late, absent, leave and hours.',
+                'filters' => ['week', ...$org], 'run' => [AttendanceReports::class, 'weekly'], 'wide' => true],
             'attendance-monthly' => ['group' => 'attendance', 'title' => 'Monthly attendance summary',
                 'description' => 'One line per person: days present, late, absent, on leave, hours worked and overtime.',
                 'filters' => ['month', ...$org], 'run' => [AttendanceReports::class, 'monthly']],

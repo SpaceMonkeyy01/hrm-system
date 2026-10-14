@@ -1,5 +1,5 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { ArrowDown, ArrowUp, Download } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { duration } from '@/components/attendance';
 import { EmptyState } from '@/components/empty-state';
@@ -12,12 +12,18 @@ import { formatDate, plural } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { Tone } from '@/types';
 
+/** "2026-10-14" moved by n days, counted in UTC so the browser's timezone can't shift it. */
+const shiftDate = (value: string, days: number) => {
+    const [y, m, d] = value.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+};
+
 /** app/Services/Reports/ReportResult.php */
 type Column = { key: string; label: string; type: 'text' | 'number' | 'date' | 'minutes' | 'percent' | 'employee' | 'status' | 'day'; tones?: Record<string, Tone>; group?: string };
 type Person = { id: number; name: string; code: string };
 type DayCell = { code: string; tone: Tone | null; title: string };
 type Row = Record<string, unknown>;
-type Filters = { month: string; from: string; to: string; year: number; date: string; within: number; company: number | null; department: number | null };
+type Filters = { month: string; from: string; to: string; year: number; date: string; within: number; company: number | null; department: number | null; day: string; week: string };
 type Company = { id: number; name: string; departments: { id: number; name: string }[] };
 type Props = {
     report: { key: string; title: string; description: string; group: string; filters: string[]; wide: boolean };
@@ -75,6 +81,8 @@ export default function ReportShow({ report, filters, today, companies, result }
         if (has('range')) Object.assign(out, { from: all.from, to: all.to });
         if (has('year')) out.year = all.year;
         if (has('date')) out.date = all.date;
+        if (has('day')) out.day = all.day;
+        if (has('week')) out.week = all.week;
         if (has('within')) out.within = all.within;
         if (has('company') && all.company) out.company = all.company;
         if (has('department') && all.department) out.department = all.department;
@@ -134,6 +142,24 @@ export default function ReportShow({ report, filters, today, companies, result }
                                 <Input type="date" className="w-40" value={filters.to} onChange={(e) => e.target.value && go({ to: e.target.value })} aria-invalid={!!errors.to} />
                             </label>
                         </>
+                    )}
+                    {has('day') && (
+                        <div className="flex items-end gap-1">
+                            <label className="grid gap-1 text-xs font-semibold text-muted-foreground">Day
+                                <Input type="date" className="w-40" value={filters.day} max={today} onChange={(e) => e.target.value && go({ day: e.target.value })} />
+                            </label>
+                            <Button variant="outline" size="icon" aria-label="Day before" onClick={() => go({ day: shiftDate(filters.day, -1) })}><ChevronLeft /></Button>
+                            <Button variant="outline" size="icon" aria-label="Day after" disabled={filters.day >= today} onClick={() => go({ day: shiftDate(filters.day, 1) })}><ChevronRight /></Button>
+                        </div>
+                    )}
+                    {has('week') && (
+                        <div className="flex items-end gap-1">
+                            <label className="grid gap-1 text-xs font-semibold text-muted-foreground">Week starting (Monday)
+                                <Input type="date" className="w-44" value={filters.week} max={today} onChange={(e) => e.target.value && go({ week: e.target.value })} />
+                            </label>
+                            <Button variant="outline" size="icon" aria-label="Week before" onClick={() => go({ week: shiftDate(filters.week, -7) })}><ChevronLeft /></Button>
+                            <Button variant="outline" size="icon" aria-label="Week after" disabled={shiftDate(filters.week, 7) > today} onClick={() => go({ week: shiftDate(filters.week, 7) })}><ChevronRight /></Button>
+                        </div>
                     )}
                     {has('date') && (
                         <label className="grid gap-1 text-xs font-semibold text-muted-foreground">As of
