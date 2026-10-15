@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\Import\AssetListImport;
+use App\Services\Import\AttendanceLinksImport;
 use App\Services\Import\EmployeeDetailsImport;
 use App\Services\Import\SpreadsheetImport;
 use App\Support\Csv;
@@ -23,7 +24,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class SpreadsheetImportController extends Controller
 {
     /** @var array<string, class-string<SpreadsheetImport>> */
-    public const KINDS = ['details' => EmployeeDetailsImport::class, 'assets' => AssetListImport::class];
+    public const KINDS = ['details' => EmployeeDetailsImport::class, 'assets' => AssetListImport::class, 'links' => AttendanceLinksImport::class];
 
     public function show(Request $request, string $kind): Response
     {

@@ -89,7 +89,8 @@ class AttendanceTest extends TestCase
         $this->employee($this->company, ['full_name' => 'Someone Else']);
         $this->upload([['Fake One', '1', '5/13/2026 9:58:03 AM'], ['Nobody Known', '9', '5/13/2026 10:00:00 AM']]);
 
-        $this->actingAs($this->user('hr'))->get('/attendance/imports')->assertInertia(fn (AssertableInertia $p) => $p
+        $this->actingAs($this->user('hr'))->get('/attendance/imports')->assertInertia(fn (AssertableInertia $p) => $p->where('unlinkedCount', 2));
+        $this->actingAs($this->user('hr'))->get('/attendance/links')->assertInertia(fn (AssertableInertia $p) => $p
             ->has('unlinked', 2)
             ->where('unlinked.0.source', 'machine')->where('unlinked.0.device_user_id', '1')->where('unlinked.0.suggestion', $e->id)->where('unlinked.0.confidence', 'match')
             ->where('unlinked.1.confidence', 'none'));
@@ -237,7 +238,7 @@ class AttendanceTest extends TestCase
         $out = AttendancePunch::where('method', 'Out')->sole();
         $this->assertSame(['hrmy', '2026-05-14 06:20:00', '2026-05-13'], [$out->source, $out->punched_at->format('Y-m-d H:i:s'), $out->work_date->toDateString()]);
 
-        $this->actingAs($hr)->get('/attendance/imports')->assertInertia(fn (AssertableInertia $p) => $p
+        $this->actingAs($hr)->get('/attendance/links')->assertInertia(fn (AssertableInertia $p) => $p
             ->where('unlinked.0.source', 'hrmy')->where('unlinked.0.suggestion', $nightWorker->id));
         $this->actingAs($hr)->post('/attendance/link', ['source' => 'hrmy', 'links' => [['device_user_id' => 'BCC-032', 'employee_id' => $nightWorker->id]]])
             ->assertSessionHasNoErrors();

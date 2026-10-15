@@ -110,7 +110,7 @@ export default function Overview(props: Props) {
                                     </p>
                                 </>
                             ) : (
-                                <p className="text-sm text-muted-foreground">Link machine numbers and HR.my IDs on <Link href="/attendance/imports#link" className="font-semibold text-cascade hover:underline">Upload attendance file</Link> to see this.</p>
+                                <p className="text-sm text-muted-foreground">Link machine numbers and HR.my IDs on <Link href="/attendance/links?tab=numbers" className="font-semibold text-cascade hover:underline">Attendance links</Link> to see this.</p>
                             )}
                         </div>
                     </Section>

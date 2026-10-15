@@ -26,6 +26,7 @@ import {
     Users,
     Workflow,
     Mail,
+    Link2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Avatar } from '@/components/avatar';
@@ -87,6 +88,7 @@ const groups: Group[] = [
             { title: 'App clock-ins', href: '/attendance/clock-ins', icon: MapPin, edit: true },
             { title: 'Punch log', href: '/attendance/punches', icon: ListOrdered, edit: true },
             { title: 'Devices', href: '/attendance/devices', icon: Fingerprint, edit: true },
+            { title: 'Attendance links', href: '/attendance/links', icon: Link2, edit: true },
             { title: 'Leave & holidays', href: '/leave', icon: Palmtree },
         ],
     },

@@ -1,4 +1,4 @@
-import { Head, router } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { Fingerprint, Pencil, Plug, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
@@ -17,7 +17,7 @@ import { formatDateTime, timeAgo } from '@/lib/format';
 
 /** app/Http/Controllers/AttendanceDeviceController.php index() */
 type Device = {
-    id: number; code: string; name: string; site: string | null; host: string; port: number; is_active: boolean; auto_sync: boolean;
+    id: number; code: string; name: string; site: string | null; host: string; links: { numbers: number; linked: number }; port: number; is_active: boolean; auto_sync: boolean;
     timeout_seconds: number; lookback_days: number; clock_warn_seconds: number; notes: string | null;
     model_name: string | null; serial: string | null; firmware: string | null; user_count: number | null; record_count: number | null;
     has_comm_key: boolean; info_read_at: string | null; punches: number; last_punch_at: string | null; status: DeviceStatus;
@@ -152,6 +152,11 @@ function DeviceCard({ device: d, onEdit }: { device: Device; onEdit: () => void 
                 <div><dt className="text-xs text-muted-foreground">Serial number</dt><dd className="font-mono">{d.serial ?? '-'}</dd></div>
                 <div><dt className="text-xs text-muted-foreground">On the machine</dt><dd>{d.user_count !== null ? `${d.user_count.toLocaleString()} users, ${(d.record_count ?? 0).toLocaleString()} punches` : '-'}</dd></div>
                 <div><dt className="text-xs text-muted-foreground">In the app</dt><dd>{d.punches.toLocaleString()} punches{d.last_punch_at && <span className="block text-xs text-muted-foreground">Latest {formatDateTime(d.last_punch_at)}</span>}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">Linked to people</dt><dd>
+                    {d.links.numbers === 0 ? '-' : <>{d.links.linked} of {d.links.numbers} machine numbers
+                        <span className="block text-xs"><Link href={`/attendance/links?device=${d.id}`} className="text-cascade hover:underline">View links</Link>
+                            {d.links.numbers > d.links.linked && <> · <Link href={`/attendance/links?tab=numbers&device=${d.id}`} className="text-cascade hover:underline">Link {d.links.numbers - d.links.linked} more</Link></>}</span></>}
+                </dd></div>
                 <div className="sm:col-span-2"><dt className="text-xs text-muted-foreground">Last sync</dt><dd className={failing ? 'text-missing' : ''}>{deviceLine(s)}</dd></div>
                 <div><dt className="text-xs text-muted-foreground">Settings</dt><dd>Waits {d.timeout_seconds} s, re-checks {d.lookback_days} {d.lookback_days === 1 ? 'day' : 'days'}, warns at {d.clock_warn_seconds} s off</dd></div>
                 <div><dt className="text-xs text-muted-foreground">Machine details read</dt><dd>{d.info_read_at ? timeAgo(d.info_read_at) : 'Not yet'}</dd></div>

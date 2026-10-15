@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AttendanceDevice;
 use App\Models\AttendancePunch;
+use App\Services\AttendanceLinks;
 use App\Services\Import\MachineSyncer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,6 +21,7 @@ class AttendanceDeviceController extends Controller
     public function index(): Response
     {
         $devices = AttendanceDevice::query()->orderByDesc('is_active')->orderBy('name')->get();
+        $links = AttendanceLinks::deviceSummary();
         $stats = AttendancePunch::query()->whereNotNull('attendance_device_id')
             ->selectRaw('attendance_device_id, count(*) as n, max(punched_at) as last')->groupBy('attendance_device_id')
             ->toBase()->get()->keyBy('attendance_device_id');
@@ -33,6 +35,7 @@ class AttendanceDeviceController extends Controller
                 'punches' => (int) ($stats[$d->id]->n ?? 0),
                 'last_punch_at' => isset($stats[$d->id]) ? substr((string) $stats[$d->id]->last, 0, 19) : null,
                 'status' => MachineSyncer::deviceStatus($d, 10),
+                'links' => $links[$d->id] ?? ['numbers' => 0, 'linked' => 0],
             ])->values(),
             'defaults' => (new AttendanceDevice)->only(['port', 'timeout_seconds', 'lookback_days', 'clock_warn_seconds']),
             // Automatic sync needs the cron link (CRON_TOKEN) opened by a cron service, or the scheduler.

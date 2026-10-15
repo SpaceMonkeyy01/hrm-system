@@ -223,7 +223,7 @@ export default function Dashboard(props: Props) {
                         {att && att.linked === 0 ? (
                             <p className="rounded-lg border px-3 py-3 text-sm text-muted-foreground">
                                 Punches are loaded, but nobody is linked to a machine number or HR.my ID yet.{' '}
-                                {auth.can.edit && <Link href="/attendance/imports#link" className="font-semibold text-cascade hover:underline">Link people</Link>}
+                                {auth.can.edit && <Link href="/attendance/links?tab=numbers" className="font-semibold text-cascade hover:underline">Link people</Link>}
                             </p>
                         ) : att ? (
                             <dl className="grid grid-cols-5 gap-2 text-center">

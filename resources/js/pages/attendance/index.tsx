@@ -77,7 +77,7 @@ export default function AttendanceIndex(props: Props) {
                 )}
                 {can && props.unlinked > 0 && (
                     <p className="rounded-lg border bg-info-soft px-4 py-3 text-sm">
-                        {plural(props.unlinked, 'machine or HR.my ID')} {props.unlinked === 1 ? "isn't" : "aren't"} linked to an employee yet, so their punches don't show here. <Link className="font-semibold text-cascade underline" href="/attendance/imports#link">Link them</Link>.
+                        {plural(props.unlinked, 'machine or HR.my ID')} {props.unlinked === 1 ? "isn't" : "aren't"} linked to an employee yet, so their punches don't show here. <Link className="font-semibold text-cascade underline" href="/attendance/links?tab=numbers">Link them</Link>.
                     </p>
                 )}
 

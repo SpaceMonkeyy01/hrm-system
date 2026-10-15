@@ -9,22 +9,20 @@ use App\Models\AttendancePunch;
 use App\Models\Company;
 use App\Models\Employee;
 use App\Services\AttendanceBoard;
+use App\Services\AttendanceLinks;
 use App\Services\Import\AttendanceFileImporter;
 use App\Services\Import\MachineSyncer;
-use App\Services\Import\NameMatcher;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * Daily attendance, machine file uploads, linking machine numbers to people, and HR's manual times.
+ * Daily attendance, machine file uploads and HR's manual times. Linking numbers to people: AttendanceLinkController.
  * The rules are in AttendanceRules; this only gathers and sends.
  */
 class AttendanceController extends Controller
@@ -88,7 +86,7 @@ class AttendanceController extends Controller
                 ->map(fn ($c) => ['id' => $c->id, 'name' => $c->name, 'departments' => $c->departments->map->only('id', 'name')->all()]),
             'statuses' => config('hrm.attendance.statuses'),
             'hasSchedules' => $board->schedules->isNotEmpty(),
-            'unlinked' => $this->unlinkedCount(),
+            'unlinked' => AttendanceLinks::unlinkedCount(),
             'pendingRequests' => AttendanceRequest::where('status', 'pending')->whereHas('employee')->count(),
             'machine' => MachineSyncer::status(),
             'lastImport' => AttendanceImport::latest('id')->first(['date_to', 'created_at'])?->date_to?->toDateString(),
@@ -132,37 +130,14 @@ class AttendanceController extends Controller
 
     public function imports(Request $request): Response
     {
-        $people = Employee::query()->whereIn('status', ['active', 'offboarding'])->orderBy('full_name')
-            ->get(['id', 'employee_code', 'full_name', 'attendance_machine_id', 'hr_portal_id']);
-
-        $unlinked = [];
-        foreach (self::LINK_FIELDS as $source => $field) {
-            $matcher = new NameMatcher;
-            foreach ($people->whereNull($field) as $e) {
-                $matcher->add($e->id, $e->full_name, $e->employee_code);
-            }
-            foreach ($this->unlinkedDevices($source) as $d) {
-                $m = $d->device_name ? $matcher->match($d->device_name) : ['type' => 'none', 'ids' => []];
-                $sure = in_array($m['type'], ['alias', 'exact', 'normalized', 'spelling'], true);
-                $unlinked[] = [
-                    'source' => $source, 'device_user_id' => $d->device_user_id, 'device_name' => $d->device_name, 'punches' => (int) $d->punches,
-                    'last_seen' => substr($d->last_seen, 0, 10),
-                    'suggestion' => count($m['ids']) === 1 ? $m['ids'][0] : null,
-                    'confidence' => count($m['ids']) === 1 ? ($sure ? 'match' : 'check') : ($m['type'] === 'ambiguous' ? 'several' : 'none'),
-                ];
-            }
-        }
-        usort($unlinked, fn ($a, $b) => [$a['source'], $a['confidence'] !== 'match', $a['device_user_id']] <=> [$b['source'], $b['confidence'] !== 'match', $b['device_user_id']]);
-
         return Inertia::render('attendance/imports', [
             'imports' => AttendanceImport::query()->with('uploader:id,name')->latest('id')->limit(20)->get()->map(fn ($i) => [
                 ...$i->only('id', 'source', 'original_name', 'punches_found', 'punches_added'),
                 'date_from' => $i->date_from?->toDateString(), 'date_to' => $i->date_to?->toDateString(),
                 'uploaded_by' => $i->uploader?->name, 'uploaded_at' => $i->created_at?->toIso8601String(),
             ]),
-            'unlinked' => $unlinked,
-            'people' => $people->map(fn ($e) => ['id' => $e->id, 'label' => "{$e->full_name} ({$e->employee_code})",
-                'machine' => $e->attendance_machine_id, 'hrmy' => $e->hr_portal_id])->values(),
+            // Linking is on Attendance > Links; this page says how many numbers are waiting.
+            'unlinkedCount' => AttendanceLinks::unlinkedCount(),
             'sources' => AttendanceFileImporter::SOURCES,
             'pending' => AttendanceUploadController::pending($request),
             'machine' => MachineSyncer::status(),
@@ -194,66 +169,7 @@ class AttendanceController extends Controller
         return back()->with('success', $msg);
     }
 
-    /**
-     * Link device ids to people: machine numbers go to employees.attendance_machine_id, HR.my ids to
-     * employees.hr_portal_id (logged on the employee). HR.my ids look like employee codes but don't match ours,
-     * so they are never linked by code.
-     */
-    public function link(Request $request): RedirectResponse
-    {
-        $data = $request->validate([
-            'source' => ['required', Rule::in(array_keys(self::LINK_FIELDS))],
-            'links' => ['required', 'array', 'min:1', 'max:500'],
-            'links.*.device_user_id' => ['required', 'string', 'max:40', 'distinct'],
-            'links.*.employee_id' => ['required', 'integer', 'distinct', Rule::exists('employees', 'id')->withoutTrashed()],
-        ], ['links.*.employee_id.distinct' => 'The same person is picked twice.']);
-        $field = self::LINK_FIELDS[$data['source']];
-        $what = $data['source'] === 'machine' ? 'machine number' : 'HR.my ID';
-
-        $n = DB::transaction(function () use ($data, $field, $what) {
-            $n = 0;
-            foreach ($data['links'] as $i => $link) {
-                $taken = Employee::where($field, $link['device_user_id'])->where('id', '!=', $link['employee_id'])->first();
-                if ($taken) {
-                    throw ValidationException::withMessages(["links.$i.employee_id" => ucfirst($what)." {$link['device_user_id']} already belongs to {$taken->full_name}."]);
-                }
-                $e = Employee::findOrFail($link['employee_id']);
-                if ($e->{$field} && $e->{$field} !== $link['device_user_id']) {
-                    throw ValidationException::withMessages(["links.$i.employee_id" => "{$e->full_name} already has $what {$e->{$field}}."]);
-                }
-                $update = [$field => $link['device_user_id']];
-                if ($field === 'attendance_machine_id' && ! $e->attendance_device_id) {
-                    $update['attendance_device_id'] = AttendancePunch::deviceFor($link['device_user_id']);   // ATD-### it punches on
-                }
-                $e->update($update);
-                $n++;
-            }
-
-            return $n;
-        });
-
-        return back()->with('success', $n === 1 ? "Linked 1 $what." : "Linked $n {$what}s.");
-    }
-
     // ---------------------------------------------------------------- helpers
 
-    /** Device source => the employee field that holds that device's id for the person. */
-    private const LINK_FIELDS = ['machine' => 'attendance_machine_id', 'hrmy' => 'hr_portal_id'];
 
-    private function unlinkedDevices(string $source)
-    {
-        $field = self::LINK_FIELDS[$source];
-        $linked = Employee::query()->whereNotNull($field)->pluck($field)->map(fn ($v) => (string) $v)->all();
-
-        return AttendancePunch::query()->where('source', $source)
-            ->when($linked, fn ($q) => $q->whereNotIn('device_user_id', $linked))
-            ->groupBy('device_user_id')
-            ->selectRaw('device_user_id, max(device_name) as device_name, count(*) as punches, max(punched_at) as last_seen')
-            ->toBase()->get();
-    }
-
-    private function unlinkedCount(): int
-    {
-        return $this->unlinkedDevices('machine')->count() + $this->unlinkedDevices('hrmy')->count();
-    }
 }

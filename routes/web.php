@@ -4,6 +4,7 @@ use App\Http\Controllers\AccountController;
 use App\Http\Controllers\AssetController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\AttendanceDeviceController;
+use App\Http\Controllers\AttendanceLinkController;
 use App\Http\Controllers\AttendanceRequestController;
 use App\Http\Controllers\AttendanceUploadController;
 use App\Http\Controllers\Auth\LoginController;
@@ -104,11 +105,11 @@ Route::middleware('auth')->group(function () {
         Route::middleware('can:edit-hr')->group(function () {
             Route::get('employees/create', [EmployeeController::class, 'create'])->name('employees.create');
             // Spreadsheet imports: download, fill in Excel, upload, preview, save (SpreadsheetImportController::KINDS)
-            Route::get('imports/{kind}', [SpreadsheetImportController::class, 'show'])->whereIn('kind', ['details', 'assets'])->name('imports.show');
-            Route::get('imports/{kind}/template', [SpreadsheetImportController::class, 'template'])->whereIn('kind', ['details', 'assets'])->name('imports.template');
-            Route::post('imports/{kind}', [SpreadsheetImportController::class, 'upload'])->whereIn('kind', ['details', 'assets'])->name('imports.upload');
-            Route::post('imports/{kind}/apply', [SpreadsheetImportController::class, 'apply'])->whereIn('kind', ['details', 'assets'])->name('imports.apply');
-            Route::delete('imports/{kind}', [SpreadsheetImportController::class, 'discard'])->whereIn('kind', ['details', 'assets'])->name('imports.discard');
+            Route::get('imports/{kind}', [SpreadsheetImportController::class, 'show'])->whereIn('kind', ['details', 'assets', 'links'])->name('imports.show');
+            Route::get('imports/{kind}/template', [SpreadsheetImportController::class, 'template'])->whereIn('kind', ['details', 'assets', 'links'])->name('imports.template');
+            Route::post('imports/{kind}', [SpreadsheetImportController::class, 'upload'])->whereIn('kind', ['details', 'assets', 'links'])->name('imports.upload');
+            Route::post('imports/{kind}/apply', [SpreadsheetImportController::class, 'apply'])->whereIn('kind', ['details', 'assets', 'links'])->name('imports.apply');
+            Route::delete('imports/{kind}', [SpreadsheetImportController::class, 'discard'])->whereIn('kind', ['details', 'assets', 'links'])->name('imports.discard');
             Route::post('employees', [EmployeeController::class, 'store'])->name('employees.store');
             Route::get('employees/{employee}/edit', [EmployeeController::class, 'edit'])->name('employees.edit');
             Route::put('employees/{employee}', [EmployeeController::class, 'update'])->name('employees.update');
@@ -171,7 +172,10 @@ Route::middleware('auth')->group(function () {
             Route::post('attendance/imports/confirm', [AttendanceUploadController::class, 'confirm'])->name('attendance.confirm');
             Route::post('attendance/imports/discard', [AttendanceUploadController::class, 'discard'])->name('attendance.discard');
             Route::post('attendance/machine/sync', [AttendanceUploadController::class, 'syncMachine'])->middleware('throttle:6,1')->name('attendance.machine.sync');
-            Route::post('attendance/link', [AttendanceController::class, 'link'])->name('attendance.link');
+            Route::post('attendance/link', [AttendanceLinkController::class, 'link'])->name('attendance.link');
+            Route::get('attendance/links', [AttendanceLinkController::class, 'index'])->name('attendance.links');
+            Route::put('attendance/links/{employee}', [AttendanceLinkController::class, 'update'])->whereNumber('employee')->name('attendance.links.update');
+            Route::post('attendance/links/accept', [AttendanceLinkController::class, 'acceptMatches'])->name('attendance.links.accept');
             Route::get('attendance/requests', [AttendanceRequestController::class, 'index'])->name('attendance.requests');
             // App clock-ins: addresses and locations are personal data, so HR and admin only.
             Route::get('attendance/clock-ins', [ClockInController::class, 'index'])->name('attendance.clock-ins');
