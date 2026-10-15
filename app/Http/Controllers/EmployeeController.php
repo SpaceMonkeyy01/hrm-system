@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AssetAssignment;
 use App\Models\AttendanceDevice;
+use App\Models\AttendancePunch;
 use App\Models\Category;
 use App\Models\Company;
 use App\Models\Department;
@@ -71,9 +72,17 @@ class EmployeeController extends Controller
         ]);
     }
 
-    public function create(): Response
+    public function create(Request $request): Response
     {
-        return Inertia::render('employees/form', ['employee' => null] + $this->formOptions());
+        // From Attendance > Links: a number that punches but has no employee. The form opens filled in.
+        $prefill = $request->validate([
+            'name' => ['nullable', 'string', 'max:150'],
+            'machine' => ['nullable', 'string', 'max:60'],
+            'hrmy' => ['nullable', 'string', 'max:60'],
+            'from' => ['nullable', Rule::in(['links'])],
+        ]);
+
+        return Inertia::render('employees/form', ['employee' => null, 'prefill' => array_filter($prefill) ?: null] + $this->formOptions());
     }
 
     public function store(Request $request): RedirectResponse
@@ -82,9 +91,15 @@ class EmployeeController extends Controller
         $categories = $this->pullCategories($data);
         $company = Company::findOrFail($data['company_id']);
         $data['employee_code'] = ($data['employee_code'] ?? null) ?: $company->nextEmployeeCode();
+        // Off when HR adds someone who already works here (found on Attendance > Links): no probation, no 90-day plan.
+        $startOnboarding = $request->boolean('start_onboarding', true);
+        $fromLinks = $request->input('from') === 'links';
+        if (! empty($data['attendance_machine_id']) && empty($data['attendance_device_id'])) {
+            $data['attendance_device_id'] = AttendancePunch::deviceFor($data['attendance_machine_id']);   // ATD-### it punches on
+        }
 
         $schedule = $this->validatedSchedule($request);
-        $employee = DB::transaction(function () use ($data, $schedule, $request, $categories) {
+        $employee = DB::transaction(function () use ($data, $schedule, $request, $categories, $startOnboarding) {
             $employee = Employee::create($data + ['status' => 'active']);
             if ($categories !== null) {
                 $employee->categories()->sync($categories);
@@ -93,16 +108,26 @@ class EmployeeController extends Controller
                 ScheduleAssigner::assign([$employee], $schedule['schedule'], $schedule['starts_on'] ?? ($employee->start_date?->toDateString() ?? CarbonImmutable::today()->toDateString()), $request->user()->id);
             }
             // New hires start onboarding immediately, on probation until the 90-day evaluation.
-            Onboarding::create([
-                'employee_id' => $employee->id,
-                'probation_end_date' => HrRules::probationEnd($employee->start_date),
-                'probation_result' => 'Pending',
-            ]);
+            if ($startOnboarding) {
+                Onboarding::create([
+                    'employee_id' => $employee->id,
+                    'probation_end_date' => HrRules::probationEnd($employee->start_date),
+                    'probation_result' => 'Pending',
+                ]);
+            }
 
             return $employee;
         });
 
-        return redirect()->route('employees.show', $employee)->with('success', "Added {$employee->full_name} as {$employee->employee_code}.");
+        $linked = implode(' and ', array_filter([
+            $employee->attendance_machine_id ? "machine no. {$employee->attendance_machine_id}" : null,
+            $employee->hr_portal_id ? "HR.my ID {$employee->hr_portal_id}" : null,
+        ]));
+        $message = "Added {$employee->full_name} as {$employee->employee_code}".($linked ? ", linked to $linked" : '').'.';
+
+        return $fromLinks
+            ? redirect('/attendance/links?tab=numbers')->with('success', $message)
+            : redirect()->route('employees.show', $employee)->with('success', $message);
     }
 
     public function show(Employee $employee): Response
@@ -330,9 +355,9 @@ class EmployeeController extends Controller
             'attendance_device_id' => ['nullable', 'integer', 'exists:attendance_devices,id'],
             'employment_type' => ['nullable', Rule::in(config('hrm.employment_types'))],
             'start_date' => ['nullable', 'date'],
-            'hr_portal_id' => ['nullable', 'string', 'max:60'],
+            'hr_portal_id' => ['nullable', 'string', 'max:60', Rule::unique('employees', 'hr_portal_id')->ignore($employee?->id)->withoutTrashed()],
             'attendance_machine' => ['nullable', 'string', 'max:60'],
-            'attendance_machine_id' => ['nullable', 'string', 'max:60'],
+            'attendance_machine_id' => ['nullable', 'string', 'max:60', Rule::unique('employees', 'attendance_machine_id')->ignore($employee?->id)->withoutTrashed()],
             'drive_folder_url' => ['nullable', 'url', 'max:500'],
             'notes' => ['nullable', 'string', 'max:5000'],
             // Master profile
@@ -366,6 +391,8 @@ class EmployeeController extends Controller
             'cnic.regex' => 'CNIC must be 13 digits, like 35202-1234567-1.',
             'manager_id.not_in' => 'An employee cannot be their own manager.',
             'secondary_manager_id.not_in' => 'An employee cannot be their own manager.',
+            'attendance_machine_id.unique' => 'This machine number already belongs to someone else.',
+            'hr_portal_id.unique' => 'This HR.my ID already belongs to someone else.',
             'bank_account_number.regex' => 'Use letters, digits, spaces and dashes only (account number or IBAN).',
             'date_of_birth.before' => 'Date of birth must be in the past.',
         ]);

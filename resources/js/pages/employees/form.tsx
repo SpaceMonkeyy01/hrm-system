@@ -21,6 +21,7 @@ type Props = {
     employee: (EmployeeData & { work_schedule_id: number | null }) | null; companies: Company[]; managers: { id: number; label: string }[];
     employmentTypes: string[]; options: Options; schedules: { id: number; label: string; is_default: boolean }[];
     categories: { id: number; name: string }[]; devices: { id: number; label: string }[];
+    prefill?: { name?: string; machine?: string; hrmy?: string; from?: 'links' } | null;
 };
 
 /** Master profile fields, all nullable strings (dates as Y-m-d). */
@@ -33,12 +34,13 @@ const profileFields = [
 /** Changing one of these on Edit adds a line to the employment history (EmployeeController@update). */
 const jobFields = ['company_id', 'department_id', 'team_id', 'role_title', 'manager_id', 'employment_type', 'work_mode'] as const;
 
-export default function EmployeeForm({ employee, companies, managers, employmentTypes, options, schedules, categories, devices }: Props) {
+export default function EmployeeForm({ employee, companies, managers, employmentTypes, options, schedules, categories, devices, prefill }: Props) {
     const editing = employee !== null;
+    const fromLinks = !editing && prefill?.from === 'links';
     const form = useForm({
         company_id: employee?.company_id ?? '',
         employee_code: employee?.employee_code ?? '',
-        full_name: employee?.full_name ?? '',
+        full_name: employee?.full_name ?? prefill?.name ?? '',
         first_name: employee?.first_name ?? '',
         last_name: employee?.last_name ?? '',
         cnic: employee?.cnic ?? '',
@@ -55,9 +57,9 @@ export default function EmployeeForm({ employee, companies, managers, employment
         // Default only for a new hire: on edit a blank type must stay blank, not become Full Time.
         employment_type: employee === null ? 'Full Time' : (employee.employment_type ?? ''),
         start_date: employee?.start_date ?? '',
-        hr_portal_id: employee?.hr_portal_id ?? '',
+        hr_portal_id: employee?.hr_portal_id ?? prefill?.hrmy ?? '',
         attendance_machine: employee?.attendance_machine ?? '',
-        attendance_machine_id: employee?.attendance_machine_id ?? '',
+        attendance_machine_id: employee?.attendance_machine_id ?? prefill?.machine ?? '',
         drive_folder_url: employee?.drive_folder_url ?? '',
         notes: employee?.notes ?? '',
         needs_review: employee?.needs_review ?? false,
@@ -68,6 +70,9 @@ export default function EmployeeForm({ employee, companies, managers, employment
         change_effective_date: '',
         change_type: '',
         change_note: '',
+        // Someone found on Attendance > Links usually works here already: no onboarding unless HR ticks it.
+        start_onboarding: !fromLinks,
+        from: fromLinks ? 'links' : '',
     });
     const d = form.data;
     const company = companies.find((c) => c.id === Number(d.company_id));
@@ -104,9 +109,11 @@ export default function EmployeeForm({ employee, companies, managers, employment
         <>
             <Head title={editing ? `Edit ${employee.full_name}` : 'Add employee'} />
             <PageHeader
-                back={editing ? { href: `/employees/${employee.id}`, label: employee.full_name } : { href: '/employees', label: 'Employees' }}
+                back={editing ? { href: `/employees/${employee.id}`, label: employee.full_name } : fromLinks ? { href: '/attendance/links?tab=numbers', label: 'Attendance links' } : { href: '/employees', label: 'Employees' }}
                 title={editing ? `Edit ${employee.full_name}` : 'Add employee'}
-                description={editing ? undefined : 'New employees start onboarding straight away, on probation for 90 days from the start date.'}
+                description={editing ? undefined : fromLinks
+                    ? `Someone who punches ${prefill?.machine ? `as machine no. ${prefill.machine}` : `as HR.my ID ${prefill?.hrmy}`} but has no employee record. Saving adds them and links the number.`
+                    : 'New employees start onboarding straight away, on probation for 90 days from the start date.'}
             />
             <form onSubmit={submit} className="grid max-w-4xl gap-8 px-4 py-6 md:px-6">
                 <fieldset className="grid gap-4 sm:grid-cols-2">
@@ -256,9 +263,17 @@ export default function EmployeeForm({ employee, companies, managers, employment
                     </fieldset>
                 )}
 
+                {fromLinks && (
+                    <label className="flex items-start gap-2 rounded-lg border p-4 text-sm">
+                        <input type="checkbox" className="mt-0.5 size-4 accent-cascade" checked={d.start_onboarding} onChange={(e) => form.setData('start_onboarding', e.target.checked)} />
+                        <span><span className="font-semibold">New hire: start onboarding</span>
+                            <span className="block text-muted-foreground">Leave it off for someone who already works here. On puts them on probation for 90 days from the start date.</span></span>
+                    </label>
+                )}
+
                 <div className="flex gap-2">
-                    <Button type="submit" disabled={form.processing}>{editing ? 'Save changes' : 'Add employee'}</Button>
-                    <Button variant="ghost" asChild><Link href={editing ? `/employees/${employee.id}` : '/employees'}>Cancel</Link></Button>
+                    <Button type="submit" disabled={form.processing}>{editing ? 'Save changes' : fromLinks ? 'Add and link' : 'Add employee'}</Button>
+                    <Button variant="ghost" asChild><Link href={editing ? `/employees/${employee.id}` : fromLinks ? '/attendance/links?tab=numbers' : '/employees'}>Cancel</Link></Button>
                 </div>
             </form>
         </>

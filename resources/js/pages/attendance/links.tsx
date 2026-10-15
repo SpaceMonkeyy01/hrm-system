@@ -1,5 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { Check, Download, Link2, Pencil, Search, Upload, Wand2, X } from 'lucide-react';
+import { Check, Download, Link2, Pencil, Search, Upload, UserPlus, Wand2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Avatar } from '@/components/avatar';
@@ -189,6 +189,7 @@ function NumbersTable({ source, unlinked, people }: { source: Source; unlinked: 
                             <th className="px-3 py-2 font-semibold">Punches</th>
                             <th className="px-3 py-2 font-semibold">Suggestion</th>
                             <th className="px-3 py-2 font-semibold">Employee</th>
+                            <th className="px-3 py-2"><span className="sr-only">New employee</span></th>
                         </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -212,6 +213,13 @@ function NumbersTable({ source, unlinked, people }: { source: Source; unlinked: 
                                             Use {byId.get(u.suggestion) ?? 'the suggestion'}
                                         </button>
                                     )}
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                    <Button variant="ghost" size="sm" asChild title="No employee record for this person? Add one and link this number.">
+                                        <Link href={`/employees/create?${new URLSearchParams({ from: 'links', [source]: u.device_user_id, ...(u.device_name ? { name: u.device_name } : {}) })}`}>
+                                            <UserPlus /> New employee
+                                        </Link>
+                                    </Button>
                                 </td>
                             </tr>
                         ))}

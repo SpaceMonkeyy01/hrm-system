@@ -125,6 +125,29 @@ class AttendanceLinksTest extends TestCase
         $this->assertSame('9', $omar->fresh()->attendance_machine_id);
     }
 
+    public function test_new_employee_from_an_unlinked_number_is_added_linked_and_not_onboarded(): void
+    {
+        $this->punch('machine', '174', '2026-10-15', 'Fake Kazmi');
+        $hr = $this->user('hr');
+
+        $this->actingAs($hr)->get('/employees/create?from=links&machine=174&name=Fake+Kazmi')->assertInertia(fn (AssertableInertia $p) => $p
+            ->component('employees/form')->where('prefill', ['name' => 'Fake Kazmi', 'machine' => '174', 'from' => 'links']));
+
+        $this->actingAs($hr)->post('/employees', ['full_name' => 'Fake Kazmi', 'company_id' => $this->company->id, 'attendance_machine_id' => '174',
+            'start_onboarding' => false, 'from' => 'links'])
+            ->assertRedirect('/attendance/links?tab=numbers')->assertSessionHas('success', fn ($m) => str_contains($m, 'linked to machine no. 174'));
+        $e = Employee::where('full_name', 'Fake Kazmi')->sole();
+        $this->assertSame(['174', $this->device->id], [$e->attendance_machine_id, $e->attendance_device_id]);
+        $this->assertFalse($e->onboarding()->exists(), 'someone who already works here is not put on probation');
+
+        // The number now belongs to them: a second person can't take it, on Add or Edit.
+        $this->actingAs($hr)->post('/employees', ['full_name' => 'Fake Other', 'company_id' => $this->company->id, 'attendance_machine_id' => '174'])
+            ->assertSessionHasErrors(['attendance_machine_id' => 'This machine number already belongs to someone else.']);
+        // A normal Add still starts onboarding.
+        $this->actingAs($hr)->post('/employees', ['full_name' => 'Fake New Hire', 'company_id' => $this->company->id])->assertSessionHasNoErrors();
+        $this->assertTrue(Employee::where('full_name', 'Fake New Hire')->sole()->onboarding()->exists());
+    }
+
     public function test_devices_page_counts_linked_numbers(): void
     {
         $this->employee($this->company, ['full_name' => 'Fake Ali', 'attendance_machine_id' => '7']);
