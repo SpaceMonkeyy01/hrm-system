@@ -270,6 +270,23 @@ class MasterImportTest extends TestCase
         $this->assertTrue($report->contains(fn ($r) => $r['result'] === 'bad_link' && str_contains($r['detail'], 'no employee has code BCC-999')));
     }
 
+    public function test_logins_are_tied_to_the_new_records(): void
+    {
+        $company = Company::create(['name' => 'BCC', 'code' => 'BCC', 'employee_code_prefix' => 'BCC-']);
+        $old = fn (string $code, string $name) => Employee::create(['employee_code' => $code, 'full_name' => $name, 'company_id' => $company->id]);
+        $bilal = $this->user('employee', ['email' => 'bilal@example.test', 'employee_id' => $old('BCC-050', 'Bilal Ahmed')->id]);
+        $atta = $this->user('employee', ['email' => 'sami@example.test', 'employee_id' => $old('UNASSIGNED-020', 'Sami Atta')->id]);
+        $gone = $this->user('hr', ['email' => 'gone@example.test', 'employee_id' => $old('BCC-051', 'Left Long Ago')->id]);
+
+        $result = (new HrWorkbookImporter(null, ['Sami Atta' => 'BCC-003'], $this->master()))->run(true);
+        $report = collect($result['report']);
+
+        $this->assertSame('BCC-002', $bilal->fresh()->employee->employee_code);
+        $this->assertSame('BCC-003', $atta->fresh()->employee->employee_code, 'through aliases.csv');
+        $this->assertNull($gone->fresh()->employee_id);
+        $this->assertTrue($report->contains(fn ($r) => $r['result'] === 'login_not_linked' && $r['source_name'] === 'gone@example.test'));
+    }
+
     public function test_command_takes_master_and_onboarding_and_prints_every_error(): void
     {
         Storage::fake('local');

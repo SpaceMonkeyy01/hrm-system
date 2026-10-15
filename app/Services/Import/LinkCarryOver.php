@@ -4,6 +4,7 @@ namespace App\Services\Import;
 
 use App\Models\AttendancePunch;
 use App\Models\Employee;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -19,6 +20,7 @@ use Illuminate\Support\Facades\DB;
  *
  * Clock-ins made in the app store the employee id as the device user, so they are moved to the new id too.
  * A machine number without a device gets the device (ATD-###) its most recent punch came from.
+ * Logins tied to an employee (self-service, HR) are tied to the new record the same way: sure or company match only.
  */
 class LinkCarryOver
 {
@@ -28,6 +30,9 @@ class LinkCarryOver
 
     /** @var list<array<string, mixed>> */
     private array $old = [];
+
+    /** @var list<array{user_id: int, email: string, employee_code: string, full_name: string, company: ?string}> */
+    private array $logins = [];
 
     public function capture(): void
     {
@@ -47,6 +52,12 @@ class LinkCarryOver
             }
         }
         unset($old);
+
+        $this->logins = User::query()->whereNotNull('employee_id')->with('employee.company:id,name')->orderBy('id')->get()
+            ->filter(fn (User $u) => $u->employee)
+            ->map(fn (User $u) => ['user_id' => $u->id, 'email' => $u->email, 'employee_code' => $u->employee->employee_code,
+                'full_name' => $u->employee->full_name, 'company' => $u->employee->company?->name])
+            ->values()->all();
     }
 
     public function count(): int
@@ -69,15 +80,7 @@ class LinkCarryOver
         foreach ($this->old as $i => $old) {
             $links = array_filter(array_intersect_key($old, array_flip(self::LINKS)), fn ($v) => $v !== null && $v !== '');
             $what = $this->describe($old);
-            $m = $matcher->match($old['full_name']);
-            if ($m['type'] === 'ambiguous' && $old['company']) {
-                $same = Employee::query()->whereIn('id', $m['ids'])->whereHas('company', fn ($q) => $q->where('name', $old['company']))->pluck('id')->all();
-                if (count($same) === 1) {
-                    $m = ['type' => 'company', 'ids' => $same, 'score' => 0.9];
-                } elseif ($same) {
-                    $m['ids'] = $same;      // still ambiguous; only the namesakes in the old company are flagged
-                }
-            }
+            $m = $this->find($matcher, $old['full_name'], $old['company']);
             if (! in_array($m['type'], ['alias', 'exact', 'normalized', 'spelling', 'fuzzy', 'subset', 'company'], true) || ! $m['ids']) {
                 $ambiguous = $m['type'] === 'ambiguous';
                 $codes = $ambiguous ? Employee::query()->whereIn('id', $m['ids'])->orderBy('employee_code')->pluck('employee_code')->implode(', ') : '';
@@ -130,7 +133,42 @@ class LinkCarryOver
         }
         $stats['app_clock_in_people_moved'] = count($remap);
 
+        foreach ($this->logins as $i => $login) {
+            $m = $this->find($matcher, $login['full_name'], $login['company']);
+            $employee = in_array($m['type'], ['alias', 'exact', 'normalized', 'spelling', 'company'], true) ? Employee::find($m['ids'][0]) : null;
+            $taken = $employee ? User::query()->where('employee_id', $employee->id)->value('email') : null;
+            if (! $employee || $taken) {
+                $why = $taken ? "{$employee->employee_code} is already the login of $taken"
+                    : ($m['type'] === 'ambiguous' ? 'more than one person has this name' : ($m['ids'] ? 'only a similar name' : 'nobody on the new list has this name'));
+                $log(self::SHEET, $i + 1, $login['email'], 'login_not_linked', $m['type'], null,
+                    "Login {$login['email']} was {$login['employee_code']} \"{$login['full_name']}\": $why. Link it under Settings > Users (or add the name to aliases.csv).");
+                $bump('logins_not_linked');
+
+                continue;
+            }
+            User::query()->whereKey($login['user_id'])->update(['employee_id' => $employee->id]);
+            $log(self::SHEET, $i + 1, $login['email'], 'login_linked', $m['type'], $employee, "Login {$login['email']} (was {$login['employee_code']})");
+            $bump('logins_linked');
+        }
+
         return $stats;
+    }
+
+    /** Name match; a tie between namesakes goes to the one in $company, if only one is. */
+    private function find(NameMatcher $matcher, string $name, ?string $company): array
+    {
+        $m = $matcher->match($name);
+        if ($m['type'] === 'ambiguous' && $company) {
+            $same = Employee::query()->whereIn('id', $m['ids'])->whereHas('company', fn ($q) => $q->where('name', $company))->pluck('id')->all();
+            if (count($same) === 1) {
+                return ['type' => 'company', 'ids' => $same, 'score' => 0.9];
+            }
+            if ($same) {
+                $m['ids'] = $same;      // still ambiguous; only the namesakes in that company are flagged
+            }
+        }
+
+        return $m;
     }
 
     /** Mark each employee for review with $note (added to what is there). */

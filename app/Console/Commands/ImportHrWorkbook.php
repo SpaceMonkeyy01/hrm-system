@@ -85,7 +85,7 @@ class ImportHrWorkbook extends Command
         Storage::disk('local')->put($file, stream_get_contents($fh));
 
         $check = ['ambiguous', 'bad_alias', 'created', 'conflict', 'duplicate_id', 'invalid_value', 'manager_not_linked',
-            'not_in_master', 'warning', 'link_not_carried', 'link_check', 'link_conflict', 'bad_link', 'link_moved'];
+            'not_in_master', 'warning', 'link_not_carried', 'link_check', 'link_conflict', 'bad_link', 'link_moved', 'login_not_linked'];
         $needsReview = collect($result['report'])->whereIn('result', $check)->count();
         $this->newLine();
         $this->line('Report: '.Storage::disk('local')->path($file));
