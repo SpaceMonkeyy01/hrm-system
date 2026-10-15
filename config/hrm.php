@@ -177,7 +177,7 @@ return [
     ],
 
     // Master profile dropdowns
-    'genders' => ['Male', 'Female'],
+    'genders' => ['Male', 'Female', 'Other'],
     'marital_statuses' => ['Single', 'Married', 'Divorced', 'Widowed'],
     'blood_groups' => ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'],
     // Office = attendance from the ZKTeco machine, Remote = the online check-in portal, Hybrid = both
@@ -193,6 +193,9 @@ return [
 
     'employee_statuses' => [
         'active' => 'Active',
+        // Not confirmed as current yet (For_Review rows of Employee_Master.xlsx). Left out of attendance, reports
+        // and headcounts until HR confirms them (next company code) or marks them as left.
+        'review' => 'Review',
         'offboarding' => 'Offboarding',
         'exited' => 'Exited',
     ],

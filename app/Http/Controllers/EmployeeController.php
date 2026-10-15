@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\AssetAssignment;
+use App\Models\AttendanceDevice;
+use App\Models\Category;
 use App\Models\Company;
 use App\Models\Department;
 use App\Models\Employee;
@@ -31,7 +33,7 @@ class EmployeeController extends Controller
             'q' => ['nullable', 'string', 'max:100'],
             'company' => ['nullable', 'integer'],
             'department' => ['nullable', 'integer'],
-            'status' => ['nullable', Rule::in(['current', 'active', 'offboarding', 'exited', 'all'])],
+            'status' => ['nullable', Rule::in(['current', 'active', 'review', 'offboarding', 'exited', 'all'])],
             'review' => ['nullable', 'boolean'],
             'unassigned' => ['nullable', 'boolean'],
             'sort' => ['nullable', Rule::in(['name', 'code', 'start_date', 'department'])],
@@ -42,7 +44,7 @@ class EmployeeController extends Controller
             ->with(['company:id,name', 'department:id,name', 'team:id,name'])
             ->search($f['q'] ?? null)
             ->when($status === 'current', fn ($q) => $q->whereIn('status', ['active', 'offboarding']))
-            ->when(in_array($status, ['active', 'offboarding', 'exited'], true), fn ($q) => $q->where('status', $status))
+            ->when(in_array($status, ['active', 'review', 'offboarding', 'exited'], true), fn ($q) => $q->where('status', $status))
             ->when($f['company'] ?? null, fn ($q, $v) => $q->where('company_id', $v))
             ->when($f['department'] ?? null, fn ($q, $v) => $q->where('department_id', $v))
             ->when($f['review'] ?? false, fn ($q) => $q->where('needs_review', true))
@@ -77,12 +79,16 @@ class EmployeeController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validated($request, null);
+        $categories = $this->pullCategories($data);
         $company = Company::findOrFail($data['company_id']);
         $data['employee_code'] = ($data['employee_code'] ?? null) ?: $company->nextEmployeeCode();
 
         $schedule = $this->validatedSchedule($request);
-        $employee = DB::transaction(function () use ($data, $schedule, $request) {
+        $employee = DB::transaction(function () use ($data, $schedule, $request, $categories) {
             $employee = Employee::create($data + ['status' => 'active']);
+            if ($categories !== null) {
+                $employee->categories()->sync($categories);
+            }
             if ($schedule) {
                 ScheduleAssigner::assign([$employee], $schedule['schedule'], $schedule['starts_on'] ?? ($employee->start_date?->toDateString() ?? CarbonImmutable::today()->toDateString()), $request->user()->id);
             }
@@ -102,6 +108,7 @@ class EmployeeController extends Controller
     public function show(Employee $employee): Response
     {
         $employee->load(['company:id,name', 'department:id,name', 'team:id,name', 'manager:id,employee_code,full_name',
+            'secondaryManager:id,employee_code,full_name', 'secondaryDepartment:id,name', 'categories:id,name', 'attendanceDevice:id,code,name',
             'onboarding', 'probationPlan:id,employee_id,updated_at', 'offboardings', 'employmentHistory.author:id,name']);
         $private = request()->user()->can('edit-hr');
         $board = new StatusBoard([$employee->id]);
@@ -129,6 +136,12 @@ class EmployeeController extends Controller
                 'department' => $employee->department?->name,
                 'team' => $employee->team?->name,
                 'manager' => $employee->manager ? ['id' => $employee->manager->id, 'name' => $employee->manager->full_name, 'code' => $employee->manager->employee_code] : null,
+                'secondary_manager' => $employee->secondaryManager ? ['id' => $employee->secondaryManager->id, 'name' => $employee->secondaryManager->full_name, 'code' => $employee->secondaryManager->employee_code] : null,
+                'secondary_department' => $employee->secondaryDepartment?->name,
+                'categories' => $employee->categories->pluck('name')->all(),
+                'attendance_device' => $employee->attendanceDevice ? ['code' => $employee->attendanceDevice->code, 'name' => $employee->attendanceDevice->name] : null,
+                // Values the master was cleaned from (old lists, Odoo). Read only.
+                'legacy' => $employee->legacy ?: null,
             ],
             'onboarding' => $o ? [
                 'cohort' => $o->cohort,
@@ -187,10 +200,12 @@ class EmployeeController extends Controller
             'employee' => [
                 ...$employee->only(['id', 'employee_code', 'full_name', 'first_name', 'last_name', 'cnic', 'email', 'phone',
                     'company_id', 'department_id', 'team_id', 'role_title', 'manager_id', 'employment_type',
+                    'secondary_department_id', 'secondary_manager_id', 'attendance_device_id',
                     'hr_portal_id', 'attendance_machine', 'attendance_machine_id', 'drive_folder_url', 'notes',
                     'needs_review', 'review_note', ...self::PROFILE_FIELDS]),
                 ...collect(self::PROFILE_DATES)->mapWithKeys(fn ($f) => [$f => $employee->{$f}?->toDateString()])->all(),
                 'start_date' => $employee->start_date?->toDateString(),
+                'category_ids' => $employee->categories()->pluck('categories.id')->all(),
                 'work_schedule_id' => ScheduleAssigner::current([$employee->id], CarbonImmutable::today()->toDateString())[$employee->id] ?? null,
             ],
         ] + $this->formOptions($employee->id));
@@ -199,6 +214,7 @@ class EmployeeController extends Controller
     public function update(Request $request, Employee $employee): RedirectResponse
     {
         $data = $this->validated($request, $employee);
+        $categories = $this->pullCategories($data);
         $change = $request->validate([
             'change_effective_date' => ['nullable', 'date'],
             'change_type' => ['nullable', Rule::in(config('hrm.history_types'))],
@@ -207,7 +223,7 @@ class EmployeeController extends Controller
 
         $schedule = $this->validatedSchedule($request);
 
-        DB::transaction(function () use ($employee, $data, $change, $request, $schedule) {
+        DB::transaction(function () use ($employee, $data, $change, $request, $schedule, $categories) {
             $jobBefore = $this->jobLabels($employee);
             if ($schedule) {
                 ScheduleAssigner::assign([$employee], $schedule['schedule'], $schedule['starts_on'] ?? CarbonImmutable::today()->toDateString(), $request->user()->id);
@@ -225,6 +241,9 @@ class EmployeeController extends Controller
                 }
             }
             $employee->update($data);
+            if ($categories !== null) {
+                $employee->categories()->sync($categories);
+            }
             $this->recordJobChange($employee, $jobBefore, $change, $request->user()?->id);
 
             // Keep the probation end date in step with the start date, unless HR set it by hand.
@@ -245,7 +264,49 @@ class EmployeeController extends Controller
         return redirect()->route('employees.index')->with('success', "Deleted {$employee->full_name}. The record is kept in the archive.");
     }
 
+    /**
+     * Someone with status "review" (an Odoo record nobody had confirmed): HR confirms them as current, which gives
+     * a REV-### or UNASSIGNED-### code the company's next real code, or records that they left.
+     */
+    public function decideReview(Request $request, Employee $employee): RedirectResponse
+    {
+        abort_unless($employee->status === 'review', 422, 'This person is not waiting for a decision.');
+        $data = $request->validate([
+            'decision' => ['required', Rule::in(['active', 'exited'])],
+            'exit_date' => ['nullable', 'date'],
+        ]);
+
+        if ($data['decision'] === 'active') {
+            if (! $employee->company_id) {
+                return back()->with('error', 'Set the company first, so the right code can be given.');
+            }
+            $update = ['status' => 'active', 'needs_review' => false];
+            if (preg_match('/^(REV|UNASSIGNED)-/', $employee->employee_code)) {
+                $update['employee_code'] = $employee->company->nextEmployeeCode();
+            }
+            $employee->update($update);
+
+            return back()->with('success', "{$employee->full_name} is now current staff as {$employee->employee_code}.");
+        }
+
+        $employee->update(['status' => 'exited', 'needs_review' => false, 'exit_date' => $data['exit_date'] ?? null]);
+
+        return back()->with('success', "{$employee->full_name} is marked as left.");
+    }
+
     // ------------------------------------------------------------------
+
+    /** category_ids from the form: null when the form did not send them (keep what is stored). */
+    private function pullCategories(array &$data): ?array
+    {
+        if (! array_key_exists('category_ids', $data)) {
+            return null;
+        }
+        $ids = array_values(array_unique(array_map('intval', $data['category_ids'] ?? [])));
+        unset($data['category_ids']);
+
+        return $ids;
+    }
 
     private function validated(Request $request, ?Employee $employee): array
     {
@@ -262,6 +323,11 @@ class EmployeeController extends Controller
             'team_id' => ['nullable', 'integer', 'exists:teams,id'],
             'role_title' => ['nullable', 'string', 'max:150'],
             'manager_id' => ['nullable', 'integer', Rule::exists('employees', 'id')->withoutTrashed(), Rule::notIn([$employee?->id])],
+            'secondary_manager_id' => ['nullable', 'integer', Rule::exists('employees', 'id')->withoutTrashed(), Rule::notIn([$employee?->id])],
+            'secondary_department_id' => ['nullable', 'integer', 'exists:departments,id'],
+            'category_ids' => ['sometimes', 'array'],
+            'category_ids.*' => ['integer', 'exists:categories,id'],
+            'attendance_device_id' => ['nullable', 'integer', 'exists:attendance_devices,id'],
             'employment_type' => ['nullable', Rule::in(config('hrm.employment_types'))],
             'start_date' => ['nullable', 'date'],
             'hr_portal_id' => ['nullable', 'string', 'max:60'],
@@ -299,6 +365,7 @@ class EmployeeController extends Controller
         $validator = validator($request->all(), $rules, [
             'cnic.regex' => 'CNIC must be 13 digits, like 35202-1234567-1.',
             'manager_id.not_in' => 'An employee cannot be their own manager.',
+            'secondary_manager_id.not_in' => 'An employee cannot be their own manager.',
             'bank_account_number.regex' => 'Use letters, digits, spaces and dashes only (account number or IBAN).',
             'date_of_birth.before' => 'Date of birth must be in the past.',
         ]);
@@ -315,6 +382,11 @@ class EmployeeController extends Controller
             $team = $teamId ? Team::find($teamId) : null;
             if ($team && $team->department_id !== $deptId) {
                 $v->errors()->add('team_id', 'This team belongs to another department.');
+            }
+            $secondId = $request->exists('secondary_department_id') ? ($request->integer('secondary_department_id') ?: null) : $employee?->secondary_department_id;
+            $second = $secondId ? Department::find($secondId) : null;
+            if ($second && $second->company_id !== $companyId) {
+                $v->errors()->add('secondary_department_id', 'This department belongs to another company.');
             }
         });
 
@@ -352,6 +424,8 @@ class EmployeeController extends Controller
                 ->orderBy('full_name')->get(['id', 'employee_code', 'full_name'])
                 ->map(fn ($e) => ['id' => $e->id, 'label' => "{$e->full_name} ({$e->employee_code})"])->all(),
             'employmentTypes' => config('hrm.employment_types'),
+            'categories' => Category::query()->orderBy('name')->get(['id', 'name'])->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])->all(),
+            'devices' => AttendanceDevice::query()->orderBy('id')->get(['id', 'code', 'name'])->map(fn ($d) => ['id' => $d->id, 'label' => "{$d->code} {$d->name}"])->all(),
             'schedules' => WorkSchedule::query()->orderBy('name')->get()->map(fn (WorkSchedule $s) => ['id' => $s->id, 'label' => "{$s->name} ({$s->summary()})", 'is_default' => $s->is_default])->all(),
             'options' => [
                 'genders' => config('hrm.genders'),

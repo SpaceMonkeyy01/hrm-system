@@ -32,6 +32,8 @@ type Employee = {
     notes: string | null; needs_review: boolean; review_note: string | null; source_ref: string | null;
     start_date: string | null; exit_date: string | null; company: string | null; department: string | null; team: string | null;
     manager: { id: number; name: string; code: string } | null;
+    secondary_manager: { id: number; name: string; code: string } | null; secondary_department: string | null; categories: string[];
+    attendance_device: { code: string; name: string } | null; legacy: Record<string, string> | null;
     gender: string | null; personal_email: string | null; city: string | null; work_mode: string | null; work_location: string | null;
     confirmation_date: string | null;
     /** True for viewer logins: the private fields below are null for them. */
@@ -77,8 +79,14 @@ type Props = {
     options: { probationResults: string[]; cohorts: string[]; historyTypes: string[] };
 };
 
-const statusTone = { active: 'done', offboarding: 'pending', exited: 'neutral' } as const;
-const statusLabel: Record<string, string> = { active: 'Active', offboarding: 'Offboarding', exited: 'Exited' };
+const statusTone = { active: 'done', review: 'pending', offboarding: 'pending', exited: 'neutral' } as const;
+const statusLabel: Record<string, string> = { active: 'Active', review: 'Review', offboarding: 'Offboarding', exited: 'Exited' };
+
+/** legacy_list_team -> "List team", legacy_odoo_manager -> "Odoo manager", match_type -> "Match type" */
+const legacyLabel = (key: string) => {
+    const words = key.replace(/^legacy_/, '').replace(/_/g, ' ').replace(/^list /, 'Old list ').replace(/^odoo /, 'Odoo ');
+    return words.charAt(0).toUpperCase() + words.slice(1);
+};
 const reload = ['lists', 'onboarding', 'documentStatus', 'activity'];
 
 function ChecklistList({ employeeId, list, optionSets, canEdit, name }: { employeeId: number; list: List; optionSets: OptionSets; canEdit: boolean; name: string }) {
@@ -432,10 +440,27 @@ export default function EmployeeShow(props: Props) {
                 )}
             </PageHeader>
 
+            {e.status === 'review' && (
+                <div className="mx-4 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#ecd29c] bg-pending-soft px-4 py-3 text-sm md:mx-6">
+                    <div>
+                        <p className="font-semibold text-pending">Not confirmed as current staff</p>
+                        <p className="mt-0.5">This person is kept out of attendance, reports and headcounts until HR decides.</p>
+                    </div>
+                    {can && (
+                        <div className="flex flex-wrap gap-2">
+                            <Button size="sm" onClick={() => confirm(`Confirm ${e.full_name} as current staff? They get the next ${e.company ?? 'company'} code.`)
+                                && router.post(`/employees/${e.id}/review-decision`, { decision: 'active' }, { preserveScroll: true })}>Confirm as current staff</Button>
+                            <Button size="sm" variant="outline" onClick={() => confirm(`Mark ${e.full_name} as left?`)
+                                && router.post(`/employees/${e.id}/review-decision`, { decision: 'exited' }, { preserveScroll: true })}>Mark as left</Button>
+                        </div>
+                    )}
+                </div>
+            )}
+
             {e.needs_review && (
                 <div className="mx-4 mt-4 rounded-lg border border-[#ecd29c] bg-pending-soft px-4 py-3 text-sm md:mx-6">
                     <p className="font-semibold text-pending">Check this record</p>
-                    <p className="mt-0.5">{e.review_note}</p>
+                    <p className="mt-0.5 whitespace-pre-line">{e.review_note}</p>
                     {can && <p className="mt-1 text-muted-foreground">Fix anything wrong with Edit, then tick "Record checked".</p>}
                 </div>
             )}
@@ -467,8 +492,15 @@ export default function EmployeeShow(props: Props) {
                             <h2 className="font-bold">Work</h2>
                             <Detail label="Company">{e.company}</Detail>
                             <Detail label="Department and team">{[e.department, e.team].filter(Boolean).join(', ')}</Detail>
+                            {e.secondary_department && <Detail label="Second department">{e.secondary_department}</Detail>}
                             <Detail label="Role">{e.role_title}</Detail>
                             <Detail label="Manager">{e.manager && <Link className="text-cascade hover:underline" href={`/employees/${e.manager.id}`}>{e.manager.name}</Link>}</Detail>
+                            {e.secondary_manager && (
+                                <Detail label="Second manager"><Link className="text-cascade hover:underline" href={`/employees/${e.secondary_manager.id}`}>{e.secondary_manager.name}</Link></Detail>
+                            )}
+                            <Detail label="Categories">{e.categories.length > 0 && (
+                                <span className="flex flex-wrap gap-1">{e.categories.map((c) => <span key={c} className="rounded-full border bg-muted px-2 py-0.5 text-xs">{c}</span>)}</span>
+                            )}</Detail>
                             <Detail label="Employment type">{e.employment_type}</Detail>
                             <Detail label="Work mode">{[e.work_mode, e.work_location].filter(Boolean).join(', ')}</Detail>
                             <Detail label="Start date">{formatDate(e.start_date)}</Detail>
@@ -478,10 +510,20 @@ export default function EmployeeShow(props: Props) {
                         <dl className="grid content-start gap-4">
                             <h2 className="font-bold">Systems</h2>
                             <Detail label="HR.my ID">{e.hr_portal_id}</Detail>
-                            <Detail label="Attendance machine">{[e.attendance_machine, e.attendance_machine_id && `ID ${e.attendance_machine_id}`].filter(Boolean).join(', ')}</Detail>
+                            <Detail label="Attendance machine">{[e.attendance_device && `${e.attendance_device.code} ${e.attendance_device.name}`, e.attendance_machine_id && `No. ${e.attendance_machine_id}`, e.attendance_machine].filter(Boolean).join(', ')}</Detail>
                             <Detail label="Drive folder">{e.drive_folder_url && <a className="inline-flex items-center gap-1 text-cascade hover:underline" href={e.drive_folder_url} target="_blank" rel="noreferrer">Open folder <ExternalLink className="size-3.5" /></a>}</Detail>
                             <Detail label="Notes">{e.notes && <span className="whitespace-pre-line">{e.notes}</span>}</Detail>
                             <Detail label="Imported from">{e.source_ref}</Detail>
+                            {e.legacy && (
+                                <details className="text-sm">
+                                    <summary className="cursor-pointer font-semibold text-muted-foreground">Earlier records ({Object.keys(e.legacy).length})</summary>
+                                    <dl className="mt-2 grid gap-1.5">
+                                        {Object.entries(e.legacy).map(([k, v]) => (
+                                            <div key={k} className="grid grid-cols-[9rem_1fr] gap-2"><dt className="text-muted-foreground">{legacyLabel(k)}</dt><dd>{v}</dd></div>
+                                        ))}
+                                    </dl>
+                                </details>
+                            )}
                         </dl>
                     </div>
                     {e.private_hidden ? (

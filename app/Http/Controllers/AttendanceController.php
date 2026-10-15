@@ -221,7 +221,11 @@ class AttendanceController extends Controller
                 if ($e->{$field} && $e->{$field} !== $link['device_user_id']) {
                     throw ValidationException::withMessages(["links.$i.employee_id" => "{$e->full_name} already has $what {$e->{$field}}."]);
                 }
-                $e->update([$field => $link['device_user_id']]);
+                $update = [$field => $link['device_user_id']];
+                if ($field === 'attendance_machine_id' && ! $e->attendance_device_id) {
+                    $update['attendance_device_id'] = AttendancePunch::deviceFor($link['device_user_id']);   // ATD-### it punches on
+                }
+                $e->update($update);
                 $n++;
             }
 

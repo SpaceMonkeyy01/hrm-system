@@ -39,7 +39,7 @@ class PeopleStats
             return $e->exit_date->toDateString() >= $date;
         }
 
-        return $e->status !== 'exited';
+        return ! in_array($e->status, ['exited', 'review'], true);   // review = not confirmed as staff yet
     }
 
     /** @return Collection<int, Employee> */

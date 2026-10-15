@@ -11,6 +11,7 @@ import { plural } from '@/lib/format';
 type Team = { id: number; name: string; employees: number };
 type Department = { id: number; name: string; employees: number; teams: Team[] };
 type Company = { id: number; name: string; code: string; prefix: string; employees: number; departments: Department[] };
+type Category = { id: number; name: string; employees: number };
 
 const opts = { preserveScroll: true, preserveState: true, onError: (e: Record<string, string>) => toast.error(Object.values(e)[0] ?? 'Not saved.') };
 
@@ -44,11 +45,11 @@ function AddInline({ placeholder, onAdd }: { placeholder: string; onAdd: (name: 
     );
 }
 
-export default function Structure({ companies }: { companies: Company[] }) {
+export default function Structure({ companies, categories }: { companies: Company[]; categories: Category[] }) {
     return (
         <>
             <Head title="Departments and teams" />
-            <PageHeader title="Departments and teams" description="Companies, their departments, and the teams inside each department. Delete works only when nobody is assigned." />
+            <PageHeader title="Departments and teams" description="Companies, their departments, the teams inside each department, and categories. Delete works only when nobody is assigned." />
             <div className="grid gap-10 px-4 py-6 md:px-6">
                 {companies.map((c) => (
                     <section key={c.id}>
@@ -88,6 +89,30 @@ export default function Structure({ companies }: { companies: Company[] }) {
                         </ul>
                     </section>
                 ))}
+                <section>
+                    <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+                        <div>
+                            <h2 className="text-lg font-bold">Categories</h2>
+                            <p className="text-sm text-muted-foreground">Tags on employees, across both companies (for example Google Ads Neon). A person can have several.</p>
+                        </div>
+                        <AddInline placeholder="New category name" onAdd={(name, done) => router.post('/settings/categories', { name }, { ...opts, onSuccess: done })} />
+                    </div>
+                    <ul className="divide-y rounded-lg border">
+                        {categories.length === 0 && <li className="px-3 py-3 text-sm text-muted-foreground">No categories yet.</li>}
+                        {categories.map((c) => (
+                            <li key={c.id} className="flex items-center justify-between gap-2 px-3 py-2">
+                                <div>
+                                    <Rename value={c.name} url={`/settings/categories/${c.id}`} label={c.name} />
+                                    <p className="text-xs text-muted-foreground">{plural(c.employees, 'employee')}</p>
+                                </div>
+                                <Button variant="ghost" size="sm" disabled={c.employees > 0} title={c.employees ? 'Take it off its employees first' : 'Delete category'}
+                                    aria-label={`Delete category ${c.name}`} onClick={() => confirm(`Delete category ${c.name}?`) && router.delete(`/settings/categories/${c.id}`, opts)}>
+                                    <Trash2 />
+                                </Button>
+                            </li>
+                        ))}
+                    </ul>
+                </section>
             </div>
         </>
     );

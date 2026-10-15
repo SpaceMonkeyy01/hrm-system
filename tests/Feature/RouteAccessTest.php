@@ -153,6 +153,7 @@ class RouteAccessTest extends TestCase
             'review' => Review::create(['review_cycle_id' => $cycle, 'employee_id' => $e->id])->id,
             'network' => \App\Models\OfficeNetwork::create(['name' => 'Test line', 'address' => '198.51.100.1'])->id,
             'device' => \App\Models\AttendanceDevice::create(['name' => 'Test machine', 'host' => '203.0.113.10'])->id,
+            'category' => \App\Models\Category::create(['name' => 'Test category'])->id,
         ];
         $out = [];
         foreach (Route::getRoutes() as $route) {

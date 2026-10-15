@@ -32,6 +32,22 @@ class AttendanceDevice extends Model
             'info_read_at' => 'datetime'];
     }
 
+    /** Our own permanent code, from the row id: ATD-001. Never typed, never reused. */
+    public static function codeFor(int $id): string
+    {
+        return 'ATD-'.str_pad((string) $id, 3, '0', STR_PAD_LEFT);
+    }
+
+    protected static function booted(): void
+    {
+        static::created(function (AttendanceDevice $d) {
+            if (! $d->code) {
+                $d->code = self::codeFor($d->id);
+                $d->saveQuietly();
+            }
+        });
+    }
+
     public function syncs(): HasMany
     {
         return $this->hasMany(MachineSync::class);
@@ -39,6 +55,6 @@ class AttendanceDevice extends Model
 
     public function activityLabel(): string
     {
-        return "Attendance device {$this->name}";
+        return "Attendance device {$this->code} {$this->name}";
     }
 }

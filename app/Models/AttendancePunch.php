@@ -21,4 +21,11 @@ class AttendancePunch extends Model
     {
         return ['punched_at' => 'datetime', 'work_date' => 'date:Y-m-d', 'latitude' => 'float', 'longitude' => 'float', 'accuracy' => 'integer'];
     }
+
+    /** The device (attendance_devices.id) a machine number last punched on, or null if it never came from a synced machine. */
+    public static function deviceFor(string $machineNumber): ?int
+    {
+        return self::query()->where('source', 'machine')->where('device_user_id', $machineNumber)
+            ->whereNotNull('attendance_device_id')->latest('punched_at')->value('attendance_device_id');
+    }
 }

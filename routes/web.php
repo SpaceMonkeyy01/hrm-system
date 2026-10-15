@@ -112,6 +112,7 @@ Route::middleware('auth')->group(function () {
             Route::post('employees', [EmployeeController::class, 'store'])->name('employees.store');
             Route::get('employees/{employee}/edit', [EmployeeController::class, 'edit'])->name('employees.edit');
             Route::put('employees/{employee}', [EmployeeController::class, 'update'])->name('employees.update');
+            Route::post('employees/{employee}/review-decision', [EmployeeController::class, 'decideReview'])->name('employees.review-decision');
             Route::post('employees/{employee}/history', [EmploymentHistoryController::class, 'store'])->name('history.store');
             Route::post('employees/{employee}/photo', [PhotoController::class, 'update'])->name('photo.update');
             // Letters (LetterController): draft, issue, print. HR and admin only: letters carry CNIC numbers.
@@ -258,6 +259,9 @@ Route::middleware('auth')->group(function () {
             Route::post('teams', [StructureController::class, 'storeTeam'])->name('teams.store');
             Route::put('teams/{team}', [StructureController::class, 'updateTeam'])->name('teams.update');
             Route::delete('teams/{team}', [StructureController::class, 'destroyTeam'])->name('teams.destroy');
+            Route::post('categories', [StructureController::class, 'storeCategory'])->name('categories.store');
+            Route::put('categories/{category}', [StructureController::class, 'updateCategory'])->name('categories.update');
+            Route::delete('categories/{category}', [StructureController::class, 'destroyCategory'])->name('categories.destroy');
 
             Route::get('checklists', [ChecklistItemController::class, 'index'])->name('checklists.index');
             Route::post('checklists', [ChecklistItemController::class, 'store'])->name('checklists.store');

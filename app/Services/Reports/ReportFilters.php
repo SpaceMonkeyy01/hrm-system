@@ -63,6 +63,7 @@ final class ReportFilters
     public function employedBetween(string $from, string $to): Builder
     {
         return $this->employees()
+            ->where('status', '!=', 'review')   // not confirmed as staff yet
             ->where(fn ($q) => $q->whereNull('start_date')->orWhere('start_date', '<=', $to))
             ->where(fn ($q) => $q->where('exit_date', '>=', $from)
                 ->orWhere(fn ($n) => $n->whereNull('exit_date')->where('status', '!=', 'exited')));

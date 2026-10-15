@@ -32,7 +32,7 @@ class PunchLogTest extends TestCase
         $file = AttendanceImport::create(['source' => 'hrmy', 'original_name' => 'clock-may.xls']);
         $punch = fn (array $a) => AttendancePunch::create($a + ['work_date' => substr($a['punched_at'], 0, 10)]);
         $punch(['source' => 'machine', 'device_user_id' => '7', 'device_name' => 'ALI', 'punched_at' => '2026-05-20 09:01:00', 'method' => 'FACE', 'attendance_import_id' => $sync->id]);
-        $punch(['source' => 'machine', 'device_user_id' => '99', 'device_name' => 'NEW GUY', 'punched_at' => '2026-05-20 09:30:00', 'method' => 'FP', 'attendance_import_id' => $sync->id]);
+        $punch(['source' => 'machine', 'device_user_id' => 'ZK99', 'device_name' => 'NEW GUY', 'punched_at' => '2026-05-20 09:30:00', 'method' => 'FP', 'attendance_import_id' => $sync->id]);
         $punch(['source' => 'hrmy', 'device_user_id' => 'H-9', 'device_name' => 'Sara F', 'punched_at' => '2026-05-20 10:00:00', 'method' => 'In', 'attendance_import_id' => $file->id]);
         $punch(['source' => 'app', 'device_user_id' => (string) $this->ali->id, 'punched_at' => '2026-05-20 17:00:00', 'method' => 'Out',
             'place' => 'remote', 'ip' => '198.51.100.5', 'latitude' => 31.5, 'longitude' => 74.3, 'accuracy' => 12]);
@@ -69,7 +69,7 @@ class PunchLogTest extends TestCase
         $count(['q' => 'Ali'], 2);              // machine + app, through the links
         $count(['q' => 'T-002'], 2);            // by code
         $count(['q' => 'new guy'], 1);          // name on the device, not linked
-        $count(['q' => '99'], 1);               // device ID
+        $count(['q' => 'ZK99'], 1);             // device ID (letters, so no system ID like HRM-00099 matches too)
         $count(['place' => 'office'], 2);
         $count(['place' => 'remote'], 3);
         $count(['linked' => 'no'], 1);

@@ -26,7 +26,7 @@ class AttendanceDeviceController extends Controller
 
         return Inertia::render('attendance/devices', [
             'devices' => $devices->map(fn (AttendanceDevice $d) => [
-                ...$d->only(['id', 'name', 'site', 'host', 'port', 'is_active', 'auto_sync', 'timeout_seconds', 'lookback_days', 'clock_warn_seconds',
+                ...$d->only(['id', 'code', 'name', 'site', 'host', 'port', 'is_active', 'auto_sync', 'timeout_seconds', 'lookback_days', 'clock_warn_seconds',
                     'notes', 'model_name', 'serial', 'firmware', 'user_count', 'record_count']),
                 'has_comm_key' => (string) $d->comm_key !== '',
                 'info_read_at' => $d->info_read_at?->toIso8601String(),

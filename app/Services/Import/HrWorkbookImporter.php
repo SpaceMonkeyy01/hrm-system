@@ -7,6 +7,7 @@ use App\Models\ChecklistEntry;
 use App\Models\ChecklistItem;
 use App\Models\Company;
 use App\Models\ControlledDocument;
+use App\Models\AttendancePunch;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\Offboarding;
@@ -17,6 +18,7 @@ use App\Support\Xlsx\XlsxReader;
 use Database\Seeders\ChecklistItemSeeder;
 use DateTimeImmutable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
 /**
@@ -30,6 +32,11 @@ use RuntimeException;
  *  5. Controlled documents + Templates list, HR_Database (if filled), Offboarding_Tracker (if filled)
  *
  * Every decision (match type, new employee, conflict, invalid value) becomes a row in the report CSV.
+ *
+ * With a master file (Employee_Master.xlsx, see EmployeeMasterImporter) step 1 comes from the master instead of the
+ * department sheets, attendance links are carried over from the records being replaced (LinkCarryOver), and a name
+ * in the onboarding sheets that is not on the master is reported and skipped: the master says who works here.
+ * The onboarding workbook is optional then.
  */
 class HrWorkbookImporter
 {
@@ -111,21 +118,48 @@ class HrWorkbookImporter
     /** @var array<string, int> */
     private array $stats = [];
 
-    public function __construct(private string $path, private array $aliases = []) {}
+    private ?EmployeeMasterImporter $master = null;
+
+    /** Files of the records a fresh import deletes, removed from the disk once the import is saved. */
+    private array $orphanFiles = [];
+
+    /**
+     * @param  list<array{employee_code: string, source: string, device_user_id: string, line: int}>  $links  links.csv: fixed
+     *                                                                                                      attendance links, applied last
+     */
+    public function __construct(private ?string $path, private array $aliases = [], private ?string $masterPath = null, private array $links = []) {}
 
     /** @return array{stats: array<string, int>, report: array<int, array<string, string>>} */
     public function run(bool $fresh): array
     {
-        $this->xlsx = new XlsxReader($this->path);
-        foreach ([self::TRACKER, self::DOCS, ...array_values(self::COMPANY_SHEETS)] as $sheet) {
-            if (! $this->xlsx->hasSheet($sheet)) {
-                throw new RuntimeException("The workbook has no sheet named \"$sheet\". Found: ".implode(', ', $this->xlsx->sheetNames()));
+        if ($this->path === null && $this->masterPath === null) {
+            throw new RuntimeException('Give the onboarding workbook, the master file, or both.');
+        }
+        if ($this->masterPath !== null) {
+            $this->master = new EmployeeMasterImporter($this->masterPath);
+            if ($errors = $this->master->validate()) {
+                throw new MasterValidationException($errors);
             }
+        }
+        if ($this->path !== null) {
+            $this->xlsx = new XlsxReader($this->path);
+            $needed = $this->master ? [self::TRACKER, self::DOCS] : [self::TRACKER, self::DOCS, ...array_values(self::COMPANY_SHEETS)];
+            foreach ($needed as $sheet) {
+                if (! $this->xlsx->hasSheet($sheet)) {
+                    throw new RuntimeException("The workbook has no sheet named \"$sheet\". Found: ".implode(', ', $this->xlsx->sheetNames()));
+                }
+            }
+        }
+
+        $carry = null;
+        if ($fresh && $this->master && Employee::query()->exists()) {
+            $carry = new LinkCarryOver;
+            $carry->capture();
         }
 
         ActivityLog::$muted = true;
         try {
-            DB::transaction(function () use ($fresh) {
+            DB::transaction(function () use ($fresh, $carry) {
                 if ($fresh) {
                     $this->wipe();
                 }
@@ -136,24 +170,44 @@ class HrWorkbookImporter
                 $this->matcher = new NameMatcher;
                 $this->matcher->setAliases($this->aliases);
 
-                $this->importCompanies();
-                $this->importTracker();
-                $this->importDocumentChecklist();
-                $this->mergeTrackerDocFacts();
-                $this->importHrDatabase();
-                $this->importControlledDocuments();
-                $this->importOffboarding();
+                if ($this->master) {
+                    $seeded = $this->master->seed($this->matcher);
+                    $this->stats += $seeded['stats'];
+                    foreach ($seeded['warnings'] as $w) {
+                        $this->log($w['sheet'], $w['row'], $w['name'], 'warning', '', null, $w['detail']);
+                    }
+                    if ($carry) {
+                        $this->stats += $carry->apply($this->matcher, fn (...$a) => $this->log(...$a));
+                    }
+                } else {
+                    $this->importCompanies();
+                }
+                if ($this->path !== null) {
+                    $this->importTracker();
+                    $this->importDocumentChecklist();
+                    $this->mergeTrackerDocFacts();
+                    $this->importHrDatabase();
+                    $this->importControlledDocuments();
+                    $this->importOffboarding();
+                }
                 $this->writeEntries();
+                $this->applyLinks();
             });
         } finally {
             ActivityLog::$muted = false;
         }
 
+        $disk = Storage::disk(config('hrm.uploads.disk'));
+        foreach ($this->orphanFiles as $file) {
+            $disk->delete($file);
+        }
+
+        $files = implode(' + ', array_map('basename', array_filter([$this->masterPath, $this->path])));
         ActivityLog::create([
             'event' => 'imported',
             'subject_type' => 'Import',
             'description' => sprintf('Imported %s: %d employees, %d onboarding rows, %d checklist values',
-                basename($this->path), Employee::count(), Onboarding::count(), ChecklistEntry::count()),
+                $files, Employee::count(), Onboarding::count(), ChecklistEntry::count()),
             'changes' => $this->stats,
         ]);
 
@@ -531,6 +585,37 @@ class HrWorkbookImporter
         }
     }
 
+    /**
+     * links.csv: "this machine number / HR.my ID belongs to this employee code". Applied after everything else, so it wins;
+     * the same number on anyone else is taken off them (reported). A machine number gets the device of its latest punch.
+     */
+    private function applyLinks(): void
+    {
+        $fields = ['machine' => 'attendance_machine_id', 'hrmy' => 'hr_portal_id'];
+        foreach ($this->links as $l) {
+            $field = $fields[$l['source']] ?? null;
+            $employee = Employee::where('employee_code', $l['employee_code'])->first();
+            if (! $field || ! $employee || $l['device_user_id'] === '') {
+                $why = ! $field ? "source \"{$l['source']}\" must be machine or hrmy" : (! $employee ? "no employee has code {$l['employee_code']}" : 'the number is empty');
+                $this->log('links.csv', $l['line'], $l['employee_code'], 'bad_link', '', null, "Not applied: $why.");
+                $this->bump('bad_links');
+
+                continue;
+            }
+            foreach (Employee::where($field, $l['device_user_id'])->where('id', '!=', $employee->id)->get() as $other) {
+                $other->update([$field => null] + ($field === 'attendance_machine_id' ? ['attendance_device_id' => null] : []));
+                $this->log('links.csv', $l['line'], $other->full_name, 'link_moved', '', $other, "{$l['source']} {$l['device_user_id']} taken off {$other->employee_code} and given to {$employee->employee_code}");
+            }
+            $update = [$field => $l['device_user_id']];
+            if ($field === 'attendance_machine_id') {
+                $update['attendance_device_id'] = AttendancePunch::deviceFor($l['device_user_id']) ?? $employee->attendance_device_id;
+            }
+            $employee->update($update);
+            $this->log('links.csv', $l['line'], $employee->full_name, 'link_set', '', $employee, "{$l['source']} {$l['device_user_id']}");
+            $this->bump('links_from_links_csv');
+        }
+    }
+
     // ------------------------------------------------------------------ helpers
 
     /** Find the employee for a name typed in a sheet; create one if the name is unknown. */
@@ -556,6 +641,9 @@ class HrWorkbookImporter
         }
         if ($m['type'] === 'ambiguous') {
             $codes = Employee::whereIn('id', $m['ids'])->pluck('employee_code')->implode(', ');
+            if ($this->master) {
+                LinkCarryOver::flag($m['ids'], "\"$name\" in $sheet could be this person or another with the same name ($codes); that row was not imported. Add the right code to aliases.csv.");
+            }
             $this->log($sheet, $row, $name, 'ambiguous', 'ambiguous', null,
                 "Could be: $codes. Row NOT imported. Add this source_name with the right code to aliases.csv and import again.");
             $this->bump('ambiguous_rows_skipped');
@@ -572,6 +660,15 @@ class HrWorkbookImporter
             $this->bump("match_{$m['type']}");
 
             return $employee;
+        }
+
+        // The master lists everyone who works here: a name it does not have is someone who left, or a typo.
+        if ($this->master) {
+            $this->log($sheet, $row, $name, 'not_in_master', 'none', null,
+                'No one on the master has this name. Row NOT imported. If it is a spelling of someone on the master, add it to aliases.csv and import again.');
+            $this->bump('rows_not_in_master_skipped');
+
+            return null;
         }
 
         // Unknown name: create an employee so no data is lost, flagged for HR review.
@@ -747,14 +844,30 @@ class HrWorkbookImporter
         $this->stats[$key] = ($this->stats[$key] ?? 0) + 1;
     }
 
+    /**
+     * Every record that belongs to an employee goes with them. Logins are kept (unlinked from their employee),
+     * and so are punches: they are stored against machine numbers and HR.my IDs, not employees.
+     * Controlled documents come from the onboarding workbook, so they are only replaced when it is imported.
+     */
     private function wipe(): void
     {
-        foreach (['activity_log', 'checklist_entries', 'probation_checkins', 'probation_plan_items', 'probation_plans',
-            'onboardings', 'offboardings', 'controlled_documents'] as $table) {
+        $this->orphanFiles = [
+            ...DB::table('employee_files')->pluck('path')->all(),
+            ...DB::table('employees')->whereNotNull('photo_path')->pluck('photo_path')->all(),
+        ];
+        $tables = ['activity_log', 'checklist_entries', 'probation_checkins', 'probation_plan_items', 'probation_plans',
+            'onboardings', 'offboardings', 'employment_history', 'employee_files', 'employee_work_schedules',
+            'attendance_adjustments', 'attendance_requests', 'leave_records', 'asset_assignments', 'reviews',
+            'issued_letters', 'employee_category'];
+        if ($this->path !== null) {
+            $tables[] = 'controlled_documents';
+        }
+        foreach ($tables as $table) {
             DB::table($table)->delete();
         }
-        DB::table('employees')->update(['manager_id' => null]);
-        foreach (['employees', 'teams', 'departments', 'companies'] as $table) {
+        DB::table('users')->whereNotNull('employee_id')->update(['employee_id' => null]);
+        DB::table('employees')->update(['manager_id' => null, 'secondary_manager_id' => null]);
+        foreach (['employees', 'teams', 'departments', 'companies', 'categories'] as $table) {
             DB::table($table)->delete();
         }
     }

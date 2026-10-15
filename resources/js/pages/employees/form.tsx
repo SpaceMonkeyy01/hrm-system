@@ -14,11 +14,13 @@ type EmployeeData = {
     role_title: string | null; manager_id: number | null; employment_type: string | null; start_date: string | null;
     hr_portal_id: string | null; attendance_machine: string | null; attendance_machine_id: string | null; drive_folder_url: string | null;
     notes: string | null; needs_review: boolean; review_note: string | null;
+    secondary_department_id: number | null; secondary_manager_id: number | null; attendance_device_id: number | null; category_ids: number[];
 } & Record<(typeof profileFields)[number], string | null>;
 type Options = { genders: string[]; maritalStatuses: string[]; bloodGroups: string[]; workModes: string[]; historyTypes: string[] };
 type Props = {
     employee: (EmployeeData & { work_schedule_id: number | null }) | null; companies: Company[]; managers: { id: number; label: string }[];
     employmentTypes: string[]; options: Options; schedules: { id: number; label: string; is_default: boolean }[];
+    categories: { id: number; name: string }[]; devices: { id: number; label: string }[];
 };
 
 /** Master profile fields, all nullable strings (dates as Y-m-d). */
@@ -31,7 +33,7 @@ const profileFields = [
 /** Changing one of these on Edit adds a line to the employment history (EmployeeController@update). */
 const jobFields = ['company_id', 'department_id', 'team_id', 'role_title', 'manager_id', 'employment_type', 'work_mode'] as const;
 
-export default function EmployeeForm({ employee, companies, managers, employmentTypes, options, schedules }: Props) {
+export default function EmployeeForm({ employee, companies, managers, employmentTypes, options, schedules, categories, devices }: Props) {
     const editing = employee !== null;
     const form = useForm({
         company_id: employee?.company_id ?? '',
@@ -46,6 +48,10 @@ export default function EmployeeForm({ employee, companies, managers, employment
         team_id: employee?.team_id ?? '',
         role_title: employee?.role_title ?? '',
         manager_id: employee?.manager_id ?? '',
+        secondary_department_id: employee?.secondary_department_id ?? '',
+        secondary_manager_id: employee?.secondary_manager_id ?? '',
+        category_ids: employee?.category_ids ?? ([] as number[]),
+        attendance_device_id: employee?.attendance_device_id ?? '',
         // Default only for a new hire: on edit a blank type must stay blank, not become Full Time.
         employment_type: employee === null ? 'Full Time' : (employee.employment_type ?? ''),
         start_date: employee?.start_date ?? '',
@@ -67,12 +73,13 @@ export default function EmployeeForm({ employee, companies, managers, employment
     const company = companies.find((c) => c.id === Number(d.company_id));
     const department = company?.departments.find((x) => x.id === Number(d.department_id));
     const unassignedCode = editing && employee.employee_code.startsWith('UNASSIGNED-');
+    const toggleCategory = (id: number) => form.setData('category_ids', d.category_ids.includes(id) ? d.category_ids.filter((x) => x !== id) : [...d.category_ids, id]);
     const jobChanged = editing && jobFields.some((f) => String(d[f] ?? '') !== String(employee[f] ?? ''));
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
         // empty strings -> null so Laravel's "nullable" rules accept them
-        form.transform((data) => Object.fromEntries(Object.entries(data).map(([k, v]) => [k, v === '' ? null : v])));
+        form.transform((data) => Object.fromEntries(Object.entries(data).map(([k, v]) => [k, v === '' ? null : v])) as typeof data);
         if (editing) form.put(`/employees/${employee.id}`);
         else form.post('/employees');
     };
@@ -106,7 +113,7 @@ export default function EmployeeForm({ employee, companies, managers, employment
                     <legend className="mb-3 font-bold">Company and code</legend>
                     <Field label="Company" htmlFor="company_id" error={form.errors.company_id}>
                         <NativeSelect id="company_id" value={d.company_id} placeholder={editing ? 'No company yet' : 'Choose a company'} required={!editing}
-                            onChange={(e) => form.setData((prev) => ({ ...prev, company_id: e.target.value, department_id: '', team_id: '' }))}
+                            onChange={(e) => form.setData((prev) => ({ ...prev, company_id: e.target.value, department_id: '', team_id: '', secondary_department_id: '' }))}
                             options={companies.map((c) => ({ value: c.id, label: c.name }))} />
                     </Field>
                     {text('employee_code', 'Employee code', { placeholder: company ? company.nextCode : '' },
@@ -165,9 +172,18 @@ export default function EmployeeForm({ employee, companies, managers, employment
                             onChange={(e) => form.setData('team_id', e.target.value)}
                             options={(department?.teams ?? []).map((x) => ({ value: x.id, label: x.name }))} />
                     </Field>
+                    <Field label="Second department" htmlFor="secondary_department_id" error={form.errors.secondary_department_id} hint="Only for people who work in two departments.">
+                        <NativeSelect id="secondary_department_id" value={d.secondary_department_id} disabled={!company} placeholder={company ? 'None' : 'Choose a company first'}
+                            onChange={(e) => form.setData('secondary_department_id', e.target.value)}
+                            options={(company?.departments ?? []).filter((x) => x.id !== Number(d.department_id)).map((x) => ({ value: x.id, label: x.name }))} />
+                    </Field>
                     {text('role_title', 'Role')}
                     <Field label="Manager" htmlFor="manager_id" error={form.errors.manager_id}>
                         <NativeSelect id="manager_id" value={d.manager_id} placeholder="No manager" onChange={(e) => form.setData('manager_id', e.target.value)} options={managers.map((m) => ({ value: m.id, label: m.label }))} />
+                    </Field>
+                    <Field label="Second manager" htmlFor="secondary_manager_id" error={form.errors.secondary_manager_id}>
+                        <NativeSelect id="secondary_manager_id" value={d.secondary_manager_id} placeholder="None" onChange={(e) => form.setData('secondary_manager_id', e.target.value)}
+                            options={managers.filter((m) => m.id !== Number(d.manager_id)).map((m) => ({ value: m.id, label: m.label }))} />
                     </Field>
                     <Field label="Employment type" htmlFor="employment_type" error={form.errors.employment_type}>
                         <NativeSelect id="employment_type" value={d.employment_type} placeholder="Not set" onChange={(e) => form.setData('employment_type', e.target.value)} options={toOptions(employmentTypes)} />
@@ -187,6 +203,21 @@ export default function EmployeeForm({ employee, companies, managers, employment
                         text('schedule_starts_on', 'Schedule starts on', { type: 'date' }, editing ? 'Leave empty for today. Earlier days keep the old schedule.' : 'Leave empty to use the start date.')}
                 </fieldset>
 
+                {categories.length > 0 && (
+                    <fieldset>
+                        <legend className="mb-3 font-bold">Categories</legend>
+                        <div className="flex flex-wrap gap-2">
+                            {categories.map((c) => (
+                                <label key={c.id} className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-sm has-[:checked]:border-cascade has-[:checked]:bg-cascade/10">
+                                    <input type="checkbox" className="size-3.5 accent-cascade" checked={d.category_ids.includes(c.id)} onChange={() => toggleCategory(c.id)} />
+                                    {c.name}
+                                </label>
+                            ))}
+                        </div>
+                        {form.errors.category_ids && <p className="mt-2 text-sm text-destructive">{form.errors.category_ids}</p>}
+                    </fieldset>
+                )}
+
                 {jobChanged && (
                     <fieldset className="grid gap-4 rounded-lg border bg-muted/40 p-4 sm:grid-cols-2">
                         <legend className="px-1 font-bold">Job change</legend>
@@ -203,8 +234,12 @@ export default function EmployeeForm({ employee, companies, managers, employment
                     <legend className="mb-3 font-bold">Systems</legend>
                     {text('hr_portal_id', 'HR.my ID')}
                     {text('drive_folder_url', 'Drive folder link', { type: 'url', placeholder: 'https://drive.google.com/...' })}
-                    {text('attendance_machine', 'Attendance machine')}
-                    {text('attendance_machine_id', 'Attendance machine ID')}
+                    <Field label="Enrolled on device" htmlFor="attendance_device_id" error={form.errors.attendance_device_id} hint="Which machine they use. For information: punches link by number from any machine.">
+                        <NativeSelect id="attendance_device_id" value={d.attendance_device_id} placeholder="Not set" onChange={(e) => form.setData('attendance_device_id', e.target.value)}
+                            options={devices.map((x) => ({ value: x.id, label: x.label }))} />
+                    </Field>
+                    {text('attendance_machine_id', 'Number on the machine', {}, 'Their user number (No.) on the attendance machine.')}
+                    {text('attendance_machine', 'Attendance machine note')}
                     <Field label="Notes" htmlFor="notes" error={form.errors.notes} className="sm:col-span-2">
                         <Textarea id="notes" value={d.notes} onChange={(e) => form.setData('notes', e.target.value)} rows={3} />
                     </Field>

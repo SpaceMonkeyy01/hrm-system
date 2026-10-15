@@ -17,7 +17,7 @@ import { formatDateTime, timeAgo } from '@/lib/format';
 
 /** app/Http/Controllers/AttendanceDeviceController.php index() */
 type Device = {
-    id: number; name: string; site: string | null; host: string; port: number; is_active: boolean; auto_sync: boolean;
+    id: number; code: string; name: string; site: string | null; host: string; port: number; is_active: boolean; auto_sync: boolean;
     timeout_seconds: number; lookback_days: number; clock_warn_seconds: number; notes: string | null;
     model_name: string | null; serial: string | null; firmware: string | null; user_count: number | null; record_count: number | null;
     has_comm_key: boolean; info_read_at: string | null; punches: number; last_punch_at: string | null; status: DeviceStatus;
@@ -129,7 +129,7 @@ function DeviceCard({ device: d, onEdit }: { device: Device; onEdit: () => void 
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="grid gap-1">
                     <h2 className="flex flex-wrap items-center gap-2 text-base font-bold">
-                        <Fingerprint className="size-4 text-muted-foreground" /> {d.name}
+                        <Fingerprint className="size-4 text-muted-foreground" /> <span className="font-mono text-sm text-muted-foreground">{d.code}</span> {d.name}
                         {!d.is_active ? <StatusPill value="Switched off" tone="neutral" />
                             : failing ? <StatusPill value="Last sync failed" tone="missing" />
                                 : s.last?.ok ? <StatusPill value="Working" tone="done" /> : <StatusPill value="Not synced yet" tone="pending" />}

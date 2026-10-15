@@ -6,6 +6,7 @@ use App\Models\Concerns\LogsActivity;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -23,6 +24,7 @@ class Employee extends Model
         'department_id', 'team_id', 'role_title', 'manager_id', 'employment_type', 'start_date',
         'status', 'exit_date', 'hr_portal_id', 'attendance_machine', 'attendance_machine_id',
         'drive_folder_url', 'notes', 'needs_review', 'review_note', 'source_ref', 'photo_path',
+        'secondary_department_id', 'secondary_manager_id', 'attendance_device_id', 'legacy',
     ];
 
     /**
@@ -98,6 +100,7 @@ class Employee extends Model
             'cnic_expiry' => 'date:Y-m-d',
             'confirmation_date' => 'date:Y-m-d',
             'needs_review' => 'boolean',
+            'legacy' => 'array',
         ];
     }
 
@@ -119,6 +122,26 @@ class Employee extends Model
     public function manager(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'manager_id');
+    }
+
+    public function secondaryManager(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'secondary_manager_id');
+    }
+
+    public function secondaryDepartment(): BelongsTo
+    {
+        return $this->belongsTo(Department::class, 'secondary_department_id');
+    }
+
+    public function attendanceDevice(): BelongsTo
+    {
+        return $this->belongsTo(AttendanceDevice::class);
+    }
+
+    public function categories(): BelongsToMany
+    {
+        return $this->belongsToMany(Category::class, 'employee_category')->orderBy('name');
     }
 
     public function onboarding(): HasOne

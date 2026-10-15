@@ -36,7 +36,7 @@ class PunchLogController extends Controller
     /** @var array<int, string> attendance_imports.id => file name ("Machine sync" for a sync) */
     private array $imports;
 
-    /** @var array<int, string> attendance_devices.id => name */
+    /** @var array<int, string> attendance_devices.id => "ATD-001 name" */
     private array $devices;
 
     public function index(Request $request): Response
@@ -183,7 +183,7 @@ class PunchLogController extends Controller
             'place' => $p->place ?? AttendanceRules::PLACES[$p->source] ?? null,
             'ip' => $p->ip,
             'location' => $p->latitude !== null ? ['lat' => $p->latitude, 'lng' => $p->longitude, 'accuracy' => $p->accuracy] : null,
-            'device' => $p->attendance_device_id ? (($this->devices ??= AttendanceDevice::query()->pluck('name', 'id')->all())[$p->attendance_device_id] ?? null) : null,
+            'device' => $p->attendance_device_id ? (($this->devices ??= AttendanceDevice::query()->get(['id', 'code', 'name'])->mapWithKeys(fn ($d) => [$d->id => trim("{$d->code} {$d->name}")])->all())[$p->attendance_device_id] ?? null) : null,
             // Where the punch came into the app: a machine sync, an uploaded file, or a press on My page.
             'via' => $p->source === AttendanceClock::SOURCE ? 'Clock-in on My page'
                 : (($this->imports ??= AttendanceImport::query()->pluck('original_name', 'id')->all())[$p->attendance_import_id] ?? 'Unknown'),

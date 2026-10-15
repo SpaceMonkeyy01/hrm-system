@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Models\Category;
 use App\Models\Company;
 use App\Models\Department;
 use App\Models\Team;
@@ -12,7 +13,7 @@ use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
-/** Companies -> departments -> teams. Delete is only allowed when nobody is assigned. */
+/** Companies -> departments -> teams, plus categories (tags on employees). Delete is only allowed when nobody is assigned. */
 class StructureController extends Controller
 {
     public function index(): Response
@@ -30,7 +31,35 @@ class StructureController extends Controller
                     'teams' => $d->teams->map(fn ($t) => ['id' => $t->id, 'name' => $t->name, 'employees' => $t->employees_count])->all(),
                 ])->all(),
             ]),
+            'categories' => Category::query()->withCount('employees')->orderBy('name')->get()
+                ->map(fn ($c) => ['id' => $c->id, 'name' => $c->name, 'employees' => $c->employees_count]),
         ]);
+    }
+
+    public function storeCategory(Request $request): RedirectResponse
+    {
+        $data = $request->validate(['name' => ['required', 'string', 'max:80', Rule::unique('categories')]]);
+        Category::create($data);
+
+        return back()->with('success', "Added category {$data['name']}.");
+    }
+
+    public function updateCategory(Request $request, Category $category): RedirectResponse
+    {
+        $data = $request->validate(['name' => ['required', 'string', 'max:80', Rule::unique('categories')->ignore($category->id)]]);
+        $category->update($data);
+
+        return back()->with('success', 'Renamed.');
+    }
+
+    public function destroyCategory(Category $category): RedirectResponse
+    {
+        if ($category->employees()->exists()) {
+            return back()->with('error', "{$category->name} is still on employees. Take it off them first.");
+        }
+        $category->delete();
+
+        return back()->with('success', "Deleted {$category->name}.");
     }
 
     public function storeDepartment(Request $request): RedirectResponse

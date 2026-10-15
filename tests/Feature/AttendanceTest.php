@@ -97,6 +97,16 @@ class AttendanceTest extends TestCase
         $this->actingAs($this->user('hr'))->post('/attendance/link', ['source' => 'machine', 'links' => [['device_user_id' => '1', 'employee_id' => $e->id]]])
             ->assertSessionHasNoErrors();
         $this->assertSame('1', $e->fresh()->attendance_machine_id);
+        $this->assertNull($e->fresh()->attendance_device_id, 'uploaded file, not a synced machine');
+
+        // A number that punched on a synced machine also gets that device (ATD-###).
+        $device = \App\Models\AttendanceDevice::create(['name' => 'Main office', 'host' => '203.0.113.10']);
+        \App\Models\AttendancePunch::create(['source' => 'machine', 'device_user_id' => '9', 'attendance_device_id' => $device->id,
+            'punched_at' => '2026-05-14 09:00:00', 'work_date' => '2026-05-14']);
+        $nine = $this->employee($this->company, ['full_name' => 'Fake Nine']);
+        $this->actingAs($this->user('hr'))->post('/attendance/link', ['source' => 'machine', 'links' => [['device_user_id' => '9', 'employee_id' => $nine->id]]])
+            ->assertSessionHasNoErrors();
+        $this->assertSame($device->id, $nine->fresh()->attendance_device_id);
 
         // The number can't go to a second person.
         $other = $this->employee($this->company, ['full_name' => 'Other Fake']);

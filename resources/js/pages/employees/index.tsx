@@ -20,8 +20,8 @@ type Row = {
 };
 type Filters = { q?: string; company?: number; department?: number; status: string; review?: boolean; unassigned?: boolean; sort?: string };
 
-const statusTone = { active: 'done', offboarding: 'pending', exited: 'neutral' } as const;
-const statusLabel: Record<string, string> = { active: 'Active', offboarding: 'Offboarding', exited: 'Exited' };
+const statusTone = { active: 'done', review: 'pending', offboarding: 'pending', exited: 'neutral' } as const;
+const statusLabel: Record<string, string> = { active: 'Active', review: 'Review', offboarding: 'Offboarding', exited: 'Exited' };
 
 export default function EmployeesIndex({ employees, filters, companies }: { employees: Paginated<Row>; filters: Filters; companies: CompanyOption[] }) {
     const { auth } = usePage<SharedProps>().props;
@@ -82,6 +82,7 @@ export default function EmployeesIndex({ employees, filters, companies }: { empl
                         onChange={(e) => apply({ status: e.target.value })}
                         options={[
                             { value: 'current', label: 'Current (active + leaving)' }, { value: 'active', label: 'Active' },
+                            { value: 'review', label: 'Review (not confirmed yet)' },
                             { value: 'offboarding', label: 'Offboarding' }, { value: 'exited', label: 'Exited' }, { value: 'all', label: 'Everyone' },
                         ]} />
                     <label className="flex items-center gap-2 px-1 text-sm">
