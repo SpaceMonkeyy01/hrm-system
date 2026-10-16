@@ -264,9 +264,11 @@ Route::middleware('auth')->group(function () {
             Route::post('departments', [StructureController::class, 'storeDepartment'])->name('departments.store');
             Route::put('departments/{department}', [StructureController::class, 'updateDepartment'])->name('departments.update');
             Route::put('departments/{department}/head', [StructureController::class, 'setHead'])->name('departments.head');
+            Route::post('departments/{department}/merge', [StructureController::class, 'mergeDepartment'])->name('departments.merge');
             Route::delete('departments/{department}', [StructureController::class, 'destroyDepartment'])->name('departments.destroy');
             Route::post('teams', [StructureController::class, 'storeTeam'])->name('teams.store');
             Route::put('teams/{team}', [StructureController::class, 'updateTeam'])->name('teams.update');
+            Route::put('teams/{team}/move', [StructureController::class, 'moveTeam'])->name('teams.move');
             Route::delete('teams/{team}', [StructureController::class, 'destroyTeam'])->name('teams.destroy');
             Route::post('categories', [StructureController::class, 'storeCategory'])->name('categories.store');
             Route::put('categories/{category}', [StructureController::class, 'updateCategory'])->name('categories.update');
