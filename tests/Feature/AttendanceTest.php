@@ -169,6 +169,12 @@ class AttendanceTest extends TestCase
         $this->actingAs($this->user('viewer'))->post('/attendance/schedules', $rules)->assertForbidden();
         $this->actingAs($hr)->post('/attendance/schedules', ['end_time' => '12:00'] + $rules)->assertSessionHasErrors('end_time');
         $this->actingAs($hr)->post('/attendance/schedules', ['half_day_minutes' => 400] + $rules)->assertSessionHasErrors('half_day_minutes');
+        $this->actingAs($hr)->post('/attendance/schedules', ['absent_after' => '12:05'] + $rules)->assertSessionHasErrors('absent_after');   // inside the grace
+        $this->actingAs($hr)->post('/attendance/schedules', ['absent_after' => '18:30'] + $rules)->assertSessionHasErrors('absent_after');
+        $this->actingAs($hr)->post('/attendance/schedules', ['absent_after' => '1pm'] + $rules)->assertSessionHasErrors('absent_after');
+        $this->actingAs($hr)->post('/attendance/schedules', ['absent_after' => '14:30'] + $rules)->assertSessionHasNoErrors();
+        $this->assertSame('14:30', WorkSchedule::where('name', 'Twelve to six')->sole()->absent_after);
+        WorkSchedule::where('name', 'Twelve to six')->delete();
         $this->actingAs($hr)->post('/attendance/schedules', $rules)->assertSessionHasNoErrors();
         $this->actingAs($hr)->post('/attendance/schedules', ['name' => 'Flexible', 'type' => 'flexible', 'is_default' => true] + $rules)->assertSessionHasNoErrors();
 
@@ -188,6 +194,61 @@ class AttendanceTest extends TestCase
 
         // A used schedule can't be deleted.
         $this->actingAs($hr)->delete("/attendance/schedules/{$twelve->id}")->assertSessionHasErrors('schedule');
+    }
+
+    public function test_schedule_can_be_given_to_chosen_people(): void
+    {
+        $hr = $this->user('hr');
+        $nine = $this->schedule(['name' => 'Nine to five', 'start_time' => '09:00', 'end_time' => '17:00']);
+        [$a, $b, $c] = [$this->employee($this->company), $this->employee($this->company), $this->employee($this->company)];
+        $gone = $this->employee($this->company, ['status' => 'exited']);
+
+        $this->actingAs($hr)->post("/attendance/schedules/{$nine->id}/assign", ['employee_ids' => [], 'starts_on' => '2026-05-01'])
+            ->assertSessionHasErrors('employee_ids');
+        $this->actingAs($this->user('viewer'))->post("/attendance/schedules/{$nine->id}/assign", ['employee_ids' => [$a->id], 'starts_on' => '2026-05-01'])
+            ->assertForbidden();
+        $this->actingAs($hr)->post("/attendance/schedules/{$nine->id}/assign", ['employee_ids' => [$a->id, $c->id, $gone->id], 'starts_on' => '2026-05-01'])
+            ->assertSessionHas('success', '2 people moved to Nine to five.');
+
+        $this->assertEqualsCanonicalizing([$a->id, $c->id], EmployeeWorkSchedule::pluck('employee_id')->all());
+        $this->assertFalse(EmployeeWorkSchedule::where('employee_id', $b->id)->exists());
+    }
+
+    public function test_daily_view_filters_by_company_and_linked(): void
+    {
+        $this->schedule(['is_default' => true]);
+        $emerge = Company::create(['name' => 'Emerge', 'code' => 'EMG', 'employee_code_prefix' => 'EMG-', 'employee_code_digits' => 3]);
+        $bccLinked = $this->employee($this->company, ['attendance_machine_id' => '1']);
+        $bccNot = $this->employee($this->company);
+        $emgLinked = $this->employee($emerge, ['hr_portal_id' => 'X1']);
+        $rows = fn (string $q) => fn (AssertableInertia $p) => $p->where('rows', fn ($r) => collect($r)->pluck('employee.id')->sort()->values()->all() === (array) json_decode($q));
+
+        $hr = $this->user('hr');
+        $this->actingAs($hr)->get('/attendance?date=2026-05-13&company='.$emerge->id)->assertInertia($rows(json_encode([$emgLinked->id])));
+        $this->actingAs($hr)->get('/attendance?date=2026-05-13&linked=yes')
+            ->assertInertia($rows(json_encode([$bccLinked->id, $emgLinked->id])))
+            ->assertInertia(fn (AssertableInertia $p) => $p->where('links', ['yes' => 2, 'no' => 1])->where('counts.No data', 2)->missing('counts.Not linked'));
+        $this->actingAs($hr)->get('/attendance?date=2026-05-13&linked=no&company='.$this->company->id)->assertInertia($rows(json_encode([$bccNot->id])));
+        $this->actingAs($hr)->get('/attendance?linked=maybe')->assertSessionHasErrors('linked');
+    }
+
+    public function test_home_narrows_to_one_company(): void
+    {
+        $this->schedule(['is_default' => true]);
+        $emerge = Company::create(['name' => 'Emerge', 'code' => 'EMG', 'employee_code_prefix' => 'EMG-', 'employee_code_digits' => 3]);
+        $this->employee($this->company, ['attendance_machine_id' => '1']);
+        $this->employee($this->company, ['attendance_machine_id' => '2']);
+        $this->employee($emerge, ['attendance_machine_id' => '3']);
+        $this->upload([['A', '1', '5/13/2026 10:00:00 AM'], ['A', '1', '5/13/2026 6:00:00 PM']]);
+
+        $hr = $this->user('hr');
+        $this->actingAs($hr)->get('/dashboard')->assertInertia(fn (AssertableInertia $p) => $p
+            ->where('company', null)->where('totals.current', 3)->where('attendance.statuses.Absent', 2)->has('companies', 2));
+        $this->actingAs($hr)->get('/dashboard?company='.$this->company->id)->assertInertia(fn (AssertableInertia $p) => $p
+            ->where('company', $this->company->id)->where('totals.current', 2)->where('attendance.statuses.Absent', 1)->where('attendance.statuses.Present', 1));
+        $this->actingAs($hr)->get('/dashboard?company='.$emerge->id)->assertInertia(fn (AssertableInertia $p) => $p
+            ->where('totals.current', 1)->where('attendance.statuses.Absent', 1)->missing('attendance.statuses.Present'));
+        $this->actingAs($hr)->get('/dashboard?company=999')->assertInertia(fn (AssertableInertia $p) => $p->where('company', null)->where('totals.current', 3));
     }
 
     public function test_schedule_changes_keep_past_days_on_the_old_rules(): void

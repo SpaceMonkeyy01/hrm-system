@@ -131,6 +131,38 @@ class AttendanceRulesTest extends TestCase
         $this->assertSame(240, $this->day(['11:00:00', '15:00:00'], $s, null, '2026-05-16')['overtime']);   // Saturday: all of it
     }
 
+    public function test_absent_after_the_cut_off_default_mid_day(): void
+    {
+        // 10-6: cut-off 14:00 by default
+        $this->assertSame(['Present', 240], [($d = $this->day(['14:00:00', '18:00:00'], $this->fixed()))['status'], $d['late']]);
+        $d = $this->day(['14:01:00', '18:00:00'], $this->fixed());
+        $this->assertSame(['Absent', '14:01', '18:00', 239, 0], [$d['status'], $d['in'], $d['out'], $d['worked'], $d['late']]);
+        $this->assertSame('Absent', $this->day(['14:30:00'], $this->fixed())['status']);   // no punch out either
+        // a set cut-off wins; HR's check-in time fixes the day
+        $this->assertSame('Absent', $this->day(['11:31:00', '18:00:00'], $this->fixed(['absent_after' => '11:30']))['status']);
+        $this->assertSame('Present', $this->day(['14:30:00', '18:00:00'], $this->fixed(), ['check_in' => '10:00', 'check_out' => null])['status']);
+        // today: Not in yet until the cut-off, Absent after it
+        $this->assertSame('Not in yet', $this->day([], $this->fixed(), null, '2026-05-13', CarbonImmutable::parse('2026-05-13 13:59'))['status']);
+        $this->assertSame('Absent', $this->day([], $this->fixed(), null, '2026-05-13', CarbonImmutable::parse('2026-05-13 14:00'))['status']);
+        // not on a day off or a leave day (half day off in the morning comes in after the cut-off)
+        $this->assertSame('Worked day off', $this->day(['15:00:00', '18:00:00'], $this->fixed(), null, '2026-05-16')['status']);
+        $d = AttendanceRules::day('2026-05-13', ['14:30:00', '18:00:00'], null, $this->fixed(), $this->now, ['leave' => ['type' => 'Casual', 'part' => 'first_half']]);
+        $this->assertSame('Present', $d['status']);
+    }
+
+    public function test_absent_cut_off_minutes(): void
+    {
+        $this->assertSame(['13:00', '14:00', '12:00'], [
+            $this->fixed(['start_time' => '09:00', 'end_time' => '17:00'])->absentAfterLabel(),
+            $this->fixed()->absentAfterLabel(),
+            $this->fixed(['start_time' => '08:00', 'end_time' => '16:00'])->absentAfterLabel(),
+        ]);
+        $night = $this->fixed(['start_time' => '21:00', 'end_time' => '06:00']);
+        $this->assertSame([1530, '01:30'], [$night->absentAfterMinutes(), $night->absentAfterLabel()]);
+        $this->assertSame(1560, $this->fixed(['start_time' => '21:00', 'end_time' => '06:00', 'absent_after' => '02:00'])->absentAfterMinutes());
+        $this->assertNull((new WorkSchedule(['type' => 'flexible']))->absentAfterMinutes());
+    }
+
     public function test_holiday_and_leave_context(): void
     {
         $this->assertSame('Holiday', AttendanceRules::day('2026-05-13', [], null, $this->fixed(), $this->now, ['holiday' => 'Fake'])['status']);

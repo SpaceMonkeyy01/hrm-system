@@ -1,6 +1,6 @@
 import { Head, router, usePage } from '@inertiajs/react';
-import { Pencil, Plus, Trash2, Users } from 'lucide-react';
-import { useState } from 'react';
+import { Pencil, Plus, Trash2, Users, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/empty-state';
@@ -17,7 +17,7 @@ import type { SharedProps } from '@/types';
 
 type Schedule = {
     id: number; name: string; type: 'fixed' | 'flexible'; start_time: string | null; end_time: string | null;
-    late_grace_minutes: number; early_grace_minutes: number; full_day_minutes: number; half_day_minutes: number; overtime_after_minutes: number | null;
+    late_grace_minutes: number; early_grace_minutes: number; absent_after: string | null; absent_after_label: string | null; full_day_minutes: number; half_day_minutes: number; overtime_after_minutes: number | null;
     working_days: number[]; missing_checkout: 'flag' | 'auto'; is_default: boolean; notes: string | null; summary: string; people: number;
 };
 type Company = { id: number; name: string; departments: { id: number; name: string }[] };
@@ -25,13 +25,24 @@ type Props = { schedules: Schedule[]; unassigned: number; companies: Company[]; 
 
 const DAYS = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [7, 'Sun']] as const;
 const blank = {
-    name: '', type: 'fixed' as 'fixed' | 'flexible', start_time: '09:00', end_time: '17:00', late_grace_minutes: 10, early_grace_minutes: 0,
+    name: '', type: 'fixed' as 'fixed' | 'flexible', start_time: '09:00', end_time: '17:00', late_grace_minutes: 10, early_grace_minutes: 0, absent_after: '',
     full_day_hours: 8, half_day_hours: 4, overtime_after: '' as number | '', working_days: [1, 2, 3, 4, 5], missing_checkout: 'flag' as 'flag' | 'auto', is_default: false, notes: '',
 };
 
+/** Halfway between start and end, "13:00" for 09:00-17:00 (a night shift ends the next day). Mirrors WorkSchedule::absentAfterMinutes. */
+function midday(start: string, end: string): string | null {
+    const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+    if (!/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) return null;
+    const a = toMin(start);
+    let b = toMin(end);
+    if (b <= a) b += 1440;
+    const mid = a + Math.floor((b - a) / 2);
+    return `${String(Math.floor(mid / 60) % 24).padStart(2, '0')}:${String(mid % 60).padStart(2, '0')}`;
+}
+
 function ScheduleDialog({ schedule, onClose }: { schedule: Schedule | null; onClose: () => void }) {
     const [d, setD] = useState(() => schedule ? {
-        ...schedule, start_time: schedule.start_time ?? '09:00', end_time: schedule.end_time ?? '17:00', notes: schedule.notes ?? '',
+        ...schedule, start_time: schedule.start_time ?? '09:00', end_time: schedule.end_time ?? '17:00', absent_after: schedule.absent_after ?? '', notes: schedule.notes ?? '',
         full_day_hours: schedule.full_day_minutes / 60, half_day_hours: schedule.half_day_minutes / 60,
         overtime_after: (schedule.overtime_after_minutes ?? '') as number | '',
     } : blank);
@@ -44,6 +55,7 @@ function ScheduleDialog({ schedule, onClose }: { schedule: Schedule | null; onCl
         const payload = {
             name: d.name, type: d.type, start_time: fixed ? d.start_time : null, end_time: fixed ? d.end_time : null,
             late_grace_minutes: Number(d.late_grace_minutes) || 0, early_grace_minutes: Number(d.early_grace_minutes) || 0,
+            absent_after: fixed && d.absent_after ? d.absent_after : null,
             full_day_minutes: Math.round(Number(d.full_day_hours) * 60), half_day_minutes: Math.round(Number(d.half_day_hours) * 60),
             overtime_after_minutes: d.overtime_after === '' ? null : Number(d.overtime_after),
             working_days: d.working_days, missing_checkout: d.missing_checkout, is_default: d.is_default, notes: d.notes || null,
@@ -82,6 +94,13 @@ function ScheduleDialog({ schedule, onClose }: { schedule: Schedule | null; onCl
                                 </Field>
                                 <Field label="Early leave allowed (minutes)" htmlFor="s-early" error={errors.early_grace_minutes}>
                                     <Input id="s-early" type="number" min={0} max={240} value={d.early_grace_minutes} onChange={(e) => set('early_grace_minutes', Number(e.target.value))} />
+                                </Field>
+                                <Field label="Absent if not in by" htmlFor="s-absent" error={errors.absent_after} className="sm:col-span-2"
+                                    hint={`Not checked in by this time = Absent for the day. Empty = the middle of the day${midday(d.start_time, d.end_time) ? ` (${midday(d.start_time, d.end_time)})` : ''}.`}>
+                                    <div className="flex gap-2">
+                                        <Input id="s-absent" type="time" className="w-40" value={d.absent_after} onChange={(e) => set('absent_after', e.target.value)} />
+                                        {d.absent_after && <Button type="button" variant="ghost" size="sm" onClick={() => set('absent_after', '')}>Use the middle of the day</Button>}
+                                    </div>
                                 </Field>
                             </>
                         )}
@@ -133,9 +152,66 @@ function ScheduleDialog({ schedule, onClose }: { schedule: Schedule | null; onCl
     );
 }
 
+type Person = { id: number; name: string; code: string; department: string | null; status: string };
+
+/** Search by name or code and pick people one by one (app/Http/Controllers/SearchController.php). */
+function PeoplePicker({ picked, onChange }: { picked: Person[]; onChange: (p: Person[]) => void }) {
+    const [q, setQ] = useState('');
+    const [hits, setHits] = useState<Person[]>([]);
+    const seq = useRef(0);
+
+    useEffect(() => {
+        const term = q.trim();
+        const mine = ++seq.current;
+        if (!term) {
+            setHits([]);
+            return;
+        }
+        const t = setTimeout(() => {
+            fetch(`/search/employees?q=${encodeURIComponent(term)}`, { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
+                .then((r) => (r.ok ? r.json() : []))
+                .then((data: Person[]) => mine === seq.current && setHits(data.filter((h) => h.status !== 'exited')));
+        }, 150);
+        return () => clearTimeout(t);
+    }, [q]);
+
+    const ids = new Set(picked.map((p) => p.id));
+    return (
+        <div className="grid gap-2">
+            <Input id="a-people" value={q} placeholder="Type a name or code" autoComplete="off" onChange={(e) => setQ(e.target.value)} />
+            {hits.length > 0 && (
+                <ul className="max-h-48 overflow-y-auto rounded-md border p-1" aria-label="Matches">
+                    {hits.map((h) => (
+                        <li key={h.id}>
+                            <button type="button" disabled={ids.has(h.id)} onClick={() => { onChange([...picked, h]); setQ(''); }}
+                                className="flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50">
+                                <span><span className="font-semibold">{h.name}</span> <span className="text-xs text-muted-foreground">{[h.code, h.department].filter(Boolean).join(', ')}</span></span>
+                                <span className="text-xs text-muted-foreground">{ids.has(h.id) ? 'Added' : 'Add'}</span>
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            )}
+            {picked.length > 0 && (
+                <ul className="flex flex-wrap gap-1.5" aria-label="Chosen people">
+                    {picked.map((p) => (
+                        <li key={p.id} className="flex items-center gap-1 rounded-full border bg-muted/50 py-0.5 pr-1 pl-2.5 text-xs">
+                            {p.name} {p.code && <span className="text-muted-foreground">{p.code}</span>}
+                            <button type="button" className="rounded-full p-0.5 hover:bg-accent" aria-label={`Remove ${p.name}`}
+                                onClick={() => onChange(picked.filter((x) => x.id !== p.id))}><X className="size-3" /></button>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    );
+}
+
 function AssignDialog({ schedule, companies, today, onClose }: { schedule: Schedule; companies: Company[]; today: string; onClose: () => void }) {
+    const [mode, setMode] = useState<'group' | 'people'>('group');
     const [companyId, setCompanyId] = useState(companies.length === 1 ? String(companies[0].id) : '');
     const [departmentId, setDepartmentId] = useState('');
+    const [people, setPeople] = useState<Person[]>([]);
     const [startsOn, setStartsOn] = useState(today);
     const [onlyUnassigned, setOnlyUnassigned] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -143,9 +219,10 @@ function AssignDialog({ schedule, companies, today, onClose }: { schedule: Sched
 
     const save = (e: FormEvent) => {
         e.preventDefault();
-        router.post(`/attendance/schedules/${schedule.id}/assign`, {
-            company_id: companyId || null, department_id: departmentId || null, starts_on: startsOn, only_unassigned: onlyUnassigned,
-        }, { preserveScroll: true, onSuccess: onClose, onError: setErrors });
+        const who = mode === 'people'
+            ? { employee_ids: people.map((p) => p.id) }
+            : { company_id: companyId || null, department_id: departmentId || null, only_unassigned: onlyUnassigned };
+        router.post(`/attendance/schedules/${schedule.id}/assign`, { ...who, starts_on: startsOn }, { preserveScroll: true, onSuccess: onClose, onError: setErrors });
     };
 
     return (
@@ -154,28 +231,44 @@ function AssignDialog({ schedule, companies, today, onClose }: { schedule: Sched
                 <form onSubmit={save} className="grid gap-4">
                     <DialogHeader>
                         <DialogTitle>Move people to {schedule.name}</DialogTitle>
-                        <DialogDescription>Everyone in the company or department works to this schedule from the date you pick. For one person, use Edit on their profile.</DialogDescription>
+                        <DialogDescription>They work to this schedule from the date you pick. Days before it keep their old schedule.</DialogDescription>
                     </DialogHeader>
+                    <div className="flex gap-1.5" role="group" aria-label="Who to move">
+                        <Button type="button" size="sm" variant={mode === 'group' ? 'default' : 'outline'} aria-pressed={mode === 'group'} onClick={() => setMode('group')}>A department or company</Button>
+                        <Button type="button" size="sm" variant={mode === 'people' ? 'default' : 'outline'} aria-pressed={mode === 'people'} onClick={() => setMode('people')}>Pick people</Button>
+                    </div>
                     <div className="grid gap-4 sm:grid-cols-2">
-                        <Field label="Company" htmlFor="a-company" error={errors.company_id}>
-                            <NativeSelect id="a-company" value={companyId} placeholder="Choose" options={companies.map((c) => ({ value: c.id, label: c.name }))}
-                                onChange={(e) => { setCompanyId(e.target.value); setDepartmentId(''); }} />
-                        </Field>
-                        <Field label="Department" htmlFor="a-dept" error={errors.department_id}>
-                            <NativeSelect id="a-dept" value={departmentId} disabled={!company} placeholder="Whole company"
-                                options={(company?.departments ?? []).map((x) => ({ value: x.id, label: x.name }))} onChange={(e) => setDepartmentId(e.target.value)} />
-                        </Field>
+                        {mode === 'group' ? (
+                            <>
+                                <Field label="Company" htmlFor="a-company" error={errors.company_id}>
+                                    <NativeSelect id="a-company" value={companyId} placeholder="Choose" options={companies.map((c) => ({ value: c.id, label: c.name }))}
+                                        onChange={(e) => { setCompanyId(e.target.value); setDepartmentId(''); }} />
+                                </Field>
+                                <Field label="Department" htmlFor="a-dept" error={errors.department_id}>
+                                    <NativeSelect id="a-dept" value={departmentId} disabled={!company} placeholder="Whole company"
+                                        options={(company?.departments ?? []).map((x) => ({ value: x.id, label: x.name }))} onChange={(e) => setDepartmentId(e.target.value)} />
+                                </Field>
+                            </>
+                        ) : (
+                            <Field label={`People${people.length ? ` (${people.length})` : ''}`} htmlFor="a-people" error={errors.employee_ids} className="sm:col-span-2">
+                                <PeoplePicker picked={people} onChange={setPeople} />
+                            </Field>
+                        )}
                         <Field label="From" htmlFor="a-from" error={errors.starts_on}>
                             <Input id="a-from" type="date" required value={startsOn} onChange={(e) => setStartsOn(e.target.value)} />
                         </Field>
-                        <label className="flex items-center gap-2 self-end pb-2 text-sm">
-                            <input type="checkbox" className="size-4 accent-cascade" checked={onlyUnassigned} onChange={(e) => setOnlyUnassigned(e.target.checked)} />
-                            Only people with no schedule yet
-                        </label>
+                        {mode === 'group' && (
+                            <label className="flex items-center gap-2 self-end pb-2 text-sm">
+                                <input type="checkbox" className="size-4 accent-cascade" checked={onlyUnassigned} onChange={(e) => setOnlyUnassigned(e.target.checked)} />
+                                Only people with no schedule yet
+                            </label>
+                        )}
                     </div>
                     <DialogFooter>
                         <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-                        <Button type="submit">Move people</Button>
+                        <Button type="submit" disabled={mode === 'people' && people.length === 0}>
+                            {mode === 'people' && people.length ? (people.length === 1 ? 'Move 1 person' : `Move ${people.length} people`) : 'Move people'}
+                        </Button>
                     </DialogFooter>
                 </form>
             </DialogContent>
@@ -231,6 +324,7 @@ export default function Schedules({ schedules, unassigned, companies, today }: P
                                 <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
                                     <div><dt className="text-xs text-muted-foreground">People</dt><dd className="tabular-nums">{s.people}{s.is_default && unassigned ? ` + ${unassigned}` : ''}</dd></div>
                                     <div><dt className="text-xs text-muted-foreground">Half day under</dt><dd>{s.half_day_minutes / 60} h</dd></div>
+                                    {s.type === 'fixed' && <div><dt className="text-xs text-muted-foreground">Absent if not in by</dt><dd>{s.absent_after_label}{s.absent_after ? '' : ' (mid-day)'}</dd></div>}
                                     {s.type === 'fixed' && <div><dt className="text-xs text-muted-foreground">Early leave allowed</dt><dd>{s.early_grace_minutes} min</dd></div>}
                                     <div><dt className="text-xs text-muted-foreground">Overtime</dt><dd>{s.overtime_after_minutes === null ? 'Not counted' : `After ${s.overtime_after_minutes} min`}</dd></div>
                                     <div><dt className="text-xs text-muted-foreground">No punch out</dt><dd>{s.type === 'fixed' && s.missing_checkout === 'auto' ? 'Auto at end time' : 'HR enters it'}</dd></div>

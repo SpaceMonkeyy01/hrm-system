@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ActivityLog;
 use App\Models\AttendancePunch;
 use App\Models\AttendanceRequest;
+use App\Models\Company;
 use App\Models\Employee;
 use App\Models\Holiday;
 use App\Models\LeaveRecord;
@@ -20,6 +21,7 @@ use Inertia\Response;
 /**
  * Home: what needs doing today. Reminders, the lists to check, probation endings, the latest attendance day,
  * who is away, who is new, and recent changes. Company-wide charts are on Overview (OverviewController).
+ * ?company= narrows everything about people to one company; recent changes stay company-wide.
  */
 class DashboardController extends Controller
 {
@@ -31,10 +33,14 @@ class DashboardController extends Controller
         $today = CarbonImmutable::today();
         $now = CarbonImmutable::now();
         $private = request()->user()->can('edit-hr');
-        $current = Employee::query()->whereIn('status', ['active', 'offboarding'])
+        $company = request()->integer('company') ?: null;
+        $company = $company && Company::whereKey($company)->exists() ? $company : null;
+        $inCompany = fn ($q) => $q->when($company, fn ($q) => $q->where('company_id', $company));
+        $current = Employee::query()->whereIn('status', ['active', 'offboarding'])->tap($inCompany)
             ->get(['id', 'employee_code', 'full_name', 'company_id', 'department_id', 'start_date', 'exit_date', 'status',
                 'attendance_machine_id', 'hr_portal_id', 'date_of_birth', 'role_title', 'photo_path']);
         $snapshot = HrSnapshot::build($current->pluck('id')->all(), $today);
+        $ids = $current->pluck('id')->flip()->all();
 
         $activity = ActivityLog::query()->with('user:id,name', 'employee:id,employee_code,full_name')
             ->latest('id')->limit(12)->get()->map(fn ($a) => [
@@ -45,25 +51,29 @@ class DashboardController extends Controller
 
         return Inertia::render('dashboard', [
             'today' => $today->toDateString(),
+            'company' => $company,
+            'companies' => Company::query()->orderBy('name')->get(['id', 'name']),
             // Viewers don't see reminders built on private fields (CNIC expiry).
             'reminders' => array_values(array_filter(Reminders::forDate($today),
-                fn ($r) => $private || ! in_array($r['type'], Reminders::PRIVATE_TYPES, true))),
+                fn ($r) => ($private || ! in_array($r['type'], Reminders::PRIVATE_TYPES, true))
+                    && (! $company || isset($ids[$r['employee_id']])))),
             'totals' => [
                 'current' => $current->count(),
                 'unassigned' => $current->whereNull('company_id')->count(),
-                'needsReview' => Employee::where('needs_review', true)->count(),
+                'needsReview' => Employee::where('needs_review', true)->tap($inCompany)->count(),
                 'inOnboarding' => $snapshot['onboarding']['total'],
                 // Skip cases whose employee was soft-deleted, like every other tile (the relation itself includes trashed).
-                'offboarding' => Offboarding::where('status', 'in_progress')->whereHas('employee', fn ($q) => $q->withoutTrashed())->count(),
-                'requests' => AttendanceRequest::where('status', 'pending')->whereHas('employee')->count(),
-                'reviews' => Review::where('status', 'manager_review')->whereHas('cycle', fn ($q) => $q->where('status', 'open'))->whereHas('employee')->count(),
+                'offboarding' => Offboarding::where('status', 'in_progress')->whereHas('employee', fn ($q) => $q->withoutTrashed()->tap($inCompany))->count(),
+                'requests' => AttendanceRequest::where('status', 'pending')->whereHas('employee', $inCompany)->count(),
+                'reviews' => Review::where('status', 'manager_review')->whereHas('cycle', fn ($q) => $q->where('status', 'open'))->whereHas('employee', $inCompany)->count(),
             ],
             ...$snapshot,
             'attendance' => $this->latestAttendance($current, $today, $now),
-            'away' => $this->away($today),
+            'away' => $this->away($today, $inCompany),
             'newPeople' => $this->newPeople($current, $today),
             'celebrations' => $this->celebrations($current, $today, $private),
-            'holidays' => Holiday::query()->with('company:id,name')->whereBetween('date', [$today->toDateString(), $today->addDays(60)->toDateString()])
+            'holidays' => Holiday::query()->with('company:id,name')
+                ->when($company, fn ($q) => $q->where(fn ($q) => $q->whereNull('company_id')->orWhere('company_id', $company)))->whereBetween('date', [$today->toDateString(), $today->addDays(60)->toDateString()])
                 ->orderBy('date')->limit(4)->get()
                 ->map(fn ($h) => ['date' => $h->date->toDateString(), 'name' => $h->name, 'company' => $h->company?->name]),
             'activity' => $activity,
@@ -84,11 +94,11 @@ class DashboardController extends Controller
     }
 
     /** On leave from today through the next week. */
-    private function away(CarbonImmutable $today): array
+    private function away(CarbonImmutable $today, \Closure $inCompany): array
     {
         return LeaveRecord::query()->with('employee:id,full_name,photo_path', 'type:id,name')
             ->where('start_date', '<=', $today->addDays(self::AHEAD_DAYS)->toDateString())->where('end_date', '>=', $today->toDateString())
-            ->whereHas('employee', fn ($q) => $q->whereIn('status', ['active', 'offboarding']))
+            ->whereHas('employee', fn ($q) => $q->whereIn('status', ['active', 'offboarding'])->tap($inCompany))
             ->orderBy('start_date')->limit(12)->get()
             ->map(fn ($l) => ['id' => $l->employee->id, 'name' => $l->employee->full_name, 'photo' => $l->employee->photoUrl(), 'type' => $l->type?->name ?? 'Leave',
                 'from' => $l->start_date->toDateString(), 'to' => $l->end_date->toDateString(), 'part' => $l->part])

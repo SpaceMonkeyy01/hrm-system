@@ -238,7 +238,7 @@ class AttendanceReports
             ->stat('Absent', $absent, $absent ? 'missing' : null)->stat('On leave', $count['On leave'] ?? 0)
             ->stat('Missing punch', $count['Missing punch'] ?? 0, ($count['Missing punch'] ?? 0) ? 'pending' : null);
         $r->note(CarbonImmutable::parse($f->day)->format('l j F Y').'. Present includes late arrivals.'
-            .($f->day === $f->today->toDateString() ? ' Today: Not in yet turns into Absent after the end of the working day.' : ''));
+            .($f->day === $f->today->toDateString() ? ' Today: Not in yet turns into Absent at the absent cut-off of the schedule (the middle of the day unless set).' : ''));
         $this->notLinkedNote($r, $employees, $board);
 
         return $r;

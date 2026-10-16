@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Company;
 use App\Models\Employee;
 use App\Models\WorkSchedule;
+use App\Services\AttendanceRules;
 use App\Services\ScheduleAssigner;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
@@ -27,9 +28,10 @@ class WorkScheduleController extends Controller
 
         return Inertia::render('attendance/schedules', [
             'schedules' => WorkSchedule::query()->orderByDesc('is_default')->orderBy('name')->get()->map(fn (WorkSchedule $s) => [
-                ...$s->only('id', 'name', 'type', 'start_time', 'end_time', 'late_grace_minutes', 'early_grace_minutes',
+                ...$s->only('id', 'name', 'type', 'start_time', 'end_time', 'late_grace_minutes', 'early_grace_minutes', 'absent_after',
                     'full_day_minutes', 'half_day_minutes', 'overtime_after_minutes', 'working_days', 'missing_checkout', 'is_default', 'notes'),
                 'summary' => $s->summary(),
+                'absent_after_label' => $s->absentAfterLabel(),
                 'people' => $counts[$s->id] ?? 0,
             ]),
             'unassigned' => $people - count($current),
@@ -76,23 +78,28 @@ class WorkScheduleController extends Controller
         return back()->with('success', "Deleted the {$schedule->name} schedule.");
     }
 
-    /** Put everyone in a department (or company) on this schedule from a date. */
+    /** Put chosen people, or everyone in a department (or company), on this schedule from a date. */
     public function assign(Request $request, WorkSchedule $schedule): RedirectResponse
     {
         $data = $request->validate([
+            'employee_ids' => ['nullable', 'array', 'max:500'],
+            'employee_ids.*' => ['integer', 'distinct', 'exists:employees,id'],
             'company_id' => ['nullable', 'integer', 'exists:companies,id'],
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
             'starts_on' => ['required', 'date'],
             'only_unassigned' => ['boolean'],
         ]);
-        if (empty($data['company_id']) && empty($data['department_id'])) {
-            throw ValidationException::withMessages(['department_id' => 'Choose a company or a department.']);
+        $picked = $data['employee_ids'] ?? [];
+        if (! $picked && empty($data['company_id']) && empty($data['department_id'])) {
+            throw ValidationException::withMessages([$request->has('employee_ids') ? 'employee_ids' : 'department_id' => $request->has('employee_ids')
+                ? 'Pick at least one person.' : 'Choose a company or a department.']);
         }
         $employees = Employee::query()->whereIn('status', ['active', 'offboarding'])
-            ->when($data['department_id'] ?? null, fn ($q, $v) => $q->where('department_id', $v))
-            ->when(! ($data['department_id'] ?? null) && ($data['company_id'] ?? null), fn ($q) => $q->where('company_id', $data['company_id']))
+            ->when($picked, fn ($q) => $q->whereIn('id', $picked))
+            ->when(! $picked && ($data['department_id'] ?? null), fn ($q) => $q->where('department_id', $data['department_id']))
+            ->when(! $picked && ! ($data['department_id'] ?? null) && ($data['company_id'] ?? null), fn ($q) => $q->where('company_id', $data['company_id']))
             ->get(['id']);
-        if ($data['only_unassigned'] ?? false) {
+        if (! $picked && ($data['only_unassigned'] ?? false)) {
             $has = ScheduleAssigner::current($employees->pluck('id')->all(), CarbonImmutable::parse($data['starts_on'])->toDateString());
             $employees = $employees->reject(fn ($e) => isset($has[$e->id]));
         }
@@ -119,6 +126,7 @@ class WorkScheduleController extends Controller
             'end_time' => [$flexible ? 'nullable' : 'required', ...$time],
             'late_grace_minutes' => ['required', 'integer', 'min:0', 'max:240'],
             'early_grace_minutes' => ['required', 'integer', 'min:0', 'max:240'],
+            'absent_after' => ['nullable', ...$time],
             'full_day_minutes' => ['required', 'integer', 'min:30', 'max:1440'],
             'half_day_minutes' => ['required', 'integer', 'min:0', 'max:1440', 'lte:full_day_minutes'],
             'overtime_after_minutes' => ['nullable', 'integer', 'min:0', 'max:600'],
@@ -130,13 +138,23 @@ class WorkScheduleController extends Controller
         ], [
             'start_time.regex' => 'Use a 24-hour time like 09:00.',
             'end_time.regex' => 'Use a 24-hour time like 17:00.',
+            'absent_after.regex' => 'Use a 24-hour time like 13:00.',
             'half_day_minutes.lte' => 'Half day must be shorter than a full day.',
         ]);
         if (! $flexible && $data['end_time'] === $data['start_time']) {
             throw ValidationException::withMessages(['end_time' => 'The day must end at a different time than it starts. An end before the start means the next morning (night shift).']);
         }
+        if (! $flexible && ($data['absent_after'] ?? null)) {
+            $start = AttendanceRules::minutes($data['start_time']);
+            $end = AttendanceRules::minutes($data['end_time']);
+            $end += $end <= $start ? 1440 : 0;
+            $cut = (new WorkSchedule($data))->absentAfterMinutes();
+            if ($cut <= $start + $data['late_grace_minutes'] || $cut > $end) {
+                throw ValidationException::withMessages(['absent_after' => 'Pick a time after the start (and its grace) and no later than the end of the day.']);
+            }
+        }
         if ($flexible) {
-            $data['start_time'] = $data['end_time'] = null;
+            $data['start_time'] = $data['end_time'] = $data['absent_after'] = null;
             $data['late_grace_minutes'] = $data['early_grace_minutes'] = 0;
             $data['missing_checkout'] = 'flag';   // no end time to check out at
         }

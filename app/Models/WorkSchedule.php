@@ -15,7 +15,7 @@ class WorkSchedule extends Model
 {
     use LogsActivity;
 
-    protected $fillable = ['name', 'type', 'start_time', 'end_time', 'late_grace_minutes', 'early_grace_minutes',
+    protected $fillable = ['name', 'type', 'start_time', 'end_time', 'late_grace_minutes', 'early_grace_minutes', 'absent_after',
         'full_day_minutes', 'half_day_minutes', 'overtime_after_minutes', 'working_days', 'missing_checkout', 'is_default', 'notes'];
 
     protected $attributes = ['type' => 'fixed', 'late_grace_minutes' => 0, 'early_grace_minutes' => 0,
@@ -36,6 +36,41 @@ class WorkSchedule extends Model
     public function isFlexible(): bool
     {
         return $this->type === 'flexible';
+    }
+
+    /**
+     * Not checked in by this time = Absent (fixed schedules only), as minutes from midnight on the day's own clock
+     * (a night shift's cut-off after midnight is 24+ hours). Empty = the middle of the day: 9-5 gives 13:00.
+     */
+    public function absentAfterMinutes(): ?int
+    {
+        if ($this->isFlexible() || ! $this->start_time || ! $this->end_time) {
+            return null;
+        }
+        $start = self::toMinutes($this->start_time);
+        $end = self::toMinutes($this->end_time);
+        $end += $end <= $start ? 1440 : 0;
+        if (! $this->absent_after) {
+            return $start + intdiv($end - $start, 2);
+        }
+        $cut = self::toMinutes($this->absent_after);
+
+        return $cut <= $start ? $cut + 1440 : $cut;
+    }
+
+    /** "13:00" (or "01:00" for a night shift's next morning) */
+    public function absentAfterLabel(): ?string
+    {
+        $m = $this->absentAfterMinutes();
+
+        return $m === null ? null : sprintf('%02d:%02d', intdiv($m, 60) % 24, $m % 60);
+    }
+
+    private static function toMinutes(string $time): int
+    {
+        [$h, $m] = array_map('intval', explode(':', $time));
+
+        return $h * 60 + $m;
     }
 
     /** "Mon-Fri, 09:00-17:00, 10 min grace" */

@@ -1,7 +1,8 @@
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { ArrowUpRight, Cake, CalendarDays, FileChartColumn, Palmtree, PartyPopper, Upload, UserPlus } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Avatar } from '@/components/avatar';
+import { NativeSelect } from '@/components/native-select';
 import { PageHeader, Section } from '@/components/page-header';
 import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,8 @@ type DocItem = { key: string; label: string; yes: number; na: number; pending: n
 
 type Props = {
     today: string;
+    company: number | null;
+    companies: { id: number; name: string }[];
     reminders: Reminder[];
     totals: { current: number; unassigned: number; needsReview: number; inOnboarding: number; offboarding: number; requests: number; reviews: number };
     onboarding: {
@@ -166,6 +169,8 @@ export default function Dashboard(props: Props) {
         ...props.celebrations.map((c) => ({ ...c, key: `${c.kind}-${c.id}-${c.date}` })),
         ...props.holidays.map((h) => ({ key: `holiday-${h.date}-${h.name}`, id: null, name: h.company ? `${h.name} (${h.company})` : h.name, date: h.date, kind: 'holiday' as const, years: null })),
     ].sort((x, y) => x.date.localeCompare(y.date)).slice(0, 10);
+    const companyName = props.companies.find((c) => c.id === props.company)?.name;
+    const inCompany = props.company ? `&company=${props.company}` : '';
     const count = (key: string) => !att ? 0 : key === 'Late' ? att.late : key === 'Present' ? (att.statuses.Present ?? 0) + (att.statuses['At work'] ?? 0) : att.statuses[key] ?? 0;
 
     return (
@@ -173,7 +178,7 @@ export default function Dashboard(props: Props) {
             <Head title="Home" />
             <PageHeader
                 title={firstName ? `Hello, ${firstName}` : 'Home'}
-                description={`What needs doing on ${formatDate(props.today)}. Company-wide numbers are on Overview, and the full lists are on Reports.`}
+                description={`What needs doing on ${formatDate(props.today)}${companyName ? ` at ${companyName}` : ''}. Company-wide numbers are on Overview, and the full lists are on Reports.`}
                 actions={auth.can.edit && (
                     <>
                         <Button variant="outline" asChild><Link href="/employees/create"><UserPlus /> Add employee</Link></Button>
@@ -182,7 +187,13 @@ export default function Dashboard(props: Props) {
                         <Button variant="outline" asChild><Link href="/reports"><FileChartColumn /> Reports</Link></Button>
                     </>
                 )}
-            />
+            >
+                {props.companies.length > 1 && (
+                    <NativeSelect className="w-48" value={props.company ?? ''} placeholder="All companies" aria-label="Company"
+                        options={props.companies.map((c) => ({ value: c.id, label: c.name }))}
+                        onChange={(e) => router.get('/dashboard', e.target.value ? { company: e.target.value } : {}, { preserveScroll: true, replace: true })} />
+                )}
+            </PageHeader>
 
             <div className="grid gap-8 p-4 md:p-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
                 <div className="grid content-start gap-8">
@@ -218,7 +229,7 @@ export default function Dashboard(props: Props) {
                         description={att
                             ? `${att.date === props.today ? 'Today' : formatDate(att.date)}, the last day with punches loaded. ${att.linked} of ${att.people} people are linked.`
                             : 'No attendance files uploaded yet.'}
-                        actions={att && <Link href={`/attendance?date=${att.date}`} className="text-sm font-semibold text-cascade hover:underline">Open the day</Link>}
+                        actions={att && <Link href={`/attendance?date=${att.date}${inCompany}`} className="text-sm font-semibold text-cascade hover:underline">Open the day</Link>}
                     >
                         {att && att.linked === 0 ? (
                             <p className="rounded-lg border px-3 py-3 text-sm text-muted-foreground">
@@ -226,9 +237,13 @@ export default function Dashboard(props: Props) {
                                 {auth.can.edit && <Link href="/attendance/links?tab=numbers" className="font-semibold text-cascade hover:underline">Link people</Link>}
                             </p>
                         ) : att ? (
-                            <dl className="grid grid-cols-5 gap-2 text-center">
+                            <dl className="grid grid-cols-3 gap-2 text-center sm:grid-cols-6">
+                                <Link href={`/employees${props.company ? `?company=${props.company}` : ''}`} className="rounded-md border bg-muted/40 px-1 py-2 hover:bg-accent">
+                                    <dd className="text-lg font-bold">{totals.current}</dd>
+                                    <dt className="text-xs text-muted-foreground">Total staff</dt>
+                                </Link>
                                 {attendanceTiles.map((t) => (
-                                    <Link key={t.key} href={`/attendance?date=${att.date}&status=${encodeURIComponent(t.key)}`} className="rounded-md border px-1 py-2 hover:bg-accent">
+                                    <Link key={t.key} href={`/attendance?date=${att.date}&status=${encodeURIComponent(t.key)}${inCompany}`} className="rounded-md border px-1 py-2 hover:bg-accent">
                                         <dd className={cn('text-lg font-bold', count(t.key) ? t.tone : 'text-muted-foreground')}>{count(t.key)}</dd>
                                         <dt className="text-xs text-muted-foreground">{t.label}</dt>
                                     </Link>

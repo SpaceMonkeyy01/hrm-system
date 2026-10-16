@@ -19,6 +19,9 @@ use Carbon\CarbonInterface;
  *              time when the schedule auto-checks-out, else missing
  *   worked     the sessions added up (overlaps counted once); HR's times move the first start and the last end
  *   late       fixed schedules: in after start + grace; counted from the start time
+ *   absent     fixed schedules: not checked in by the schedule's absent cut-off (default the middle of the day, 9-5 ->
+ *              13:00). No punches: Not in yet until the cut-off, then Absent. Checked in after it: Absent, with the
+ *              times still shown (HR can fix the day). Not applied on a leave day (a half day off moves the start)
  *   early      fixed schedules: out before end - grace; counted to the end time
  *   short      flexible schedules: worked less than the day's hours
  *   overtime   worked past the end time (fixed) or past the day's hours (flexible) by more than the schedule's
@@ -94,6 +97,7 @@ class AttendanceRules
         $fixed = $schedule && ! $schedule->isFlexible() && $schedule->start_time && $schedule->end_time;
         $startMin = $fixed ? self::minutes($schedule->start_time) : null;
         $endMin = $fixed ? self::minutes($schedule->end_time) + (self::minutes($schedule->end_time) <= $startMin ? 1440 : 0) : null;
+        $absentMin = $fixed ? $schedule->absentAfterMinutes() : null;
         // One punch after the end of the day is not a check-in to close.
         if ($in && ! $out && $date < $today && $fixed && $schedule->missing_checkout === 'auto'
             && self::minutes(end($sessions)['in'] ?? $in) < $endMin) {
@@ -138,9 +142,17 @@ class AttendanceRules
                 ! $working => 'Day off',
                 $fullLeave => 'On leave',
                 $schedule === null => 'No punches',
-                $date === $today && (! $fixed || self::minutes($now->format('H:i')) < $endMin) => 'Not in yet',
+                $date === $today && (! $fixed || self::minutes($now->format('H:i')) < $absentMin) => 'Not in yet',
                 default => 'Absent',
             };
+
+            return $result;
+        }
+
+        // A lone punch after the end of the day is a forgotten check-in (Missing punch), not a late arrival.
+        if ($in && $fixed && $working && ! $leave && self::minutes($in) > $absentMin && ($out || self::minutes($in) < $endMin)) {
+            $result['status'] = 'Absent';
+            $result['worked'] = self::worked($sessions) ?: null;
 
             return $result;
         }

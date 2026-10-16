@@ -16,10 +16,11 @@ type Row = AttendanceDay & { employee: { id: number; code: string; name: string;
 type Company = { id: number; name: string; departments: { id: number; name: string }[] };
 type Props = {
     date: string; today: string; rows: Row[]; counts: Record<string, number>;
-    filters: { company?: number; department?: number; status?: string; where?: 'office' | 'remote' | 'both'; q?: string };
+    filters: { company?: number; department?: number; status?: string; where?: 'office' | 'remote' | 'both'; linked?: 'yes' | 'no'; q?: string };
     companies: Company[]; statuses: Record<string, Tone>; hasSchedules: boolean; unlinked: number; lastImport: string | null; pendingRequests: number;
     machine: MachineStatus;
     places: Record<'office' | 'remote' | 'both', number>;
+    links: Record<'yes' | 'no', number>;
 };
 
 const placeLabel = { office: 'In the office', remote: 'Remote', both: 'Office + remote' } as const;
@@ -40,7 +41,9 @@ export default function AttendanceIndex(props: Props) {
 
     const chips = ['Present', 'Late', 'Half day', 'Missing punch', 'Absent', 'At work', 'Not in yet', 'On leave', 'Holiday', 'Worked day off', 'Day off', 'No punches', 'No data', 'Not linked']
         .filter((s) => props.counts[s]);
-    const departments = props.companies.flatMap((c) => c.departments.map((d) => ({ value: d.id, label: props.companies.length > 1 ? `${d.name} (${c.name})` : d.name })));
+    const shown = props.filters.company ? props.companies.filter((c) => c.id === Number(props.filters.company)) : props.companies;
+    const departments = shown.flatMap((c) => c.departments.map((d) => ({ value: d.id, label: shown.length > 1 ? `${d.name} (${c.name})` : d.name })));
+    const filtered = Boolean(props.filters.status || props.filters.where || props.filters.q || props.filters.department || props.filters.company || props.filters.linked);
 
     return (
         <>
@@ -60,6 +63,10 @@ export default function AttendanceIndex(props: Props) {
                     <Input type="date" className="w-40" value={props.date} max={props.today} aria-label="Date" onChange={(e) => e.target.value && go({ date: e.target.value })} />
                     <Button variant="outline" size="icon" aria-label="Next day" disabled={props.date >= props.today} onClick={() => go({ date: shift(props.date, 1) })}><ChevronRight /></Button>
                     {props.date !== props.today && <Button variant="ghost" onClick={() => go({ date: props.today })}>Today</Button>}
+                    {props.companies.length > 1 && (
+                        <NativeSelect className="w-44" value={props.filters.company ?? ''} placeholder="All companies" options={props.companies.map((c) => ({ value: c.id, label: c.name }))}
+                            aria-label="Company" onChange={(e) => go({ company: e.target.value || undefined, department: undefined })} />
+                    )}
                     <NativeSelect className="w-56" value={props.filters.department ?? ''} placeholder="All departments" options={departments}
                         aria-label="Department" onChange={(e) => go({ department: e.target.value || undefined })} />
                     <form onSubmit={(e) => { e.preventDefault(); go({ q: q || undefined }); }}>
@@ -91,6 +98,14 @@ export default function AttendanceIndex(props: Props) {
                         </Button>
                     ))}
                 </div>
+                {(props.links.no > 0 || props.filters.linked) && (
+                    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter by linked">
+                        <span className="text-xs text-muted-foreground">Punches:</span>
+                        <Button size="sm" variant={!props.filters.linked ? 'default' : 'outline'} onClick={() => go({ linked: undefined })}>Everyone</Button>
+                        <Button size="sm" variant={props.filters.linked === 'yes' ? 'default' : 'outline'} onClick={() => go({ linked: 'yes' })}>Linked {props.links.yes}</Button>
+                        <Button size="sm" variant={props.filters.linked === 'no' ? 'default' : 'outline'} onClick={() => go({ linked: 'no' })}>Not linked {props.links.no}</Button>
+                    </div>
+                )}
                 {(props.places.remote > 0 || props.places.both > 0 || props.filters.where) && (
                     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter by where">
                         <span className="text-xs text-muted-foreground">Where:</span>
@@ -104,8 +119,8 @@ export default function AttendanceIndex(props: Props) {
                 )}
 
                 {props.rows.length === 0 ? (
-                    <EmptyState icon={props.filters.status || props.filters.where || props.filters.q || props.filters.department ? SearchX : Clock}
-                        title={props.filters.status || props.filters.where || props.filters.q || props.filters.department ? 'Nobody matches these filters.' : 'No attendance for this day.'}
+                    <EmptyState icon={filtered ? SearchX : Clock}
+                        title={filtered ? 'Nobody matches these filters.' : 'No attendance for this day.'}
                         action={can && !props.filters.status && !props.filters.q && <Button variant="outline" asChild><Link href="/attendance/imports"><Upload /> Upload attendance file</Link></Button>} />
                 ) : (
                     <div className="overflow-x-auto rounded-lg border">

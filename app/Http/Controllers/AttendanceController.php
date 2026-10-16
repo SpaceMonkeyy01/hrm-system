@@ -38,6 +38,7 @@ class AttendanceController extends Controller
             'department' => ['nullable', 'integer'],
             'status' => ['nullable', 'string', 'max:30'],
             'where' => ['nullable', 'in:office,remote,both'],
+            'linked' => ['nullable', 'in:yes,no'],
             'q' => ['nullable', 'string', 'max:100'],
         ]);
         $now = CarbonImmutable::now();
@@ -65,6 +66,12 @@ class AttendanceController extends Controller
                 ...$day,
             ];
         }
+        // Linked = the person's punches can reach the app (machine number, HR.my ID or the app's own clock-in).
+        $linkedCount = count(array_filter($rows, fn ($r) => $r['employee']['linked']));
+        $links = ['yes' => $linkedCount, 'no' => count($rows) - $linkedCount];
+        if ($linked = $f['linked'] ?? null) {
+            $rows = array_values(array_filter($rows, fn ($r) => $r['employee']['linked'] === ($linked === 'yes')));
+        }
         $counts = array_count_values(array_column($rows, 'status'));
         $late = count(array_filter($rows, fn ($r) => $r['late'] > 0));
         $places = array_count_values(array_filter(array_column($rows, 'where')));
@@ -80,6 +87,7 @@ class AttendanceController extends Controller
             'today' => $now->toDateString(),
             'rows' => $rows,
             'counts' => $counts + ['Late' => $late],
+            'links' => $links,
             'places' => ['office' => $places['office'] ?? 0, 'remote' => $places['remote'] ?? 0, 'both' => $places['both'] ?? 0],
             'filters' => $f,
             'companies' => Company::query()->orderBy('name')->with('departments:id,company_id,name')->get(['id', 'name'])
