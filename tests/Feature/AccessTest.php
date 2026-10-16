@@ -83,6 +83,15 @@ class AccessTest extends TestCase
     {
         $admin = $this->user('admin');
         $this->actingAs($admin)->put("/settings/users/{$admin->id}", ['name' => 'A', 'role' => 'viewer', 'is_active' => true])->assertSessionHasErrors('role');
+        // Admins can change a login's email (stored lowercased, unique).
+        $other = $this->user('viewer', ['email' => 'taken@example.com']);
+        $this->actingAs($admin)->put("/settings/users/{$admin->id}", ['name' => 'A', 'email' => 'Taken@Example.com', 'role' => 'admin', 'is_active' => true])
+            ->assertSessionHasErrors('email');
+        $this->actingAs($admin)->put("/settings/users/{$admin->id}", ['name' => 'A', 'email' => ' Me@Example.com ', 'role' => 'admin', 'is_active' => true])
+            ->assertSessionHasNoErrors();
+        $this->assertSame('me@example.com', $admin->fresh()->email);
+        $this->actingAs($this->user('hr'))->put("/settings/users/{$other->id}", ['name' => 'B', 'email' => 'x@example.com', 'role' => 'viewer', 'is_active' => true])
+            ->assertForbidden();
         $this->assertSame('admin', $admin->fresh()->role);
     }
 

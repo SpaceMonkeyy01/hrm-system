@@ -17,7 +17,7 @@ type Option = { value: number; label: string };
 const roleName = (r: string) => (r === 'hr' ? 'HR' : r[0].toUpperCase() + r.slice(1));
 
 function UserRow({ user, roles, isMe, employees }: { user: User; roles: Record<string, string>; isMe: boolean; employees: Option[] }) {
-    const form = useForm({ name: user.name, role: user.role, is_active: user.is_active, password: '', employee_id: user.employee_id ? String(user.employee_id) : '' });
+    const form = useForm({ name: user.name, email: user.email, role: user.role, is_active: user.is_active, password: '', employee_id: user.employee_id ? String(user.employee_id) : '' });
     const submit = (e: FormEvent) => {
         e.preventDefault();
         form.put(`/settings/users/${user.id}`, { preserveScroll: true, onSuccess: () => { form.setDefaults({ ...form.data, password: '' }); form.reset('password'); } });
@@ -26,7 +26,9 @@ function UserRow({ user, roles, isMe, employees }: { user: User; roles: Record<s
         <tr className="align-top">
             <td className="py-2 pr-3">
                 <Input aria-label="Name" value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} className="h-8" />
-                <span className="mt-1 block text-xs text-muted-foreground">{user.email}{isMe && ' (you)'}</span>
+                <Input aria-label="Email" type="email" required value={form.data.email} onChange={(e) => form.setData('email', e.target.value)} className="mt-1 h-8 text-xs" />
+                {form.errors.email && <p className="mt-1 text-xs text-missing">{form.errors.email}</p>}
+                {isMe && <span className="mt-1 block text-xs text-muted-foreground">You</span>}
             </td>
             <td className="py-2 pr-3">
                 <NativeSelect aria-label="Role" value={form.data.role} disabled={isMe} onChange={(e) => form.setData('role', e.target.value)}

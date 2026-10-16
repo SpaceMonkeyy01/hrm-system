@@ -69,8 +69,12 @@ class UserController extends Controller
 
     public function update(Request $request, User $user): RedirectResponse
     {
+        if (is_string($request->input('email'))) {
+            $request->merge(['email' => strtolower(trim($request->input('email')))]);
+        }
         $data = $request->validate([
             'name' => ['required', 'string', 'max:150'],
+            'email' => ['sometimes', 'required', 'email', 'max:150', Rule::unique('users', 'email')->ignore($user->id)],
             'role' => ['required', Rule::in(array_keys(config('hrm.roles')))],
             'is_active' => ['required', 'boolean'],
             'password' => ['nullable', Password::min(8)],
