@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 
 class User extends Authenticatable
 {
@@ -28,6 +29,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'last_login_at' => 'datetime',
         ];
     }
 
@@ -71,6 +73,47 @@ class User extends Authenticatable
     public function canEdit(): bool
     {
         return in_array($this->role, ['admin', 'hr'], true);
+    }
+
+    /**
+     * Every column that records which login did something. A login named in any of them (or in the activity log, other
+     * than changes to its own login) has history and is switched off rather than deleted, so names stay on the record.
+     * tests/Feature/UserManagementTest checks this covers every foreign key to users.
+     */
+    public const HISTORY_COLUMNS = [
+        'activity_log' => ['user_id'], 'asset_assignments' => ['assigned_by', 'returned_by'], 'attendance_adjustments' => ['updated_by'],
+        'attendance_imports' => ['uploaded_by'], 'attendance_requests' => ['requested_by', 'decided_by'], 'checklist_entries' => ['updated_by'],
+        'employee_files' => ['uploaded_by'], 'employee_work_schedules' => ['created_by'], 'employment_history' => ['created_by'],
+        'issued_letters' => ['issued_by'], 'leave_records' => ['created_by'], 'machine_syncs' => ['user_id'], 'offboardings' => ['created_by'],
+        'office_networks' => ['created_by'], 'review_cycles' => ['created_by'], 'reviews' => ['reviewed_by'],
+    ];
+
+    /**
+     * Which of these logins have done anything in the app.
+     *
+     * @param  list<int>  $ids
+     * @return array<int, true>
+     */
+    public static function withHistory(array $ids): array
+    {
+        $found = [];
+        foreach (self::HISTORY_COLUMNS as $table => $columns) {
+            foreach ($columns as $column) {
+                $left = array_values(array_diff($ids, array_keys($found)));
+                if (! $left) {
+                    return $found;
+                }
+                $q = DB::table($table)->whereIn($column, $left);
+                if ($table === 'activity_log') {   // changes to their own login (e.g. setting a password) aren't history
+                    $q->where(fn ($q) => $q->where('subject_type', '!=', 'User')->orWhereColumn('subject_id', '!=', $column));
+                }
+                foreach ($q->distinct()->pluck($column) as $id) {
+                    $found[(int) $id] = true;
+                }
+            }
+        }
+
+        return $found;
     }
 
     public function activityLabel(): string

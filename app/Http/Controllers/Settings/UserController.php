@@ -21,11 +21,15 @@ class UserController extends Controller
 {
     public function index(): Response
     {
+        $users = User::query()->with('employee:id,full_name,employee_code')->orderBy('name')
+            ->get(['id', 'name', 'email', 'role', 'is_active', 'last_login_at', 'employee_id', 'created_at']);
+        $history = User::withHistory($users->pluck('id')->all());
+
         return Inertia::render('settings/users', [
-            'users' => User::query()->with('employee:id,full_name,employee_code')->orderBy('name')->get(['id', 'name', 'email', 'role', 'is_active', 'employee_id', 'created_at'])
-                ->map(fn ($u) => [...$u->only('id', 'name', 'email', 'role', 'is_active', 'employee_id'),
-                    'employee' => $u->employee ? "{$u->employee->full_name} ({$u->employee->employee_code})" : null,
-                    'created_at' => $u->created_at?->toIso8601String()]),
+            'users' => $users->map(fn ($u) => [...$u->only('id', 'name', 'email', 'role', 'is_active', 'employee_id'),
+                'employee' => $u->employee ? "{$u->employee->full_name} ({$u->employee->employee_code})" : null,
+                'created_at' => $u->created_at?->toIso8601String(), 'last_login_at' => $u->last_login_at?->toIso8601String(),
+                'has_history' => isset($history[$u->id])]),
             'roles' => config('hrm.roles'),
             'staffLogins' => (fn ($c) => ['ready' => $c['ready']->count(), 'noEmail' => $c['noEmail'], 'emailTaken' => $c['emailTaken']])(StaffLoginController::candidates()),
             // Current staff, for linking a login to its own employee record (My page).
@@ -91,6 +95,38 @@ class UserController extends Controller
         $user->update($data);
 
         return back()->with('success', "Saved {$user->email}.");
+    }
+
+    /** Only a login that has never done anything (made by mistake, wrong email). Anyone else is switched off instead. */
+    public function destroy(Request $request, User $user): RedirectResponse
+    {
+        if ($user->is($request->user())) {
+            throw ValidationException::withMessages(['user' => 'You can\'t delete your own login.']);
+        }
+        if (User::withHistory([$user->id])) {
+            throw ValidationException::withMessages(['user' => "{$user->email} has made changes in the app, so it can't be deleted (their name stays on those records). Untick \"Can log in\" to switch it off instead."]);
+        }
+        $user->delete();
+
+        return back()->with('success', "Deleted the login for {$user->email}.");
+    }
+
+    /** A fresh link to choose a password: the welcome email ran out, went to spam, or they forgot it. */
+    public function sendLink(User $user): RedirectResponse
+    {
+        if (! $user->is_active) {
+            throw ValidationException::withMessages(['user' => "{$user->email} is switched off. Tick \"Can log in\" and save first."]);
+        }
+        $invite = $user->last_login_at === null;   // never signed in: the welcome wording
+        try {
+            $user->notify(new SetPasswordNotification(PasswordBroker::broker($invite ? 'invites' : 'users')->createToken($user), invite: $invite));
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', "The email to {$user->email} couldn't be sent. Check the email settings (Send a test email).");
+        }
+
+        return back()->with('success', "Sent {$user->email} a link to choose a password.");
     }
 
     private const MESSAGES = [

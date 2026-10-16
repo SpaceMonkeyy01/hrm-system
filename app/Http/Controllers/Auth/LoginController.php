@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -45,6 +46,7 @@ class LoginController extends Controller
 
         // Staff go where they were heading; an employee login only ever has My page.
         $user = $request->user();
+        DB::table('users')->where('id', $user->id)->update(['last_login_at' => now()]);   // not a change worth logging
 
         return $user->canViewHr() ? redirect()->intended($user->homeUrl()) : redirect($user->homeUrl());
     }

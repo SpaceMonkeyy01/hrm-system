@@ -89,6 +89,19 @@ class Employee extends Model
                 $e->saveQuietly();
             }
         });
+        // Someone who has left (or whose record is deleted) can't keep logging in.
+        static::updated(function (Employee $e) {
+            if ($e->wasChanged('status') && $e->status === 'exited') {
+                $e->switchOffLogins();
+            }
+        });
+        static::deleted(fn (Employee $e) => $e->switchOffLogins());
+    }
+
+    /** Switch off this person's login(s); logged like any other change. */
+    public function switchOffLogins(): void
+    {
+        User::where('employee_id', $this->id)->where('is_active', true)->get()->each->update(['is_active' => false]);
     }
 
     protected function casts(): array

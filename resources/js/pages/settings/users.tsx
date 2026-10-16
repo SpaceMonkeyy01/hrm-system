@@ -1,5 +1,5 @@
 import { Head, router, useForm, usePage } from '@inertiajs/react';
-import { Mail, MailPlus, Plus } from 'lucide-react';
+import { KeyRound, Mail, MailPlus, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Field } from '@/components/field';
@@ -8,13 +8,17 @@ import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { plural } from '@/lib/format';
+import { toast } from 'sonner';
+import { formatDateTime, plural } from '@/lib/format';
 import type { SharedProps } from '@/types';
 
-type User = { id: number; name: string; email: string; role: string; is_active: boolean; employee_id: number | null; employee: string | null; created_at: string | null };
+type User = { id: number; name: string; email: string; role: string; is_active: boolean; employee_id: number | null; employee: string | null; created_at: string | null;
+    last_login_at: string | null; has_history: boolean };
 type Option = { value: number; label: string };
 
 const roleName = (r: string) => (r === 'hr' ? 'HR' : r[0].toUpperCase() + r.slice(1));
+
+const firstError = (e: Record<string, string>) => toast.error(Object.values(e)[0] ?? 'Not done.');
 
 function UserRow({ user, roles, isMe, employees }: { user: User; roles: Record<string, string>; isMe: boolean; employees: Option[] }) {
     const form = useForm({ name: user.name, email: user.email, role: user.role, is_active: user.is_active, password: '', employee_id: user.employee_id ? String(user.employee_id) : '' });
@@ -46,6 +50,9 @@ function UserRow({ user, roles, isMe, employees }: { user: User; roles: Record<s
                     <input type="checkbox" className="size-4 accent-cascade" checked={form.data.is_active} disabled={isMe} onChange={(e) => form.setData('is_active', e.target.checked)} />
                     Can log in
                 </label>
+                <span className="mt-1.5 block text-xs text-muted-foreground">
+                    {user.last_login_at ? `Last in ${formatDateTime(user.last_login_at)}` : 'Never logged in'}
+                </span>
             </td>
             <td className="py-2 pr-3">
                 <Input aria-label="New password" type="password" autoComplete="new-password" placeholder="Leave empty to keep" value={form.data.password}
@@ -53,7 +60,22 @@ function UserRow({ user, roles, isMe, employees }: { user: User; roles: Record<s
                 {form.errors.password && <p className="mt-1 text-xs text-missing">{form.errors.password}</p>}
             </td>
             <td className="py-2 text-right">
-                <form onSubmit={submit}><Button size="sm" type="submit" disabled={!form.isDirty || form.processing}>Save</Button></form>
+                <form onSubmit={submit} className="flex justify-end gap-1">
+                    <Button size="sm" type="submit" disabled={!form.isDirty || form.processing}>Save</Button>
+                    <Button size="sm" type="button" variant="ghost" disabled={!user.is_active} aria-label={`Email ${user.email} a link to choose a password`}
+                        title={user.is_active ? 'Email a link to choose a password' : 'Switched off'}
+                        onClick={() => confirm(`Email ${user.email} a link to choose a password?`)
+                            && router.post(`/settings/users/${user.id}/send-link`, {}, { preserveScroll: true, onError: firstError })}>
+                        <KeyRound /> Send link
+                    </Button>
+                    {!isMe && !user.has_history && (
+                        <Button size="sm" type="button" variant="ghost" aria-label={`Delete ${user.email}`} title="Delete: this login hasn't done anything yet"
+                            onClick={() => confirm(`Delete the login for ${user.email}? This can't be undone.`)
+                                && router.delete(`/settings/users/${user.id}`, { preserveScroll: true, onError: firstError })}>
+                            <Trash2 />
+                        </Button>
+                    )}
+                </form>
             </td>
         </tr>
     );
@@ -97,15 +119,15 @@ export default function Users({ users, roles, employees, staffLogins }: { users:
                 </Button>
             </div>
             <div className="overflow-x-auto px-4 py-4 md:px-6">
-                <table className="w-full min-w-[1080px] text-sm">
+                <table className="w-full min-w-[1120px] text-sm">
                     <thead>
                         <tr className="border-b text-left text-xs text-muted-foreground">
-                            <th className="py-2.5 pr-3 font-semibold">Name and email</th>
-                            <th className="w-40 py-2.5 pr-3 font-semibold">Role</th>
-                            <th className="w-64 py-2.5 pr-3 font-semibold">Their employee record</th>
+                            <th className="min-w-56 py-2.5 pr-3 font-semibold">Name and email</th>
+                            <th className="w-36 py-2.5 pr-3 font-semibold">Role</th>
+                            <th className="w-52 py-2.5 pr-3 font-semibold">Their employee record</th>
                             <th className="w-36 py-2.5 pr-3 font-semibold">Access</th>
-                            <th className="w-56 py-2.5 pr-3 font-semibold">Reset password</th>
-                            <th className="w-20 py-2.5" />
+                            <th className="w-44 py-2.5 pr-3 font-semibold">Set a password</th>
+                            <th className="w-56 py-2.5" />
                         </tr>
                     </thead>
                     <tbody className="divide-y">

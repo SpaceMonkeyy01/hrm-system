@@ -254,6 +254,8 @@ Route::middleware('auth')->group(function () {
             Route::post('test-email', TestEmailController::class)->middleware('throttle:5,1')->name('test-email');
             Route::post('users', [UserController::class, 'store'])->name('users.store');
             Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
+            Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+            Route::post('users/{user}/send-link', [UserController::class, 'sendLink'])->middleware('throttle:10,1')->name('users.send-link');
         Route::post('users/staff-logins', [StaffLoginController::class, 'store'])->name('users.staff-logins');
 
             Route::get('structure', [StructureController::class, 'index'])->name('structure.index');
