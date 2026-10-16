@@ -3,17 +3,22 @@
 namespace App\Http\Controllers;
 
 use App\Models\Employee;
+use App\Services\EmployeeFilters;
 use App\Services\StatusBoard;
 use App\Support\Csv;
+use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /** CSV downloads with the same numbers as the screens. Opens straight in Excel (UTF-8 BOM). */
 class ExportController extends Controller
 {
-    public function __invoke(string $type): StreamedResponse
+    public function __invoke(Request $request, string $type): StreamedResponse
     {
+        // Employees: exactly who the list shows with its filters (the button sends them). A bare link exports everyone.
+        $filters = $type === 'employees' ? $request->validate(EmployeeFilters::rules()) + ['status' => 'all'] : null;
         $employees = Employee::query()
             ->with(['company:id,name', 'department:id,name', 'team:id,name', 'onboarding'])
+            ->when($filters !== null, fn ($q) => EmployeeFilters::apply($q, $filters))
             ->when($type !== 'employees', fn ($q) => $q->whereIn('status', ['active', 'offboarding']))
             ->when($type === 'onboarding', fn ($q) => $q->whereHas('onboarding'))
             ->orderBy('full_name')->get();
@@ -36,9 +41,9 @@ class ExportController extends Controller
     private function employees($employees): array
     {
         return [
-            ['Code', 'Name', 'Company', 'Department', 'Team', 'Role', 'Employment type', 'Start date', 'Status',
+            ['Code', 'Name', 'Company', 'Department', 'Team', 'Role', 'Employment type', 'Work mode', 'Start date', 'Status',
                 'Exit date', 'CNIC', 'Email', 'Phone', 'HR.my ID', 'Attendance machine ID', 'Drive folder', 'Needs review', 'System ID'],
-            $employees->map(fn ($e) => [...$this->base($e), $e->team?->name, $e->role_title, $e->employment_type,
+            $employees->map(fn ($e) => [...$this->base($e), $e->team?->name, $e->role_title, $e->employment_type, $e->work_mode,
                 $e->start_date?->toDateString(), $e->status, $e->exit_date?->toDateString(), $e->cnic, $e->email, $e->phone,
                 $e->hr_portal_id, $e->attendance_machine_id, $e->drive_folder_url, $e->needs_review ? 'Yes' : '', $e->system_id])->all(),
         ];

@@ -15,6 +15,7 @@ use App\Http\Controllers\ControlledDocumentController;
 use App\Http\Controllers\CronController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentChecklistController;
+use App\Http\Controllers\EmployeeBulkController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EmployeeFileController;
 use App\Http\Controllers\EmploymentHistoryController;
@@ -111,6 +112,7 @@ Route::middleware('auth')->group(function () {
             Route::post('imports/{kind}/apply', [SpreadsheetImportController::class, 'apply'])->whereIn('kind', ['details', 'assets', 'links'])->name('imports.apply');
             Route::delete('imports/{kind}', [SpreadsheetImportController::class, 'discard'])->whereIn('kind', ['details', 'assets', 'links'])->name('imports.discard');
             Route::post('employees', [EmployeeController::class, 'store'])->name('employees.store');
+            Route::post('employees/bulk', EmployeeBulkController::class)->name('employees.bulk');
             Route::get('employees/{employee}/edit', [EmployeeController::class, 'edit'])->name('employees.edit');
             Route::put('employees/{employee}', [EmployeeController::class, 'update'])->name('employees.update');
             Route::post('employees/{employee}/review-decision', [EmployeeController::class, 'decideReview'])->name('employees.review-decision');

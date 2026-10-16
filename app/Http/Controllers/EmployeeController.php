@@ -15,6 +15,8 @@ use App\Models\Team;
 use App\Models\WorkSchedule;
 use App\Services\EmployeeRecords;
 use App\Services\HrRules;
+use App\Services\EmployeeFilters;
+use App\Services\JobHistory;
 use App\Services\ScheduleAssigner;
 use App\Services\StatusBoard;
 use Carbon\CarbonImmutable;
@@ -30,26 +32,12 @@ class EmployeeController extends Controller
 {
     public function index(Request $request): Response
     {
-        $f = $request->validate([
-            'q' => ['nullable', 'string', 'max:100'],
-            'company' => ['nullable', 'integer'],
-            'department' => ['nullable', 'integer'],
-            'status' => ['nullable', Rule::in(['current', 'active', 'review', 'offboarding', 'exited', 'all'])],
-            'review' => ['nullable', 'boolean'],
-            'unassigned' => ['nullable', 'boolean'],
+        $f = $request->validate(EmployeeFilters::rules() + [
             'sort' => ['nullable', Rule::in(['name', 'code', 'start_date', 'department'])],
         ]);
         $status = $f['status'] ?? 'current';
 
-        $q = Employee::query()
-            ->with(['company:id,name', 'department:id,name', 'team:id,name'])
-            ->search($f['q'] ?? null)
-            ->when($status === 'current', fn ($q) => $q->whereIn('status', ['active', 'offboarding']))
-            ->when(in_array($status, ['active', 'review', 'offboarding', 'exited'], true), fn ($q) => $q->where('status', $status))
-            ->when($f['company'] ?? null, fn ($q, $v) => $q->where('company_id', $v))
-            ->when($f['department'] ?? null, fn ($q, $v) => $q->where('department_id', $v))
-            ->when($f['review'] ?? false, fn ($q) => $q->where('needs_review', true))
-            ->when($f['unassigned'] ?? false, fn ($q) => $q->whereNull('company_id'));
+        $q = EmployeeFilters::apply(Employee::query()->with(['company:id,name', 'department:id,name', 'team:id,name']), $f);
 
         match ($f['sort'] ?? 'name') {
             'code' => $q->orderBy('employee_code'),
@@ -69,6 +57,14 @@ class EmployeeController extends Controller
             'employees' => $page,
             'filters' => ['status' => $status] + $f,
             'companies' => $this->companyOptions(),
+            'employmentTypes' => config('hrm.employment_types'),
+            'workModes' => config('hrm.work_modes'),
+            // Managers: anyone who manages someone, for the filter and the bulk change.
+            'managers' => Employee::query()->whereIn('status', ['active', 'offboarding'])->orderBy('full_name')->get(['id', 'employee_code', 'full_name'])
+                ->map(fn ($e) => ['value' => $e->id, 'label' => "{$e->full_name} ({$e->employee_code})"]),
+            'managerIds' => Employee::query()->whereNotNull('manager_id')->distinct()->pluck('manager_id')
+                ->merge(Employee::query()->whereNotNull('secondary_manager_id')->distinct()->pluck('secondary_manager_id'))->unique()->values(),
+            'schedules' => WorkSchedule::query()->orderBy('name')->get(['id', 'name'])->map(fn ($s) => ['value' => $s->id, 'label' => $s->name]),
         ]);
     }
 
@@ -249,7 +245,7 @@ class EmployeeController extends Controller
         $schedule = $this->validatedSchedule($request);
 
         DB::transaction(function () use ($employee, $data, $change, $request, $schedule, $categories) {
-            $jobBefore = $this->jobLabels($employee);
+            $jobBefore = JobHistory::labels($employee);
             if ($schedule) {
                 ScheduleAssigner::assign([$employee], $schedule['schedule'], $schedule['starts_on'] ?? CarbonImmutable::today()->toDateString(), $request->user()->id);
             }
@@ -269,7 +265,7 @@ class EmployeeController extends Controller
             if ($categories !== null) {
                 $employee->categories()->sync($categories);
             }
-            $this->recordJobChange($employee, $jobBefore, $change, $request->user()?->id);
+            JobHistory::record($employee, $jobBefore, $change, $request->user()?->id);
 
             // Keep the probation end date in step with the start date, unless HR set it by hand.
             $o = $employee->onboarding()->first();
@@ -494,52 +490,4 @@ class EmployeeController extends Controller
     }
 
     /** Job fields as the names HR reads (company, department, team and manager names rather than ids). */
-    private function jobLabels(Employee $e): array
-    {
-        $out = [];
-        foreach (Employee::JOB_FIELDS as $field => $label) {
-            $out[$label] = match ($field) {
-                'company_id' => $e->company_id ? Company::find($e->company_id)?->name : null,
-                'department_id' => $e->department_id ? Department::find($e->department_id)?->name : null,
-                'team_id' => $e->team_id ? Team::find($e->team_id)?->name : null,
-                'manager_id' => $e->manager_id ? Employee::withTrashed()->find($e->manager_id)?->full_name : null,
-                default => $e->{$field},
-            };
-        }
-
-        return $out;
-    }
-
-    /**
-     * Write one employment_history row when a job field changed. The type is what HR picked, or a guess from what changed
-     * (company/department/team = Transfer first). The effective date defaults to today.
-     */
-    private function recordJobChange(Employee $employee, array $before, array $change, ?int $userId): void
-    {
-        $after = $this->jobLabels($employee);
-        $diff = [];
-        foreach ($after as $label => $value) {
-            if (($before[$label] ?? null) !== $value) {
-                $diff[$label] = [$before[$label] ?? null, $value];
-            }
-        }
-        if (! $diff) {
-            return;
-        }
-        $guess = match (true) {
-            (bool) array_intersect_key($diff, array_flip(['Company', 'Department', 'Team'])) => 'Transfer',
-            isset($diff['Role']) => 'Role change',
-            isset($diff['Employment type']) => 'Employment type change',
-            isset($diff['Manager']) => 'Manager change',
-            default => 'Work mode change',
-        };
-        EmploymentHistory::create([
-            'employee_id' => $employee->id,
-            'effective_date' => $change['change_effective_date'] ?? CarbonImmutable::today()->toDateString(),
-            'change_type' => $change['change_type'] ?? $guess,
-            'changes' => $diff,
-            'note' => $change['change_note'] ?? null,
-            'created_by' => $userId,
-        ]);
-    }
 }

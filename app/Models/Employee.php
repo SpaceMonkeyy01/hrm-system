@@ -117,6 +117,12 @@ class Employee extends Model
         ];
     }
 
+    /** Their login, when they have one (users.employee_id). */
+    public function user(): HasOne
+    {
+        return $this->hasOne(User::class);
+    }
+
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
