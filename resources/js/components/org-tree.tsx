@@ -23,6 +23,8 @@ export type OrgNode = {
     children?: OrgNode[];
     /** Shown as a stacked list under the box when it is open (teams), so wide teams don't stretch the chart. */
     people?: OrgPerson[];
+    /** People whose second manager this is: a dashed stack under the box when it is open. */
+    dotted?: OrgPerson[];
     /**
      * "grid": children wrap as a grid of boxes under this one instead of one long row (a company's 20+
      * departments). An open child then takes the full width and shows its own small tree.
@@ -40,11 +42,13 @@ const kindStyle: Record<OrgNode['kind'], string> = {
 
 const PEOPLE_SHOWN = 8;
 
-function PeopleStack({ people, highlight }: { people: OrgPerson[]; highlight: (p: OrgPerson) => boolean }) {
+function PeopleStack({ people, highlight, dotted }: { people: OrgPerson[]; highlight: (p: OrgPerson) => boolean; dotted?: boolean }) {
     const [all, setAll] = useState(false);
     const shown = all ? people : people.slice(0, PEOPLE_SHOWN);
     return (
-        <div className="mt-1.5 grid w-48 gap-1" role="list">
+        <div className={cn('mt-1.5 grid w-48 gap-1', dotted && 'rounded-md border border-dashed border-cascade/40 p-1')} role="list"
+            aria-label={dotted ? 'Dotted-line reports' : undefined}>
+            {dotted && <p className="px-1 text-[10px] font-semibold text-muted-foreground">Dotted line ({people.length})</p>}
             {shown.map((p) => (
                 <div key={p.id} role="listitem">
                     <Link href={`/employees/${p.id}`} title={[p.code, p.role].filter(Boolean).join(', ') || undefined}
@@ -72,7 +76,7 @@ function Branch({ node, open, toggle, highlight, fill, nested }: {
     /** Already inside a grid: a grid of children takes the cell's width instead of a fixed one. */
     nested?: boolean;
 }) {
-    const hasMore = !!(node.children?.length || node.people?.length);
+    const hasMore = !!(node.children?.length || node.people?.length || node.dotted?.length);
     const isOpen = open.has(node.key);
     const hit = node.person ? highlight(node.person) : false;
     const inner = (
@@ -99,6 +103,7 @@ function Branch({ node, open, toggle, highlight, fill, nested }: {
                 <Link href={node.href} className={box}>{inner}</Link>
             ) : <div className={box}>{inner}</div>}
             {isOpen && node.people && node.people.length > 0 && <PeopleStack people={node.people} highlight={highlight} />}
+            {isOpen && node.dotted && node.dotted.length > 0 && <PeopleStack people={node.dotted} highlight={highlight} dotted />}
             {isOpen && node.children && node.children.length > 0 && (node.childLayout === 'grid' ? (
                 <div className={cn('flex flex-col items-center', nested || fill ? 'w-full' : '')}>
                     <span className="h-5 w-px bg-border" aria-hidden />
@@ -126,7 +131,7 @@ function allKeys(n: OrgNode): string[] {
 
 /** Keys of every box on the way to a person whose name contains the search text, so the match is visible. */
 function pathsTo(n: OrgNode, match: (p: OrgPerson) => boolean): string[] {
-    const own = (n.person && match(n.person)) || (n.people ?? []).some(match);
+    const own = (n.person && match(n.person)) || (n.people ?? []).some(match) || (n.dotted ?? []).some(match);
     const below = (n.children ?? []).flatMap((c) => pathsTo(c, match));
     return own || below.length ? [n.key, ...below] : [];
 }
@@ -170,12 +175,12 @@ export function OrgTree({ root, startOpen, needle, zoom, command, storageKey }: 
     return (
         <div className="grid gap-2">
             {/* Scrolls sideways when wide; up and down with the page, under the sticky bar. */}
-            <div ref={scroller} className="overflow-x-auto rounded-lg border bg-[#fbfcfd] p-6">
+            <div ref={scroller} className="overflow-x-auto rounded-lg border bg-[#fbfcfd] p-6 print:overflow-visible print:border-0 print:bg-white print:p-0">
                 <div className="org-tree mx-auto w-max" style={{ zoom }}>
                     <ul><Branch node={root} open={effective} toggle={toggle} highlight={highlight} /></ul>
                 </div>
             </div>
-            <p className="text-xs text-muted-foreground">Click a box to open or close what is under it. {plural(root.count ?? 0, 'person', 'people')} in this chart.</p>
+            <p className="text-xs text-muted-foreground print:hidden">Click a box to open or close what is under it. {plural(root.count ?? 0, 'person', 'people')} in this chart.</p>
         </div>
     );
 }

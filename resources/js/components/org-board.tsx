@@ -5,7 +5,7 @@ import { plural } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 type Person = { id: number; name: string; code: string; role: string | null; leaving: boolean; photo?: string | null };
-type Department = { id: number | null; name: string; count: number; teams: { name: string | null; people: Person[] }[] };
+type Department = { id: number | null; name: string; count: number; head?: { id: number; name: string } | null; teams: { name: string | null; people: Person[] }[] };
 
 const SHOWN = 6;
 
@@ -57,6 +57,11 @@ export function OrgBoard({ companies, needle }: { companies: { name: string; cou
                                     {d.id ? <Link href={`/employees?department=${d.id}`} className="truncate hover:text-cascade hover:underline">{d.name}</Link> : <span className="truncate">{d.name}</span>}
                                     <span className="shrink-0 text-xs font-semibold text-muted-foreground tabular-nums">{d.count}</span>
                                 </p>
+                                {d.head && (
+                                    <p className="-mt-1 px-0.5 text-xs text-muted-foreground">
+                                        Head: <Link href={`/employees/${d.head.id}`} className="font-semibold text-foreground hover:text-cascade hover:underline">{d.head.name}</Link>
+                                    </p>
+                                )}
                                 {d.teams.map((t) => <TeamCard key={t.name ?? '-'} name={t.name} people={t.people} needle={needle} />)}
                             </div>
                         ))}

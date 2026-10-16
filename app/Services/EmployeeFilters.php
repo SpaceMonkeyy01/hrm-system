@@ -21,6 +21,7 @@ class EmployeeFilters
             'type' => ['nullable', 'string', 'max:40'],
             'mode' => ['nullable', 'string', 'max:40'],
             'manager' => ['nullable', 'integer'],
+            'no_manager' => ['nullable', 'boolean'],
             'started_from' => ['nullable', 'date_format:Y-m-d'],
             'started_to' => ['nullable', 'date_format:Y-m-d'],
             'login' => ['nullable', 'in:yes,no'],
@@ -45,6 +46,7 @@ class EmployeeFilters
             ->when($f['type'] ?? null, fn ($q, $v) => $q->where('employment_type', $v))
             ->when($f['mode'] ?? null, fn ($q, $v) => $q->where('work_mode', $v))
             ->when($f['manager'] ?? null, fn ($q, $v) => $q->where(fn ($q) => $q->where('manager_id', $v)->orWhere('secondary_manager_id', $v)))
+            ->when($f['no_manager'] ?? false, fn ($q) => $q->whereNull('manager_id'))
             ->when($f['started_from'] ?? null, fn ($q, $v) => $q->where('start_date', '>=', $v))
             ->when($f['started_to'] ?? null, fn ($q, $v) => $q->where('start_date', '<=', $v))
             ->when(($f['login'] ?? null) === 'yes', fn ($q) => $q->whereHas('user'))

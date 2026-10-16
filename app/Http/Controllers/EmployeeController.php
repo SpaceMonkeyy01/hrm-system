@@ -438,7 +438,7 @@ class EmployeeController extends Controller
             'companies' => Company::query()->orderBy('name')->with('departments.teams')->get()->map(fn ($c) => [
                 'id' => $c->id, 'name' => $c->name, 'nextCode' => $c->nextEmployeeCode(),
                 'departments' => $c->departments->map(fn ($d) => [
-                    'id' => $d->id, 'name' => $d->name,
+                    'id' => $d->id, 'name' => $d->name, 'head_id' => $d->head_employee_id,
                     'teams' => $d->teams->map(fn ($t) => ['id' => $t->id, 'name' => $t->name])->all(),
                 ])->all(),
             ])->all(),

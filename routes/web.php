@@ -263,6 +263,7 @@ Route::middleware('auth')->group(function () {
             Route::get('structure', [StructureController::class, 'index'])->name('structure.index');
             Route::post('departments', [StructureController::class, 'storeDepartment'])->name('departments.store');
             Route::put('departments/{department}', [StructureController::class, 'updateDepartment'])->name('departments.update');
+            Route::put('departments/{department}/head', [StructureController::class, 'setHead'])->name('departments.head');
             Route::delete('departments/{department}', [StructureController::class, 'destroyDepartment'])->name('departments.destroy');
             Route::post('teams', [StructureController::class, 'storeTeam'])->name('teams.store');
             Route::put('teams/{team}', [StructureController::class, 'updateTeam'])->name('teams.update');

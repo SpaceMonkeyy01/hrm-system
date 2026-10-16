@@ -291,3 +291,12 @@
         border-left: 1px solid var(--border);
     }
 }
+
+/* Printing a page (Org chart > Print): the page only, without the sidebar or the phone bar. */
+@media print {
+    [data-slot='sidebar'],
+    [data-slot='sidebar-rail'],
+    [data-slot='sidebar-trigger'] {
+        display: none !important;
+    }
+}

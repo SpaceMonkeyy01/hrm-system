@@ -11,11 +11,17 @@ class Department extends Model
 {
     use LogsActivity;
 
-    protected $fillable = ['company_id', 'name'];
+    protected $fillable = ['company_id', 'name', 'head_employee_id'];
 
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    /** The department head (optional): top of the department on the org chart, default manager for new joiners. */
+    public function head(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'head_employee_id');
     }
 
     public function teams(): HasMany

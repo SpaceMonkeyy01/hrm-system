@@ -3,13 +3,15 @@ import { Check, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { toast } from 'sonner';
+import { NativeSelect } from '@/components/native-select';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { plural } from '@/lib/format';
 
 type Team = { id: number; name: string; employees: number };
-type Department = { id: number; name: string; employees: number; teams: Team[] };
+type Department = { id: number; name: string; employees: number; head_id: number | null; teams: Team[] };
+type Option = { value: number; label: string };
 type Company = { id: number; name: string; code: string; prefix: string; employees: number; departments: Department[] };
 type Category = { id: number; name: string; employees: number };
 
@@ -45,11 +47,11 @@ function AddInline({ placeholder, onAdd }: { placeholder: string; onAdd: (name: 
     );
 }
 
-export default function Structure({ companies, categories }: { companies: Company[]; categories: Category[] }) {
+export default function Structure({ companies, categories, people }: { companies: Company[]; categories: Category[]; people: Record<number, Option[]> }) {
     return (
         <>
             <Head title="Departments and teams" />
-            <PageHeader title="Departments and teams" description="Companies, their departments, the teams inside each department, and categories. Delete works only when nobody is assigned." />
+            <PageHeader title="Departments and teams" description="Companies, their departments (with an optional head, shown on the org chart and suggested as manager for new joiners), the teams inside each department, and categories. Delete works only when nobody is assigned." />
             <div className="grid gap-10 px-4 py-6 md:px-6">
                 {companies.map((c) => (
                     <section key={c.id}>
@@ -66,6 +68,9 @@ export default function Structure({ companies, categories }: { companies: Compan
                                     <div>
                                         <Rename value={d.name} url={`/settings/departments/${d.id}`} label={d.name} />
                                         <p className="text-xs text-muted-foreground">{plural(d.employees, 'employee')}</p>
+                                        <NativeSelect className="mt-1.5 h-8 w-full text-xs" aria-label={`Head of ${d.name}`} value={d.head_id ?? ''} placeholder="No head"
+                                            options={people[c.id] ?? []}
+                                            onChange={(e) => router.put(`/settings/departments/${d.id}/head`, { head_employee_id: e.target.value || null }, opts)} />
                                     </div>
                                     <div className="flex flex-wrap items-center gap-1.5">
                                         {d.teams.map((t) => (

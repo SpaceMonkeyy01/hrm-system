@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 
-type Company = { id: number; name: string; nextCode: string; departments: { id: number; name: string; teams: { id: number; name: string }[] }[] };
+type Company = { id: number; name: string; nextCode: string; departments: { id: number; name: string; head_id: number | null; teams: { id: number; name: string }[] }[] };
 type EmployeeData = {
     id: number; employee_code: string; full_name: string; first_name: string | null; last_name: string | null; cnic: string | null;
     email: string | null; phone: string | null; company_id: number | null; department_id: number | null; team_id: number | null;
@@ -171,7 +171,12 @@ export default function EmployeeForm({ employee, companies, managers, employment
                     <legend className="mb-3 font-bold">Work</legend>
                     <Field label="Department" htmlFor="department_id" error={form.errors.department_id}>
                         <NativeSelect id="department_id" value={d.department_id} disabled={!company} placeholder={company ? 'No department' : 'Choose a company first'}
-                            onChange={(e) => form.setData((prev) => ({ ...prev, department_id: e.target.value, team_id: '' }))}
+                            onChange={(e) => form.setData((prev) => {
+                                // New joiner with no manager yet: the department head is the starting suggestion.
+                                const head = company?.departments.find((x) => x.id === Number(e.target.value))?.head_id;
+                                const suggest = !employee && !prev.manager_id && head ? head : prev.manager_id;
+                                return { ...prev, department_id: e.target.value, team_id: '', manager_id: suggest };
+                            })}
                             options={(company?.departments ?? []).map((x) => ({ value: x.id, label: x.name }))} />
                     </Field>
                     <Field label="Team" htmlFor="team_id" error={form.errors.team_id}>

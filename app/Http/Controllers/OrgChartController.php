@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Company;
+use App\Models\Department;
 use App\Models\Employee;
+use App\Services\ManagerCheckup;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -13,6 +15,8 @@ use Inertia\Response;
  *  - structure  company > department > team > people (from department and team on each profile)
  *  - managers   who reports to whom (from Manager on each profile); a person is a root when they have reports
  *               but no current manager. People with neither a manager nor reports are counted, not drawn.
+ *               Second managers show as dotted-line reports under that manager.
+ *  - check-up   reporting lines that need fixing (ManagerCheckup)
  */
 class OrgChartController extends Controller
 {
@@ -23,7 +27,9 @@ class OrgChartController extends Controller
             ->with(['company:id,name', 'department:id,name', 'team:id,name'])
             ->when($f['company'] ?? null, fn ($q, $v) => $q->where('company_id', $v))
             ->orderBy('full_name')
-            ->get(['id', 'employee_code', 'full_name', 'role_title', 'company_id', 'department_id', 'team_id', 'manager_id', 'status', 'photo_path']);
+            ->get(['id', 'employee_code', 'full_name', 'role_title', 'company_id', 'department_id', 'team_id', 'manager_id', 'secondary_manager_id', 'status', 'photo_path']);
+        $heads = Department::query()->whereNotNull('head_employee_id')->with('head:id,full_name')->get(['id', 'head_employee_id'])
+            ->mapWithKeys(fn ($d) => [$d->id => $d->head ? ['id' => $d->head->id, 'name' => $d->head->full_name] : null]);
         $node = fn (Employee $e) => ['id' => $e->id, 'name' => $e->full_name, 'code' => $e->employee_code, 'role' => $e->role_title, 'photo' => $e->photoUrl(),
             'department' => $e->department?->name, 'leaving' => $e->status === 'offboarding'];
 
@@ -38,7 +44,8 @@ class OrgChartController extends Controller
                 }
                 // Named teams A-Z, people without a team last.
                 usort($teams, fn ($a, $b) => [$a['name'] === null, $a['name']] <=> [$b['name'] === null, $b['name']]);
-                $departments[] = ['id' => $inDept->first()->department_id, 'name' => $department, 'count' => $inDept->count(), 'teams' => $teams];
+                $deptId = $inDept->first()->department_id;
+                $departments[] = ['id' => $deptId, 'name' => $department, 'count' => $inDept->count(), 'teams' => $teams, 'head' => $deptId ? ($heads[$deptId] ?? null) : null];
             }
             usort($departments, fn ($a, $b) => $b['count'] <=> $a['count']);
             $structure[] = ['name' => $company, 'count' => $inCompany->count(), 'departments' => $departments];
@@ -48,14 +55,16 @@ class OrgChartController extends Controller
         // ---------------------------------------------------------------- managers
         $byId = $people->keyBy('id');
         $reports = $people->filter(fn ($e) => $e->manager_id && $byId->has($e->manager_id))->groupBy('manager_id');
-        $build = function (Employee $e, array $seen) use (&$build, $reports, $node): array {
+        $dotted = $people->filter(fn ($e) => $e->secondary_manager_id && $byId->has($e->secondary_manager_id))->groupBy('secondary_manager_id');
+        $build = function (Employee $e, array $seen) use (&$build, $reports, $dotted, $node): array {
             $seen[$e->id] = true;   // a loop (A manages B manages A) stops here instead of running forever
             $children = ($reports->get($e->id) ?? collect())->reject(fn ($r) => isset($seen[$r->id]))
                 ->map(fn ($r) => $build($r, $seen))->values()->all();
 
-            return $node($e) + ['reports' => $children, 'total' => array_sum(array_map(fn ($c) => 1 + $c['total'], $children))];
+            return $node($e) + ['reports' => $children, 'total' => array_sum(array_map(fn ($c) => 1 + $c['total'], $children)),
+                'dotted' => ($dotted->get($e->id) ?? collect())->map($node)->values()->all()];
         };
-        $roots = $people->filter(fn ($e) => $reports->has($e->id) && (! $e->manager_id || ! $byId->has($e->manager_id)))
+        $roots = $people->filter(fn ($e) => ($reports->has($e->id) || $dotted->has($e->id)) && (! $e->manager_id || ! $byId->has($e->manager_id)))
             ->map(fn ($e) => $build($e, []))->sortByDesc('total')->values()->all();
         $inTree = $people->filter(fn ($e) => $reports->has($e->id) || ($e->manager_id && $byId->has($e->manager_id)))->count();
 
@@ -64,7 +73,8 @@ class OrgChartController extends Controller
             'companies' => Company::query()->orderBy('name')->get(['id', 'name']),
             'total' => $people->count(),
             'structure' => $structure,
-            'managers' => ['roots' => $roots, 'inTree' => $inTree, 'withoutManager' => $people->count() - $inTree],
+            'managers' => ['roots' => $roots, 'inTree' => $inTree, 'withoutManager' => $people->count() - $inTree, 'dotted' => $dotted->flatten()->count()],
+            'checkup' => ManagerCheckup::run($people),
         ]);
     }
 }
