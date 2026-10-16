@@ -5,6 +5,10 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Models\ChecklistItem;
 use App\Services\HrRules;
+use App\Models\AppSetting;
+use App\Models\Onboarding;
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -34,7 +38,57 @@ class ChecklistItemController extends Controller
             ])]),
             'optionSets' => config('hrm.option_sets'),
             'setsPerList' => self::SETS,
+            'probation' => [
+                'days' => HrRules::probationDays(),
+                'checkins' => collect(HrRules::checkinOffsets())->map(fn ($days, $key) => [
+                    'key' => $key, 'days' => $days, 'label' => $items->firstWhere('key', $key)?->label ?? $key,
+                ])->values(),
+            ],
         ]);
+    }
+
+    /**
+     * Probation length and check-in days for everyone (Settings > Checklists > Onboarding). Check-in due dates are worked
+     * out live, so they follow at once. Stored end dates change only for open probations still on the old length, when
+     * HR asks; anyone extended or with an end date typed by hand keeps theirs.
+     */
+    public function updateProbation(Request $request): RedirectResponse
+    {
+        $keys = array_keys(config('hrm.reminders.checkin_offsets'));
+        $data = $request->validate([
+            'days' => ['required', 'integer', 'min:7', 'max:730'],
+            'checkins' => ['required', 'array'],
+            ...collect($keys)->mapWithKeys(fn ($k) => ["checkins.$k" => ['required', 'integer', 'min:1', 'lte:days']])->all(),
+            'update_open' => ['boolean'],
+        ], ['checkins.*.lte' => 'A check-in can\'t be after the end of probation.']);
+        $days = array_map(fn ($k) => (int) $data['checkins'][$k], $keys);
+        $sorted = $days;
+        sort($sorted);
+        if ($days !== $sorted || count(array_unique($days)) !== count($days)) {
+            throw ValidationException::withMessages(['checkins' => 'Put the check-ins in order, each on a later day than the one before.']);
+        }
+
+        $oldDays = HrRules::probationDays();
+        $moved = 0;
+        DB::transaction(function () use ($data, $keys, $oldDays, $request, &$moved) {
+            AppSetting::put('probation_days', (int) $data['days']);
+            AppSetting::put('checkin_offsets', array_combine($keys, array_map(fn ($k) => (int) $data['checkins'][$k], $keys)));
+            if ($request->boolean('update_open') && $oldDays !== (int) $data['days']) {
+                $open = Onboarding::query()->open()->where('probation_result', 'Pending')->whereNotNull('probation_end_date')
+                    ->whereHas('employee', fn ($q) => $q->whereIn('status', ['active', 'offboarding'])->whereNotNull('start_date'))
+                    ->with('employee:id,start_date')->get();
+                foreach ($open as $o) {
+                    $start = CarbonImmutable::parse($o->employee->start_date);
+                    if ($o->probation_end_date->toDateString() === $start->addDays($oldDays)->toDateString()) {
+                        $o->update(['probation_end_date' => $start->addDays((int) $data['days'])->toDateString()]);
+                        $moved++;
+                    }
+                }
+            }
+        });
+
+        return back()->with('success', 'Saved. Probation is now '.$data['days'].' days.'
+            .($moved ? ' Moved the end date for '.($moved === 1 ? '1 open probation.' : "$moved open probations.") : ''));
     }
 
     public function store(Request $request): RedirectResponse

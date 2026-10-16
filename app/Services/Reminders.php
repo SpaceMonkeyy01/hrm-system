@@ -43,7 +43,7 @@ class Reminders
 
         $active = Employee::query()->where('status', 'active')
             ->get(['id', 'employee_code', 'full_name', 'start_date', 'status', 'cnic_expiry']);
-        $onboardings = Onboarding::query()->whereHas('employee', fn ($q) => $q->where('status', 'active'))
+        $onboardings = Onboarding::query()->open()->whereHas('employee', fn ($q) => $q->where('status', 'active'))
             ->get(['id', 'employee_id', 'probation_end_date', 'probation_result'])->keyBy('employee_id');
         // The relation includes trashed employees (case history), so skip them explicitly.
         $offboardings = Offboarding::query()->where('status', 'in_progress')->whereNotNull('last_working_day')
@@ -54,6 +54,8 @@ class Reminders
         $board = new StatusBoard(array_values(array_unique([...$active->pluck('id')->all(), ...$offboardings->pluck('employee_id')->all()])));
         $onboardingItems = $board->items['onboarding']->keyBy('key');
 
+        // Probation and check-in reminders open the 90-day plan when it's switched on, else the profile's Onboarding tab.
+        $planLink = fn (Employee $e) => config('hrm.probation_plan') ? "/employees/{$e->id}/plan" : "/employees/{$e->id}#onboarding";
         $out = [];
         $add = function (Employee $e, string $type, string $severity, string $due, string $message, string $link) use (&$out, $today) {
             $out[] = [
@@ -90,16 +92,16 @@ class Reminders
                 $days = HrRules::daysUntil($end, $today);
                 if (HrRules::isProbationOverdue($end, $o->probation_result, $today)) {
                     $add($e, 'probation_overdue', 'overdue', $end,
-                        'Probation ended '.self::when($days).' and still needs a decision', "/employees/{$e->id}/plan");
+                        'Probation ended '.self::when($days).' and still needs a decision', $planLink($e));
                 } elseif (HrRules::isProbationEndingSoon($end, $o->probation_result, $today, (int) $cfg['probation_ending_days'])) {
-                    $add($e, 'probation_ending', 'due_soon', $end, 'Probation ends '.self::when($days), "/employees/{$e->id}/plan");
+                    $add($e, 'probation_ending', 'due_soon', $end, 'Probation ends '.self::when($days), $planLink($e));
                 }
             }
 
             // ---------------------------------------------------------------- check-ins
             if ($o && $e->start_date && ! in_array($o->probation_result, ['Pass', 'Fail'], true)) {
                 $values = $board->values($e->id, 'onboarding');
-                foreach (array_keys($cfg['checkin_offsets']) as $key) {
+                foreach (array_keys(HrRules::checkinOffsets()) as $key) {
                     $item = $onboardingItems->get($key);
                     if (! $item || HrRules::isDone($values[$key] ?? null, $item->option_set)) {
                         continue;
@@ -111,7 +113,7 @@ class Reminders
                         $message = $severity === 'overdue'
                             ? "{$item->label} was due ".self::when($days)
                             : "{$item->label} is due ".self::when($days);
-                        $add($e, $severity === 'overdue' ? 'checkin_missed' : 'checkin_due', $severity, $due, $message, "/employees/{$e->id}/plan");
+                        $add($e, $severity === 'overdue' ? 'checkin_missed' : 'checkin_due', $severity, $due, $message, $planLink($e));
                     }
                 }
             }

@@ -40,11 +40,14 @@ class OnboardingController extends Controller
             'docs' => ['nullable', Rule::in(['Pending', 'Complete'])],
             'legal' => ['nullable', Rule::in(['pending'])],
             'probation' => ['nullable', Rule::in([...config('hrm.probation_results'), 'none', 'overdue', 'ending'])],
+            'show' => ['nullable', Rule::in(['open', 'closed', 'all'])],
         ]);
+        $show = $f['show'] ?? 'open';
 
         $employees = Employee::query()
             ->whereIn('status', ['active', 'offboarding'])
-            ->whereHas('onboarding')
+            ->whereHas('onboarding', fn ($q) => $q->when($show === 'open', fn ($q) => $q->whereNull('closed_at'))
+                ->when($show === 'closed', fn ($q) => $q->whereNotNull('closed_at')))
             ->with(['onboarding', 'company:id,name', 'department:id,name'])
             ->search($f['q'] ?? null)
             ->when($f['company'] ?? null, fn ($q, $v) => $q->where('company_id', $v))
@@ -78,6 +81,7 @@ class OnboardingController extends Controller
                 'orientation' => $board->orientation($e->id),
                 'documents' => $board->documents($e->id),
                 'status' => $board->onboarding($e->id, $o->probation_result),
+                'closed_at' => $o->closed_at?->toDateString(),
             ];
         })->filter(function (array $r) use ($f) {
             $cohort = $f['cohort'] ?? null;
@@ -111,6 +115,9 @@ class OnboardingController extends Controller
             'companies' => Company::query()->orderBy('name')->with('departments:id,company_id,name')->get(['id', 'name']),
             'cohorts' => config('hrm.cohorts'),
             'probationResults' => config('hrm.probation_results'),
+            // For "close out old records": open records of people who started before the cut-off, or with no start date.
+            'closeCandidates' => $this->closeCandidates(CarbonImmutable::today()->subDays((int) config('hrm.reminders.recent_start_days', 180))->toDateString()),
+            'closedCount' => Onboarding::query()->whereNotNull('closed_at')->whereHas('employee', fn ($q) => $q->whereIn('status', ['active', 'offboarding']))->count(),
             'notInOnboarding' => Employee::query()->whereIn('status', ['active', 'offboarding'])->whereDoesntHave('onboarding')->count(),
         ]);
     }
@@ -136,6 +143,54 @@ class OnboardingController extends Controller
         $onboarding->update($data);
 
         return back();
+    }
+
+    /**
+     * Close onboarding: ticked people (ids), or everyone still open who started before a date (and, if asked, those
+     * with no start date). The record and its checklist stay; it just stops being tracked.
+     */
+    public function close(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'ids' => ['nullable', 'array', 'max:1000'],
+            'ids.*' => ['integer'],
+            'started_before' => ['nullable', 'required_without:ids', 'date'],
+            'include_undated' => ['boolean'],
+            'note' => ['nullable', 'string', 'max:300'],
+        ]);
+        $q = Onboarding::query()->open()->whereHas('employee', fn ($q) => $q->whereIn('status', ['active', 'offboarding']));
+        if (! empty($data['ids'])) {
+            $q->whereIn('employee_id', $data['ids']);
+            $note = $data['note'] ?? 'Closed from the tracker';
+        } else {
+            $before = $data['started_before'];
+            $undated = $request->boolean('include_undated');
+            $q->whereHas('employee', fn ($q) => $q->where(fn ($q) => $q->where('start_date', '<', $before)
+                ->when($undated, fn ($q) => $q->orWhereNull('start_date'))));
+            $note = $data['note'] ?? 'Closed out: started before '.CarbonImmutable::parse($before)->format('j M Y').($undated ? ' or no start date' : '');
+        }
+        $n = 0;
+        foreach ($q->get() as $o) {
+            $o->update(['closed_at' => now(), 'closed_note' => $note]);
+            $n++;
+        }
+
+        return back()->with('success', $n === 1 ? 'Closed 1 onboarding record. It is kept on file.' : "Closed $n onboarding records. They are kept on file.");
+    }
+
+    public function reopen(Employee $employee): RedirectResponse
+    {
+        $employee->onboarding()->first()?->update(['closed_at' => null, 'closed_note' => null]);
+
+        return back()->with('success', "{$employee->full_name}'s onboarding is open again.");
+    }
+
+    /** @return array{before: string, dated: int, undated: int} */
+    private function closeCandidates(string $before): array
+    {
+        $open = fn () => Employee::query()->whereIn('status', ['active', 'offboarding'])->whereHas('onboarding', fn ($q) => $q->open());
+
+        return ['before' => $before, 'dated' => $open()->where('start_date', '<', $before)->count(), 'undated' => $open()->whereNull('start_date')->count()];
     }
 
     /** Put someone who isn't in the onboarding process yet into it. */

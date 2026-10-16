@@ -51,7 +51,7 @@ type EmployeeFile = { id: number; checklist_item_id: number | null; label: strin
 type HistoryEntry = { id: number; effective_date: string; change_type: string; changes: Record<string, [string | null, string | null]>; note: string | null; by: string | null };
 type Onboarding = {
     cohort: string | null; probation_end_date: string | null; probation_result: string | null; notes: string | null; plan_url: string | null;
-    overdue: boolean; orientation: string; documents: string; status: string;
+    overdue: boolean; orientation: string; documents: string; status: string; closed_at: string | null; closed_note: string | null;
 };
 type List = { columns: ChecklistColumn[]; values: Record<string, string | null> };
 type Props = {
@@ -61,6 +61,7 @@ type Props = {
     lists: Record<'onboarding' | 'document' | 'offboarding', List>;
     optionSets: OptionSets;
     plan: { updated_at: string | null } | null;
+    planEnabled: boolean;
     offboardings: { id: number; type: string; status: string; last_working_day: string | null }[];
     employmentHistory: HistoryEntry[];
     attendance: AttendanceMonth;
@@ -411,11 +412,11 @@ export default function EmployeeShow(props: Props) {
                                 <a href={e.drive_folder_url} target="_blank" rel="noreferrer"><FolderOpen /> Drive folder</a>
                             </Button>
                         )}
-                        {props.plan ? (
+                        {props.planEnabled && (props.plan ? (
                             <Button variant="outline" asChild><Link href={`/employees/${e.id}/plan`}>90-day plan</Link></Button>
                         ) : can && (
                             <Button variant="outline" onClick={() => router.post(`/employees/${e.id}/plan`)}>Start 90-day plan</Button>
-                        )}
+                        ))}
                         {can && <Button variant="outline" asChild><Link href={`/employees/${e.id}/letters/new`}><Mail /> Issue a letter</Link></Button>}
                         {can && <Button asChild><Link href={`/employees/${e.id}/edit`}><Pencil /> Edit</Link></Button>}
                         {auth.can.admin && (
@@ -570,6 +571,12 @@ export default function EmployeeShow(props: Props) {
                     ) : (
                         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
                             <div className="grid content-start gap-5">
+                                {o.closed_at && (
+                                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/50 px-3 py-2.5 text-sm">
+                                        <span>Onboarding closed on {formatDate(o.closed_at)}{o.closed_note ? `: ${o.closed_note}` : ''}. Kept on file, not tracked.</span>
+                                        {can && <Button size="sm" variant="outline" onClick={() => router.post(`/onboarding/${e.id}/reopen`, {}, { preserveScroll: true })}>Reopen</Button>}
+                                    </div>
+                                )}
                                 <div className="grid grid-cols-3 gap-2 text-center text-xs">
                                     {[['Onboarding', o.status === 'Onboarding Complete' ? 'Complete' : 'In progress', o.status], ['Orientation', o.orientation, o.orientation], ['Documents', o.documents, o.documents]].map(([label, text, raw]) => (
                                         <div key={label} className="rounded-lg border px-2 py-3">
@@ -598,12 +605,12 @@ export default function EmployeeShow(props: Props) {
                                             options={toOptions(props.options.cohorts).map((x) => ({ ...x, label: `Group ${x.label}` }))}
                                             onChange={(ev) => saveOnboarding({ cohort: ev.target.value || null })} />
                                     </div>
-                                    <div className="grid gap-1.5">
+                                    {(props.planEnabled || o.plan_url) && <div className="grid gap-1.5">
                                         <span className="text-sm font-medium">90-day plan</span>
                                         {props.plan ? <Link className="text-sm text-cascade hover:underline" href={`/employees/${e.id}/plan`}>Open plan</Link>
                                             : o.plan_url ? <a className="text-sm text-cascade hover:underline" href={o.plan_url} target="_blank" rel="noreferrer">Old sheet copy</a>
                                             : <span className="text-sm text-muted-foreground">Not started</span>}
-                                    </div>
+                                    </div>}
                                     <div className="grid gap-1.5 sm:col-span-2">
                                         <label className="text-sm font-medium" htmlFor="onb-notes">Notes</label>
                                         <Textarea id="onb-notes" disabled={!can} value={notes} onChange={(ev) => setNotes(ev.target.value)} rows={3} />

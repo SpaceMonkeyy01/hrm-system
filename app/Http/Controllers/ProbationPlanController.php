@@ -35,8 +35,11 @@ class ProbationPlanController extends Controller
 
     private const CHECKIN_FIELDS = ['held_on', 'manager_summary', 'employee_summary', 'action_items', 'next_follow_up', 'initials'];
 
-    public function show(Employee $employee): Response
+    public function show(Employee $employee): Response|RedirectResponse
     {
+        if (! config('hrm.probation_plan')) {
+            return redirect("/employees/{$employee->id}#onboarding");
+        }
         $employee->load(['department:id,name', 'manager:id,full_name', 'onboarding', 'probationPlan.items', 'probationPlan.checkins']);
         $plan = $employee->probationPlan;
         $date = fn ($d) => $d?->toDateString();
@@ -79,6 +82,7 @@ class ProbationPlanController extends Controller
 
     public function store(Employee $employee): RedirectResponse
     {
+        abort_unless(config('hrm.probation_plan'), 404);
         if ($employee->probationPlan()->exists()) {
             return redirect()->route('plan.show', $employee);
         }
@@ -111,6 +115,7 @@ class ProbationPlanController extends Controller
 
     public function update(Request $request, Employee $employee): RedirectResponse
     {
+        abort_unless(config('hrm.probation_plan'), 404);
         $plan = $employee->probationPlan()->firstOrFail();
         $text = ['nullable', 'string', 'max:4000'];
         $data = $request->validate([
@@ -196,6 +201,7 @@ class ProbationPlanController extends Controller
 
     public function addCheckin(Employee $employee): RedirectResponse
     {
+        abort_unless(config('hrm.probation_plan'), 404);
         $plan = $employee->probationPlan()->firstOrFail();
         $plan->checkins()->create(['kind' => 'extra', 'sort_order' => ($plan->checkins()->max('sort_order') ?? 0) + 1]);
 

@@ -136,7 +136,12 @@ return [
     'probation_open_results' => ['Pending', 'Extend'],
 
     // Probation length used for Probation_End_Date (sheet formula: =H+90)
+    // Default probation length for new joiners. HR changes it in Settings > Checklists (app_settings 'probation_days').
     'probation_days' => 90,
+
+    // The separate 90-day plan page (goals, ratings, check-in notes). Switched off: the check-ins on the onboarding
+    // checklist cover it. Tests switch it on to keep its code covered (phpunit.xml).
+    'probation_plan' => (bool) env('HRM_PROBATION_PLAN', false),
 
     // Employment_Type dropdown (tracker column J)
     'employment_types' => ['Full Time', 'Intern', 'Contract'],
@@ -253,7 +258,8 @@ return [
         // Probation is open (Pending or Extend) and ends within this many days. Past the end date = overdue.
         'probation_ending_days' => 7,
 
-        // Check-ins: onboarding checklist item key => days after the start date it is due.
+        // Check-ins: onboarding checklist item key => days after the start date it is due. HR changes the days in
+        // Settings > Checklists (app_settings 'checkin_offsets'); HrRules::checkinOffsets() merges them over these.
         'checkin_offsets' => [
             'day30_checkin' => 30,
             'day60_checkin' => 60,

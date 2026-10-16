@@ -19,6 +19,8 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
+        <!-- the 90-day plan is off in the app; on here so its code stays covered (OnboardingSettingsTest checks "off") -->
+        <env name="HRM_PROBATION_PLAN" value="true"/>
         <!-- Test-only key so a fresh checkout (no .env) can run the tests. Never use it anywhere else. -->
         <env name="APP_KEY" value="base64:7kv4s03AAKfEMiSphDmHO9pWqpi+93HF2e3a+9eHAb4="/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>

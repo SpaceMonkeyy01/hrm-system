@@ -72,7 +72,7 @@ class ComplianceReports
 
     public function onboarding(ReportFilters $f): ReportResult
     {
-        $employees = $f->current()->whereHas('onboarding')->with(['department:id,name', 'onboarding'])->orderBy('start_date')
+        $employees = $f->current()->whereHas('onboarding', fn ($q) => $q->open())->with(['department:id,name', 'onboarding'])->orderBy('start_date')
             ->get(['id', 'employee_code', 'full_name', 'department_id', 'start_date']);
         $board = new StatusBoard($employees->pluck('id')->all());
         $tone = ['Complete' => 'done', 'In Progress' => 'pending', 'Not Started' => 'missing', 'Pending' => 'pending',

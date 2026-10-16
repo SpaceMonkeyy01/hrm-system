@@ -11,6 +11,7 @@ import type { OptionSets } from '@/types';
 
 type Item = { id: number; key: string; label: string; option_set: string; description: string | null; sort_order: number; is_active: boolean; used: number; required: boolean };
 type ListName = 'onboarding' | 'document' | 'offboarding';
+type Probation = { days: number; checkins: { key: string; label: string; days: number }[] };
 
 const listLabel: Record<ListName, string> = { onboarding: 'Onboarding', document: 'Documents', offboarding: 'Offboarding clearance' };
 const setLabel: Record<string, string> = { yes_no: 'Yes / No', session: 'Done / Not Started', document: 'Yes / No / Pending / Not Required / Old employee / not available', clearance: 'Done / Pending / Not Required' };
@@ -62,7 +63,48 @@ function AddItem({ list, sets }: { list: ListName; sets: string[] }) {
     );
 }
 
-export default function Checklists({ lists, setsPerList }: { lists: Record<ListName, Item[]>; optionSets: OptionSets; setsPerList: Record<ListName, string[]> }) {
+/** Probation length and check-in days for everyone (ChecklistItemController::updateProbation). */
+function ProbationTimeline({ probation }: { probation: Probation }) {
+    const form = useForm({
+        days: probation.days,
+        checkins: Object.fromEntries(probation.checkins.map((c) => [c.key, c.days])) as Record<string, number>,
+        update_open: true,
+    });
+    const submit = (e: FormEvent) => { e.preventDefault(); form.put('/settings/probation', { preserveScroll: true, onSuccess: () => form.setDefaults() }); };
+    const errors = form.errors as Record<string, string>;
+    return (
+        <form onSubmit={submit} className="mb-6 grid gap-4 rounded-lg border p-4">
+            <div>
+                <h2 className="font-bold">Probation and check-ins</h2>
+                <p className="text-sm text-muted-foreground">
+                    For everyone, counted from the start date. A person's own end date can still be changed or extended on the onboarding tracker or their profile.
+                    If you change a check-in day, rename its label below to match (e.g. "45-day check-in").
+                </p>
+            </div>
+            <div className="flex flex-wrap items-start gap-4">
+                <Field label="Probation length (days)" htmlFor="prob-days" error={form.errors.days}>
+                    <Input id="prob-days" type="number" min={7} max={730} className="w-36" value={form.data.days} onChange={(e) => form.setData('days', Number(e.target.value))} />
+                </Field>
+                {probation.checkins.map((c) => (
+                    <Field key={c.key} label={`${c.label} on day`} htmlFor={`ci-${c.key}`} error={errors[`checkins.${c.key}`]}>
+                        <Input id={`ci-${c.key}`} type="number" min={1} max={form.data.days} className="w-36" value={form.data.checkins[c.key]}
+                            onChange={(e) => form.setData('checkins', { ...form.data.checkins, [c.key]: Number(e.target.value) })} />
+                    </Field>
+                ))}
+            </div>
+            {errors.checkins && <p className="text-sm text-missing">{errors.checkins}</p>}
+            {form.data.days !== probation.days && (
+                <label className="flex items-start gap-2 text-sm">
+                    <input type="checkbox" className="mt-0.5 size-4 accent-cascade" checked={form.data.update_open} onChange={(e) => form.setData('update_open', e.target.checked)} />
+                    <span>Also move the end date for open probations still on {probation.days} days. <span className="text-muted-foreground">People who were extended, passed, or had their end date set by hand keep theirs.</span></span>
+                </label>
+            )}
+            <Button type="submit" className="justify-self-start" disabled={!form.isDirty || form.processing}>Save timeline</Button>
+        </form>
+    );
+}
+
+export default function Checklists({ lists, setsPerList, probation }: { lists: Record<ListName, Item[]>; optionSets: OptionSets; setsPerList: Record<ListName, string[]>; probation: Probation }) {
     return (
         <>
             <Head title="Checklists" />
@@ -73,6 +115,7 @@ export default function Checklists({ lists, setsPerList }: { lists: Record<ListN
                 </TabsList>
                 {(Object.keys(listLabel) as ListName[]).map((l) => (
                     <TabsContent key={l} value={l}>
+                        {l === 'onboarding' && <ProbationTimeline probation={probation} />}
                         <div className="overflow-x-auto">
                             <table className="w-full min-w-[900px] text-sm">
                                 <thead>

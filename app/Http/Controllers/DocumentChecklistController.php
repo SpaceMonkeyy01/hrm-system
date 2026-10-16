@@ -31,7 +31,7 @@ class DocumentChecklistController extends Controller
             ->search($f['q'] ?? null)
             ->when($f['company'] ?? null, fn ($q, $v) => $q->where('company_id', $v))
             ->when($f['department'] ?? null, fn ($q, $v) => $q->where('department_id', $v))
-            ->when(($f['scope'] ?? 'all') === 'onboarding', fn ($q) => $q->whereHas('onboarding'))
+            ->when(($f['scope'] ?? 'all') === 'onboarding', fn ($q) => $q->whereHas('onboarding', fn ($q) => $q->open()))
             ->orderBy('full_name')
             ->get();
 

@@ -19,7 +19,7 @@ class HrSnapshot
         $board = new StatusBoard($currentIds);
 
         // ---------------------------------------------------------------- onboarding
-        $onboardings = Onboarding::query()->whereIn('employee_id', $currentIds)
+        $onboardings = Onboarding::query()->open()->whereIn('employee_id', $currentIds)
             ->with('employee:id,employee_code,full_name,department_id', 'employee.department:id,name')->get();
 
         $orientation = ['Not Started' => 0, 'In Progress' => 0, 'Complete' => 0];

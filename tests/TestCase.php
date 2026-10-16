@@ -2,6 +2,7 @@
 
 namespace Tests;
 
+use App\Models\AppSetting;
 use App\Models\Company;
 use App\Models\Department;
 use App\Models\Employee;
@@ -15,6 +16,7 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
         $this->withoutVite();   // tests don't need built JS/CSS
+        AppSetting::flush();    // settings are cached per process; each test starts from its own database
     }
 
     protected function user(string $role = 'hr', array $attrs = []): User

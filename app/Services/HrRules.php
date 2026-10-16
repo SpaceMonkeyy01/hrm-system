@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AppSetting;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 
@@ -111,7 +112,21 @@ class HrRules
     /** Sheet I: =IF(H="","",H+90) */
     public static function probationEnd(?CarbonInterface $start): ?string
     {
-        return $start ? CarbonImmutable::parse($start)->addDays((int) config('hrm.probation_days', 90))->toDateString() : null;
+        return $start ? CarbonImmutable::parse($start)->addDays(self::probationDays())->toDateString() : null;
+    }
+
+    /** Probation length in days: HR's setting (Settings > Checklists), else config hrm.probation_days. */
+    public static function probationDays(): int
+    {
+        return (int) AppSetting::get('probation_days', config('hrm.probation_days', 90));
+    }
+
+    /** @return array<string, int> check-in item key => days after the start date (HR's setting over the config) */
+    public static function checkinOffsets(): array
+    {
+        $saved = AppSetting::get('checkin_offsets', []);
+
+        return array_map('intval', array_merge(config('hrm.reminders.checkin_offsets', []), array_intersect_key(is_array($saved) ? $saved : [], config('hrm.reminders.checkin_offsets', []))));
     }
 
     /** Is the probation still open (no final decision yet)? Pending and Extend both count, see config hrm.probation_open_results. */
@@ -142,12 +157,12 @@ class HrRules
     }
 
     /**
-     * Due date of a check-in: start date + its offset in config hrm.reminders.checkin_offsets
-     * (day30_checkin => 30, day60_checkin => 60, day90_evaluation => 90). Null without a start date or for an unknown key.
+     * Due date of a check-in: start date + its offset (checkinOffsets(): day30_checkin => 30, day60_checkin => 60,
+     * day90_evaluation => 90 unless HR changed them). Null without a start date or for an unknown key.
      */
     public static function checkinDueDate(?CarbonInterface $start, string $key): ?string
     {
-        $offset = config("hrm.reminders.checkin_offsets.$key");
+        $offset = self::checkinOffsets()[$key] ?? null;
 
         return $start && $offset !== null ? CarbonImmutable::parse($start)->addDays((int) $offset)->toDateString() : null;
     }

@@ -104,4 +104,11 @@ class AccessTest extends TestCase
             ->assertSessionHasErrors('is_active');
         $this->assertTrue($nda->fresh()->is_active);
     }
+
+    public function test_a_missing_record_shows_the_not_found_page_with_the_login_details(): void
+    {
+        // Route-model binding fails before HandleInertiaRequests: the page still needs auth.can, or it renders blank.
+        $this->actingAs($this->user('hr'))->get('/employees/999999')->assertNotFound()
+            ->assertInertia(fn (\Inertia\Testing\AssertableInertia $p) => $p->component('error')->where('status', 404)->where('auth.can.view', true));
+    }
 }

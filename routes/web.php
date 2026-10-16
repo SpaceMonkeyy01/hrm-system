@@ -142,6 +142,8 @@ Route::middleware('auth')->group(function () {
         Route::middleware('can:edit-hr')->group(function () {
             Route::put('onboarding/{employee}', [OnboardingController::class, 'update'])->name('onboarding.update');
             Route::post('onboarding/{employee}/start', [OnboardingController::class, 'start'])->name('onboarding.start');
+            Route::post('onboarding/close', [OnboardingController::class, 'close'])->name('onboarding.close');
+            Route::post('onboarding/{employee}/reopen', [OnboardingController::class, 'reopen'])->name('onboarding.reopen');
             Route::put('checklist/{employee}/{item}', [ChecklistEntryController::class, 'update'])->name('checklist.update');
             Route::post('checklist/bulk', [ChecklistEntryController::class, 'bulk'])->name('checklist.bulk');
         });
@@ -277,6 +279,7 @@ Route::middleware('auth')->group(function () {
             Route::get('checklists', [ChecklistItemController::class, 'index'])->name('checklists.index');
             Route::post('checklists', [ChecklistItemController::class, 'store'])->name('checklists.store');
             Route::put('checklists/{item}', [ChecklistItemController::class, 'update'])->name('checklists.update');
+            Route::put('probation', [ChecklistItemController::class, 'updateProbation'])->name('probation.update');
         });
     });
 });

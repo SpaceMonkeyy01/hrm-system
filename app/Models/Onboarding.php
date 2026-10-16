@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\LogsActivity;
 use App\Services\HrRules;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -11,11 +12,11 @@ class Onboarding extends Model
 {
     use LogsActivity;
 
-    protected $fillable = ['employee_id', 'cohort', 'probation_end_date', 'probation_result', 'plan_url', 'notes'];
+    protected $fillable = ['employee_id', 'cohort', 'probation_end_date', 'probation_result', 'plan_url', 'notes', 'closed_at', 'closed_note'];
 
     protected function casts(): array
     {
-        return ['probation_end_date' => 'date:Y-m-d'];
+        return ['probation_end_date' => 'date:Y-m-d', 'closed_at' => 'datetime'];
     }
 
     /**
@@ -28,6 +29,12 @@ class Onboarding extends Model
             'probation_end_date' => HrRules::probationEnd($employee->start_date),
             'probation_result' => 'Pending',
         ]);
+    }
+
+    /** Still being tracked (not closed out). Closed records stay on file but leave the tracker, counts and reminders. */
+    public function scopeOpen(Builder $q): Builder
+    {
+        return $q->whereNull('closed_at');
     }
 
     public function employee(): BelongsTo

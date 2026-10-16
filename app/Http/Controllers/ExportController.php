@@ -56,7 +56,7 @@ class ExportController extends Controller
 
         return [
             ['Code', 'Name', 'Company', 'Department', 'Group', 'Start date', 'Probation end', 'Probation result',
-                ...array_column($onb, 'label'), ...array_column($legal, 'label'), 'Orientation', 'Documents', 'Onboarding status'],
+                ...array_column($onb, 'label'), ...array_column($legal, 'label'), 'Orientation', 'Documents', 'Onboarding status', 'Closed on'],
             $employees->map(function ($e) use ($board, $onb, $legal) {
                 $o = $board->values($e->id, 'onboarding');
                 $d = $board->values($e->id, 'document');
@@ -64,7 +64,8 @@ class ExportController extends Controller
                 return [...$this->base($e), $e->onboarding?->cohort, $e->start_date?->toDateString(),
                     $e->onboarding?->probation_end_date?->toDateString(), $e->onboarding?->probation_result,
                     ...array_map(fn ($c) => $o[$c['key']] ?? '', $onb), ...array_map(fn ($c) => $d[$c['key']] ?? '', $legal),
-                    $board->orientation($e->id), $board->documents($e->id), $board->onboarding($e->id, $e->onboarding?->probation_result)];
+                    $board->orientation($e->id), $board->documents($e->id), $board->onboarding($e->id, $e->onboarding?->probation_result),
+                    $e->onboarding?->closed_at?->toDateString()];
             })->all(),
         ];
     }

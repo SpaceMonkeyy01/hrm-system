@@ -174,6 +174,8 @@ class EmployeeController extends Controller
                 'orientation' => $board->orientation($employee->id),
                 'documents' => $board->documents($employee->id),
                 'status' => $board->onboarding($employee->id, $o->probation_result),
+                'closed_at' => $o->closed_at?->toDateString(),
+                'closed_note' => $o->closed_note,
             ] : null,
             'documentStatus' => $board->documents($employee->id),
             'completeness' => $private ? $employee->completeness() : null,
@@ -199,6 +201,7 @@ class EmployeeController extends Controller
             'lists' => $lists,
             'optionSets' => StatusBoard::optionSets(),
             'plan' => $employee->probationPlan ? ['updated_at' => $employee->probationPlan->updated_at?->toIso8601String()] : null,
+            'planEnabled' => (bool) config('hrm.probation_plan'),
             'offboardings' => $employee->offboardings->map(fn ($x) => [
                 'id' => $x->id, 'type' => $x->type, 'status' => $x->status,
                 'last_working_day' => $x->last_working_day?->toDateString(),

@@ -1,5 +1,5 @@
 import { Head, router, usePage } from '@inertiajs/react';
-import { Download, Search, SearchX } from 'lucide-react';
+import { Archive, Download, Search, SearchX } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { ChecklistGrid } from '@/components/checklist-grid';
@@ -10,6 +10,7 @@ import { NativeSelect, toOptions } from '@/components/native-select';
 import { PageHeader } from '@/components/page-header';
 import { computedTone, StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { formatDate } from '@/lib/format';
 import { cn, query } from '@/lib/utils';
@@ -18,17 +19,67 @@ import type { ChecklistColumn, CompanyOption, OptionSets, SharedProps } from '@/
 type Row = GridRow & {
     company: string | null; department: string | null; cohort: string | null; start_date: string | null;
     employment_type: string | null; probation_end_date: string | null; probation_result: string | null;
-    overdue: boolean; ending: boolean; orientation: string; documents: string; status: string;
+    overdue: boolean; ending: boolean; orientation: string; documents: string; status: string; closed_at: string | null;
 };
-type Filters = Partial<Record<'q' | 'company' | 'department' | 'cohort' | 'status' | 'orientation' | 'docs' | 'legal' | 'probation', string>>;
+type Filters = Partial<Record<'q' | 'company' | 'department' | 'cohort' | 'status' | 'orientation' | 'docs' | 'legal' | 'probation' | 'show', string>>;
 type Props = {
     rows: Row[]; columns: ChecklistColumn[]; optionSets: OptionSets; filters: Filters; companies: CompanyOption[];
     cohorts: string[]; probationResults: string[]; notInOnboarding: number;
+    closeCandidates: { before: string; dated: number; undated: number }; closedCount: number;
 };
 
-export default function OnboardingIndex({ rows, columns, optionSets, filters, companies, cohorts, probationResults, notInOnboarding }: Props) {
+/** Close onboarding for everyone who started before a date: kept on file, no longer tracked (OnboardingController::close). */
+function CloseOutDialog({ candidates, onClose }: { candidates: Props['closeCandidates']; onClose: () => void }) {
+    const [before, setBefore] = useState(candidates.before);
+    const [undated, setUndated] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const submit = () => {
+        setBusy(true);
+        router.post('/onboarding/close', { started_before: before, include_undated: undated }, {
+            preserveScroll: true, onSuccess: onClose, onFinish: () => setBusy(false),
+            onError: (e) => toast.error(Object.values(e)[0] ?? 'Not saved.'),
+        });
+    };
+    return (
+        <Dialog open onOpenChange={(o) => !o && onClose()}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Close out old onboarding records</DialogTitle>
+                    <DialogDescription>
+                        For people who joined before the app and were imported with half-filled checklists. Their record and checklist stay on file;
+                        they just leave this tracker, the Home counts and the reminders. You can reopen anyone from their profile.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-3 text-sm">
+                    <label className="grid gap-1">
+                        <span className="font-semibold">Close everyone who started before</span>
+                        <Input type="date" className="w-44" value={before} onChange={(e) => setBefore(e.target.value)} />
+                        {before === candidates.before && <span className="text-xs text-muted-foreground">{candidates.dated} open records started before this date (6 months ago).</span>}
+                    </label>
+                    {candidates.undated > 0 && (
+                        <label className="flex items-start gap-2">
+                            <input type="checkbox" className="mt-0.5 size-4 accent-cascade" checked={undated} onChange={(e) => setUndated(e.target.checked)} />
+                            <span>Also close the {candidates.undated} with no start date. <span className="text-muted-foreground">Leave this off if some of them might be new joiners.</span></span>
+                        </label>
+                    )}
+                </div>
+                <DialogFooter>
+                    <Button variant="ghost" onClick={onClose}>Cancel</Button>
+                    <Button onClick={submit} disabled={busy || !before}><Archive /> Close records</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+export default function OnboardingIndex({ rows, columns, optionSets, filters, companies, cohorts, probationResults, notInOnboarding, closeCandidates, closedCount }: Props) {
     const { auth } = usePage<SharedProps>().props;
     const can = auth.can.edit;
+    const [closingOut, setClosingOut] = useState(false);
+    const show = filters.show ?? 'open';
+    const closeTicked = (ids: number[], clear: () => void) =>
+        confirm(`Close onboarding for ${ids.length === 1 ? '1 person' : `${ids.length} people`}? Their records stay on file.`)
+        && router.post('/onboarding/close', { ids }, { preserveScroll: true, onSuccess: clear, onError: (e) => toast.error(Object.values(e)[0] ?? 'Not saved.') });
     const [q, setQ] = useState(filters.q ?? '');
     const apply = (patch: Filters) => router.get('/onboarding', query({ ...filters, ...patch }), { preserveState: true, preserveScroll: true, replace: true });
 
@@ -117,7 +168,15 @@ export default function OnboardingIndex({ rows, columns, optionSets, filters, co
         },
         { key: 'orientation', header: 'Orientation', className: 'w-28', cell: (r) => <StatusPill value={r.orientation} tone={computedTone(r.orientation)} /> },
         { key: 'documents', header: 'Documents', className: 'w-24', cell: (r) => <StatusPill value={r.documents} tone={computedTone(r.documents)} /> },
-        { key: 'status', header: 'Onboarding', className: 'w-28', cell: (r) => <StatusPill value={r.status === 'Onboarding Complete' ? 'Complete' : 'In progress'} tone={computedTone(r.status)} /> },
+        {
+            key: 'status', header: 'Onboarding', className: 'w-28',
+            cell: (r) => r.closed_at ? (
+                <span className="grid justify-items-start gap-0.5">
+                    <StatusPill value="Closed" tone="neutral" />
+                    {can && <button type="button" className="text-[11px] font-semibold text-cascade hover:underline" onClick={() => router.post(`/onboarding/${r.id}/reopen`, {}, { preserveScroll: true })}>Reopen</button>}
+                </span>
+            ) : <StatusPill value={r.status === 'Onboarding Complete' ? 'Complete' : 'In progress'} tone={computedTone(r.status)} />,
+        },
     ];
 
     return (
@@ -126,14 +185,19 @@ export default function OnboardingIndex({ rows, columns, optionSets, filters, co
             <PageHeader
                 title="Onboarding tracker"
                 description="One row per person in onboarding. Click a status to change it, or focus it and type the first letter (Y, N, D). Tick rows to update many at once."
-                actions={<Button variant="outline" asChild><a href="/export/onboarding"><Download /> Export CSV</a></Button>}
+                actions={<>
+                    {can && closeCandidates.dated + closeCandidates.undated > 0 && <Button variant="outline" onClick={() => setClosingOut(true)}><Archive /> Close out old records</Button>}
+                    <Button variant="outline" asChild><a href="/export/onboarding"><Download /> Export CSV</a></Button>
+                </>}
             >
-                <FilterBar active={[filters.company, filters.department, filters.cohort, filters.status, filters.orientation, filters.probation, filters.legal, filters.docs].filter(Boolean).length} search={
+                <FilterBar active={[filters.company, filters.department, filters.cohort, filters.status, filters.orientation, filters.probation, filters.legal, filters.docs, filters.show].filter(Boolean).length} search={
                         <div className="relative w-full md:w-60">
                             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
                             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or code" className="pl-8" aria-label="Search" />
                         </div>
                 }>
+                    <NativeSelect aria-label="Open or closed" className="w-40" value={show} onChange={(e) => apply({ show: e.target.value === 'open' ? undefined : e.target.value })}
+                        options={[{ value: 'open', label: 'Being tracked' }, { value: 'closed', label: `Closed (${closedCount})` }, { value: 'all', label: 'Open and closed' }]} />
                     <NativeSelect aria-label="Company" className="w-40" value={filters.company ?? ''} placeholder="All companies"
                         onChange={(e) => apply({ company: e.target.value || undefined, department: undefined })} options={companies.map((c) => ({ value: c.id, label: c.name }))} />
                     <NativeSelect aria-label="Department" className="w-52" value={filters.department ?? ''} placeholder="All departments"
@@ -168,8 +232,10 @@ export default function OnboardingIndex({ rows, columns, optionSets, filters, co
                 after={after}
                 reload={['rows']}
                 profileTab="onboarding"
+                bulkExtra={show !== 'closed' ? (ids, clear) => <Button size="sm" variant="outline" onClick={() => closeTicked(ids, clear)}><Archive /> Close onboarding</Button> : undefined}
                 empty={<EmptyState icon={SearchX} title="Nobody matches these filters.">Clear a filter to see more people.</EmptyState>}
             />
+            {closingOut && <CloseOutDialog candidates={closeCandidates} onClose={() => setClosingOut(false)} />}
         </>
     );
 }

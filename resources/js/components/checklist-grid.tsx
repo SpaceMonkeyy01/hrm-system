@@ -51,6 +51,7 @@ export function ChecklistGrid<R extends GridRow>({
     reload,
     empty,
     profileTab,
+    bulkExtra,
 }: {
     rows: R[];
     columns: ChecklistColumn[];
@@ -63,6 +64,8 @@ export function ChecklistGrid<R extends GridRow>({
     empty: ReactNode;
     /** Profile tab a phone card opens (#onboarding, #documents). */
     profileTab?: string;
+    /** More actions in the bulk bar for the ticked rows (e.g. close onboarding). */
+    bulkExtra?: (ids: number[], clear: () => void) => ReactNode;
 }) {
     const [compact, setCompact] = useState(readCompact);
     const toggleCompact = () => setCompact((c) => {
@@ -178,6 +181,7 @@ export function ChecklistGrid<R extends GridRow>({
                     <Button size="sm" onClick={applyBulk} disabled={!bulkColumn || bulkBusy}>
                         Apply to {selected.size}
                     </Button>
+                    {bulkExtra?.([...selected], () => setSelected(new Set()))}
                     <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
                         Clear selection
                     </Button>
