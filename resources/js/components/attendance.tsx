@@ -67,6 +67,8 @@ export type DeviceStatus = {
     last_ok_at: string | null;
     clock_offset: number | null;
     clock_wrong: boolean;
+    /** On automatic sync but no good sync for over an hour (MachineSyncer::isOverdue) */
+    overdue: boolean;
     recent: { at: string; ok: boolean | null; added: number; checked: number; trigger: string; error: string | null }[];
 };
 
@@ -109,7 +111,7 @@ export function MachineSyncBar({ machine, canSync, showRecent }: { machine: Mach
     const [busy, setBusy] = useState(false);
     if (!machine.configured || !machine.devices) return null;
     const devices = machine.devices;
-    const failing = devices.some((d) => d.last?.ok === false);
+    const failing = devices.some((d) => d.last?.ok === false || d.overdue);
     const sync = () => router.post('/attendance/machine/sync', {}, { preserveScroll: true, onStart: () => setBusy(true), onFinish: () => setBusy(false) });
     return (
         <div className={`grid gap-2 rounded-lg border px-4 py-3 text-sm ${failing ? 'border-[#f0b8b8] bg-missing-soft' : ''}`}>
@@ -124,6 +126,11 @@ export function MachineSyncBar({ machine, canSync, showRecent }: { machine: Mach
                     {canSync && <Button variant="outline" size="sm" disabled={busy} onClick={sync}><RefreshCw className={busy ? 'animate-spin' : ''} /> {busy ? 'Reading' : 'Sync now'}</Button>}
                 </div>
             </div>
+            {devices.filter((d) => d.overdue && d.last?.ok !== false).map((d) => (
+                <p key={`o${d.id}`} className="font-semibold text-missing">
+                    {devices.length > 1 && `${d.name}: `}Sync overdue: no automatic sync {d.last_ok_at ? `since ${timeAgo(d.last_ok_at)}` : 'yet'}. Check the cron job (cron-job.org) and that the machine is reachable; until then days show No data or Absent.
+                </p>
+            ))}
             {devices.filter((d) => d.clock_wrong).map((d) => (
                 <div key={d.id}>{devices.length > 1 && <span className="font-semibold">{d.name}: </span>}<ClockWarning offset={d.clock_offset ?? 0} /></div>
             ))}

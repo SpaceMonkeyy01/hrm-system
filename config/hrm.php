@@ -66,6 +66,9 @@ return [
         'lookback_days' => 3,
         // Warn HR when the machine's clock is off by more than this.
         'clock_warn_seconds' => 60,
+        // A device on automatic sync with no good sync for this long is "Sync overdue" (the cron job has probably
+        // stopped). The cron runs round the clock, so this holds at night too.
+        'stale_after_minutes' => 60,
     ],
 
     // Clock in / out on the My page (a punch with source "app"). A clock-in from one of the office IPs counts as office

@@ -5,6 +5,16 @@
 {{ $count === 1 ? '1 thing needs' : $count.' things need' }} attention today. Overdue items are listed first in each group.
 @endif
 
+@if (count($stalled))
+## Attendance machine not syncing
+
+@foreach ($stalled as $d)
+- {{ $d['name'] }}{{ $d['code'] ? ' ('.$d['code'].')' : '' }}: {{ $d['since'] ? 'no automatic sync since '.$d['since'] : 'never synced automatically' }}.
+@endforeach
+
+Until it syncs again, days show No data or Absent. Check the cron job and that the machine is reachable. [Open Devices]({{ $devicesLink }})
+
+@endif
 @foreach ($groups as $group)
 ## {{ $group['heading'] }} ({{ count($group['rows']) }})
 

@@ -200,10 +200,42 @@ class MachineSyncer
             'last_ok_at' => $lastOk?->started_at->toIso8601String(),
             'clock_offset' => $lastOk?->clock_offset,
             'clock_wrong' => $lastOk && $lastOk->clock_offset !== null && abs($lastOk->clock_offset) > $d->clock_warn_seconds,
+            'overdue' => self::isOverdue($d, $lastOk),
             'recent' => MachineSync::query()->where('attendance_device_id', $d->id)->latest('started_at')->latest('id')->limit($recent)->get()->map(fn ($s) => [
                 'at' => $s->started_at->toIso8601String(), 'ok' => $s->ok, 'added' => $s->added, 'checked' => $s->checked, 'trigger' => $s->trigger, 'error' => $s->error,
             ])->all(),
         ];
+    }
+
+    /**
+     * On automatic sync but no good sync for config hrm.machine.stale_after_minutes (or never): the automatic sync has
+     * probably stopped, and days quietly turn into No data or Absent. Switched-off and "Sync now only" devices never are.
+     */
+    public static function isOverdue(AttendanceDevice $d, ?MachineSync $lastOk): bool
+    {
+        if (! $d->is_active || ! $d->auto_sync) {
+            return false;
+        }
+
+        return $lastOk === null || $lastOk->started_at->lt(now()->subMinutes((int) config('hrm.machine.stale_after_minutes', 60)));
+    }
+
+    /**
+     * Devices whose sync is overdue, for the daily HR email.
+     *
+     * @return list<array{name: string, code: ?string, last_ok_at: ?string}>
+     */
+    public static function overdueDevices(): array
+    {
+        $out = [];
+        foreach (self::devices() as $d) {
+            $lastOk = MachineSync::query()->where('attendance_device_id', $d->id)->where('ok', true)->latest('started_at')->latest('id')->first();
+            if (self::isOverdue($d, $lastOk)) {
+                $out[] = ['name' => $d->name, 'code' => $d->code, 'last_ok_at' => $lastOk?->started_at->toIso8601String()];
+            }
+        }
+
+        return $out;
     }
 
     /** One line for the cron service's log, the command and the flash message. */

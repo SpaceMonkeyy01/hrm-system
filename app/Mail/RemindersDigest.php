@@ -17,14 +17,19 @@ class RemindersDigest extends Mailable
     /**
      * @param  list<array<string, mixed>>  $reminders  from Reminders::forDate()
      * @param  int  $backlog  from Reminders::documentsBacklog(), only on the weekly backlog day (0 = leave the line out)
+     * @param  list<array{name: string, code: ?string, last_ok_at: ?string}>  $overdue  MachineSyncer::overdueDevices()
      */
-    public function __construct(public CarbonInterface $today, public array $reminders, public int $backlog = 0) {}
+    public function __construct(public CarbonInterface $today, public array $reminders, public int $backlog = 0, public array $overdue = []) {}
 
     public function envelope(): Envelope
     {
         $n = count($this->reminders);
 
-        $what = $n === 0 ? 'older missing documents' : "$n ".($n === 1 ? 'item' : 'items');
+        $what = match (true) {
+            $n > 0 => "$n ".($n === 1 ? 'item' : 'items'),
+            $this->overdue !== [] => 'attendance machine not syncing',
+            default => 'older missing documents',
+        };
 
         return new Envelope(subject: 'HR reminders for '.$this->today->format('j M Y').": $what");
     }
@@ -45,6 +50,8 @@ class RemindersDigest extends Mailable
             'groups' => $groups,
             'backlog' => $this->backlog,
             'backlogLink' => url('/documents?status=Pending'),
+            'stalled' => array_map(fn ($d) => $d + ['since' => $d['last_ok_at'] ? \Carbon\CarbonImmutable::parse($d['last_ok_at'])->timezone(config('app.timezone'))->format('j M Y H:i') : null], $this->overdue),
+            'devicesLink' => url('/attendance/devices'),
             'dashboard' => url('/dashboard'),
         ]);
     }

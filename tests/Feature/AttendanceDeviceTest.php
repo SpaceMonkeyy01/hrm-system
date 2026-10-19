@@ -138,4 +138,36 @@ class AttendanceDeviceTest extends TestCase
         $read = fn (string $prop) => (fn () => $this->{$prop})->call($client);
         $this->assertSame(['203.0.113.10', 4371, 77, 9], [$read('host'), $read('port'), $read('commKey'), $read('timeout')]);
     }
+
+    public function test_sync_overdue_shows_on_devices_and_in_the_daily_email(): void
+    {
+        \Illuminate\Support\Facades\Mail::fake();
+        $this->user('hr', ['email' => 'hr@example.test']);
+        $main = AttendanceDevice::create(['name' => 'Main office', 'host' => '203.0.113.10']);
+        $manual = AttendanceDevice::create(['name' => 'Warehouse', 'host' => '203.0.113.20', 'auto_sync' => false]);
+        AttendanceDevice::create(['name' => 'Old machine', 'host' => '203.0.113.30', 'is_active' => false]);
+        $sync = fn (int $minutesAgo, ?bool $ok = true) => MachineSync::forceCreate(['attendance_device_id' => $main->id, 'trigger' => 'cron',
+            'started_at' => now()->subMinutes($minutesAgo), 'finished_at' => now()->subMinutes($minutesAgo), 'ok' => $ok]);
+
+        // Never synced while on automatic sync: overdue. Manual-only and switched-off devices never are.
+        $this->assertSame(['Main office'], array_column(MachineSyncer::overdueDevices(), 'name'));
+        $sync(30);
+        $this->assertSame([], MachineSyncer::overdueDevices());
+        $this->assertFalse(MachineSyncer::deviceStatus($main)['overdue']);
+        $this->assertFalse(MachineSyncer::deviceStatus($manual)['overdue']);
+
+        // 90 minutes later, with only failed tries since: overdue, everywhere
+        $this->travel(60)->minutes();
+        $sync(5, false);
+        $this->assertTrue(MachineSyncer::deviceStatus($main)['overdue']);
+        $this->actingAs($this->user('hr'))->get('/attendance/devices')->assertInertia(fn (AssertableInertia $p) => $p
+            ->where('devices', fn ($d) => collect($d)->firstWhere('name', 'Main office')['status']['overdue'] === true));
+        $this->actingAs($this->user('hr'))->get('/attendance')->assertInertia(fn (AssertableInertia $p) => $p->where('machine.devices.0.overdue', true));
+
+        $this->artisan('hr:send-reminders')->assertSuccessful();
+        \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\RemindersDigest::class, fn ($m) => count($m->overdue) === 1
+            && $m->hasSubject('HR reminders for 13 Oct 2026: attendance machine not syncing'));
+        $html = (new \App\Mail\RemindersDigest(now(), [], 0, MachineSyncer::overdueDevices()))->render();
+        $this->assertStringContainsString("Main office ({$main->fresh()->code}): no automatic sync since 13 Oct 2026 15:30", $html);
+    }
 }

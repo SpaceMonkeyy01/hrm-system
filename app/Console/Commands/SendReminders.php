@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Mail\RemindersDigest;
 use App\Models\User;
+use App\Services\Import\MachineSyncer;
 use App\Services\Reminders;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
@@ -27,11 +28,12 @@ class SendReminders extends Command
         $today = CarbonImmutable::today();
         $reminders = Reminders::forDate($today);
         $backlog = Reminders::isBacklogDay($today) ? Reminders::documentsBacklog($today) : 0;
+        $overdue = MachineSyncer::overdueDevices();
         $recipients = User::query()->where('is_active', true)
             ->whereIn('role', config('hrm.reminders.recipient_roles', ['admin', 'hr']))
             ->orderBy('id')->get(['id', 'name', 'email', 'role']);
 
-        if ($reminders === [] && $backlog === 0) {
+        if ($reminders === [] && $backlog === 0 && $overdue === []) {
             $this->info("Nothing needs attention on {$today->toDateString()}. No email sent.");
 
             return self::SUCCESS;
@@ -43,6 +45,9 @@ class SendReminders extends Command
             ], $reminders));
             if ($backlog) {
                 $this->line("Weekly line: $backlog older employees still have missing documents.");
+            }
+            foreach ($overdue as $d) {
+                $this->line("Sync overdue: {$d['name']}, last good sync ".($d['last_ok_at'] ?? 'never').'.');
             }
             $this->info(count($reminders).' reminders. Dry run: no email sent. Would send to: '
                 .($recipients->isEmpty() ? 'nobody (no active HR or admin logins)' : $recipients->pluck('email')->implode(', ')));
@@ -57,7 +62,7 @@ class SendReminders extends Command
         }
 
         foreach ($recipients as $user) {
-            Mail::to($user->email, $user->name)->send(new RemindersDigest($today, $reminders, $backlog));
+            Mail::to($user->email, $user->name)->send(new RemindersDigest($today, $reminders, $backlog, $overdue));
         }
         $this->info('Sent '.count($reminders).' reminders to '.$recipients->count().' '.($recipients->count() === 1 ? 'person' : 'people').'.');
 

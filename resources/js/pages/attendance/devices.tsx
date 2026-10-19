@@ -132,6 +132,7 @@ function DeviceCard({ device: d, onEdit }: { device: Device; onEdit: () => void 
                         <Fingerprint className="size-4 text-muted-foreground" /> <span className="font-mono text-sm text-muted-foreground">{d.code}</span> {d.name}
                         {!d.is_active ? <StatusPill value="Switched off" tone="neutral" />
                             : failing ? <StatusPill value="Last sync failed" tone="missing" />
+                                : s.overdue ? <StatusPill value="Sync overdue" tone="missing" />
                                 : s.last?.ok ? <StatusPill value="Working" tone="done" /> : <StatusPill value="Not synced yet" tone="pending" />}
                         {d.is_active && !d.auto_sync && <StatusPill value="Sync now only" tone="neutral" />}
                     </h2>
