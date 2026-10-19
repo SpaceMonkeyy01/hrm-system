@@ -4,7 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\AssetAssignment;
 use App\Models\AttendanceRequest;
+use App\Models\ControlledDocument;
 use App\Models\Employee;
+use App\Models\IssuedLetter;
+use App\Models\LeaveRecord;
+use App\Models\LeaveRequest;
+use App\Models\LeaveType;
 use App\Models\Review;
 use App\Services\AttendanceClock;
 use App\Services\EmployeeRecords;
@@ -14,9 +19,13 @@ use App\Services\StatusBoard;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * My page: a login linked to an employee sees their own record, attendance and leave, clocks in and out,
@@ -85,6 +94,17 @@ class MeController extends Controller
             'scale' => config('hrm.reviews.scale'),
             'requests' => AttendanceRequest::query()->with('decider:id,name')->where('employee_id', $employee->id)
                 ->latest('id')->limit(30)->get()->map->props(),
+            'leaveRequests' => LeaveRequest::query()->with('type:id,name', 'decider:id,name')->where('employee_id', $employee->id)
+                ->latest('id')->limit(30)->get()->map->props(),
+            'leaveTypes' => LeaveType::query()->where('is_active', true)->orderBy('sort_order')->orderBy('name')->get(['id', 'name', 'yearly_days', 'per_leave_days']),
+            'leaveParts' => LeaveRecord::PARTS,
+            'uploads' => ['enabled' => (bool) config('hrm.uploads.enabled'), 'max_mb' => (int) round(config('hrm.uploads.max_kb') / 1024)],
+            // My documents: letters HR issued to them, and the company's active policies
+            'letters' => IssuedLetter::query()->where('employee_id', $employee->id)->latest('issued_on')->latest('id')->get(['id', 'reference', 'subject', 'issued_on'])
+                ->map(fn ($l) => ['id' => $l->id, 'reference' => $l->reference, 'subject' => $l->subject, 'issued_on' => $l->issued_on->toDateString()]),
+            'policies' => ControlledDocument::query()->where('doc_type', 'Policy')->where('status', 'Active')->orderBy('doc_number')
+                ->get(['id', 'doc_number', 'name', 'description', 'link_url', 'issued_on'])
+                ->map(fn ($d) => [...$d->only('id', 'doc_number', 'name', 'description', 'link_url'), 'issued_on' => $d->issued_on?->toDateString()]),
             'rules' => [
                 'daysBack' => (int) config('hrm.self_service.request_days_back'),
                 'editable' => config('hrm.self_service.editable_fields'),
@@ -202,6 +222,108 @@ class MeController extends Controller
         $review->update(['acknowledged_at' => now(), 'employee_comment' => $data['employee_comment'] ?? null]);
 
         return back()->with('success', 'Thanks. HR can see you have read your review.');
+    }
+
+    // ---------------------------------------------------------------- leave requests
+
+    /**
+     * Apply for leave. The signed leave form (with the manager's approval) is attached; HR approves it. Required while
+     * uploads are on; with uploads switched off (no file store yet) the person hands the form to HR instead.
+     * Going over the balance is allowed: the message says so, and HR decides.
+     */
+    public function storeLeaveRequest(Request $request): RedirectResponse
+    {
+        $employee = $this->employee($request);
+        $cfg = config('hrm.uploads');
+        $data = $request->validate([
+            'leave_type_id' => ['required', 'integer', Rule::exists('leave_types', 'id')->where('is_active', true)],
+            'start_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:'.CarbonImmutable::today()->subDays((int) config('hrm.self_service.request_days_back'))->toDateString()],
+            'end_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:start_date'],
+            'part' => ['required', Rule::in(array_keys(LeaveRecord::PARTS))],
+            'reason' => ['required', 'string', 'max:1000'],
+            'attachment' => $cfg['enabled'] ? ['required', 'file', 'mimes:'.implode(',', $cfg['extensions']), 'max:'.$cfg['max_kb']] : ['prohibited'],
+        ], [
+            'start_date.after_or_equal' => 'That is too far back to ask for. Talk to HR.',
+            'end_date.after_or_equal' => 'The last day can\'t be before the first day.',
+            'reason.required' => 'Say what the leave is for.',
+            'attachment.required' => 'Attach the signed leave form with your manager\'s approval.',
+            'attachment.mimes' => 'Attach a PDF, JPG or PNG file.',
+            'attachment.max' => 'The file is larger than '.round($cfg['max_kb'] / 1024).' MB.',
+            'attachment.prohibited' => 'Attachments are switched off for now. Hand the signed form to HR.',
+        ]);
+        LeaveController::checkDates($data);
+        LeaveController::refuseClash($employee->id, $data['start_date'], $data['end_date']);
+        $open = LeaveRequest::query()->where('employee_id', $employee->id)->where('status', 'pending')
+            ->where('start_date', '<=', $data['end_date'])->where('end_date', '>=', $data['start_date'])->exists();
+        if ($open) {
+            throw ValidationException::withMessages(['start_date' => 'You already asked for leave on some of these days. Cancel that request first.']);
+        }
+
+        $file = $data['attachment'] ?? null;
+        $stored = null;
+        if ($file) {
+            $ext = strtolower($file->guessExtension() ?: $file->getClientOriginalExtension());
+            $stored = $file->storeAs("leave-requests/{$employee->id}", Str::random(40).'.'.$ext, $cfg['disk']);
+        }
+        $type = LeaveType::findOrFail($data['leave_type_id']);
+        try {
+            LeaveRequest::create([
+                'employee_id' => $employee->id, 'leave_type_id' => $type->id, 'start_date' => $data['start_date'], 'end_date' => $data['end_date'],
+                'part' => $data['part'], 'reason' => $data['reason'], 'requested_by' => $request->user()->id,
+                'days' => LeaveController::workingDays($employee, $data['start_date'], $data['end_date'], $data['part']),
+                'attachment_path' => $stored, 'attachment_name' => $file ? Str::limit(basename($file->getClientOriginalName()), 250, '') : null,
+                'attachment_mime' => $file?->getMimeType(), 'attachment_size' => $file?->getSize(),
+            ]);
+        } catch (\Throwable $e) {
+            $stored && Storage::disk($cfg['disk'])->delete($stored);   // no orphan file without a row
+            throw $e;
+        }
+
+        return back()->with('success', 'Sent to HR. You\'ll see their answer here.'.$this->overNote($employee, $type, $data['start_date'], $data['end_date'], $data['part']));
+    }
+
+    public function cancelLeaveRequest(Request $request, LeaveRequest $leaveRequest): RedirectResponse
+    {
+        abort_unless($leaveRequest->employee_id === $this->employee($request)->id, 404);
+        if ($leaveRequest->status !== 'pending') {
+            throw ValidationException::withMessages(['status' => 'Only a request HR hasn\'t answered yet can be cancelled.']);
+        }
+        $leaveRequest->update(['status' => 'cancelled']);
+
+        return back()->with('success', 'Request cancelled.');
+    }
+
+    public function leaveRequestFile(Request $request, LeaveRequest $leaveRequest): StreamedResponse
+    {
+        abort_unless($leaveRequest->employee_id === $this->employee($request)->id, 404);
+
+        return LeaveRequestController::stream($leaveRequest);
+    }
+
+    /** A letter HR issued to them, on the same A4 sheet HR prints. */
+    public function letter(Request $request, IssuedLetter $letter): Response
+    {
+        abort_unless($letter->employee_id === $this->employee($request)->id, 404);
+
+        return LetterController::printPage($letter, ['href' => '/me#documents', 'label' => 'My page']);
+    }
+
+    /** " This goes 2 days over your Annual balance for 2026; HR decides." when the request would. */
+    private function overNote(Employee $employee, LeaveType $type, string $from, string $to, string $part): string
+    {
+        if ($type->per_leave_days !== null) {
+            $over = \App\Services\LeaveBalances::overLimit($type, $from, $to);
+
+            return $over ? " It is $over ".($over === 1 ? 'day' : 'days')." longer than the {$type->per_leave_days}-day {$type->name} allowance; HR decides." : '';
+        }
+        if ($type->yearly_days === null) {
+            return '';
+        }
+        $year = (int) substr($from, 0, 4);
+        $b = collect(\App\Services\LeaveBalances::forEmployee($employee, $year))->firstWhere('type_id', $type->id);
+        $after = $b ? $b['left'] - LeaveController::workingDays($employee, $from, $to, $part) : 0;
+
+        return $b && $after < 0 ? ' This goes '.(0 - $after)." ".(0 - $after == 1 ? 'day' : 'days')." over your {$type->name} balance for $year; HR decides." : '';
     }
 
     private function employee(Request $request, bool $required = true): ?Employee

@@ -58,7 +58,7 @@ import type { SharedProps } from '@/types';
  * edit: only for HR and admin logins (the page itself returns 403 to others).
  * badge: key of a count in the shared "nav" prop (HandleInertiaRequests), shown when above 0.
  */
-type Item = { title: string; href: string; icon: LucideIcon; edit?: boolean; badge?: 'requests' | 'reviews' };
+type Item = { title: string; href: string; icon: LucideIcon; edit?: boolean; badge?: 'requests' | 'reviews' | 'leave' };
 type Group = { label?: string; items: Item[] };
 
 const groups: Group[] = [
@@ -89,7 +89,7 @@ const groups: Group[] = [
             { title: 'Punch log', href: '/attendance/punches', icon: ListOrdered, edit: true },
             { title: 'Devices', href: '/attendance/devices', icon: Fingerprint, edit: true },
             { title: 'Attendance links', href: '/attendance/links', icon: Link2, edit: true },
-            { title: 'Leave & holidays', href: '/leave', icon: Palmtree },
+            { title: 'Leave & holidays', href: '/leave', icon: Palmtree, badge: 'leave' },
         ],
     },
     {

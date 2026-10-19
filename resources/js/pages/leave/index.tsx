@@ -244,7 +244,7 @@ function Types({ types, can }: { types: LeaveType[]; can: boolean }) {
 }
 
 export default function LeaveIndex(props: Props) {
-    const { auth } = usePage<SharedProps>().props;
+    const { auth, nav } = usePage<SharedProps>().props;
     const can = auth.can.edit;
     const [adding, setAdding] = useState(false);
     const [q, setQ] = useState(props.filters.q ?? '');
@@ -255,8 +255,11 @@ export default function LeaveIndex(props: Props) {
     return (
         <>
             <Head title="Leave" />
-            <PageHeader title="Leave" description="Approved leave and public holidays. Approvals stay in HR.my; record the outcome here so attendance is right."
-                actions={can && <Button onClick={() => setAdding(true)}><Plus /> Record leave</Button>} />
+            <PageHeader title="Leave" description="Approved leave and public holidays. Staff apply on My page and HR approves under Requests; leave approved elsewhere is recorded here."
+                actions={can && <>
+                    <Button variant="outline" asChild><Link href="/leave/requests">Requests{nav?.leave ? ` (${nav.leave})` : ''}</Link></Button>
+                    <Button onClick={() => setAdding(true)}><Plus /> Record leave</Button>
+                </>} />
             <Tabs defaultValue={['balances', 'holidays', 'types'].includes(hash) ? hash : 'records'} className="px-4 pt-4 pb-10 md:px-6"
                 onValueChange={(v) => history.replaceState(history.state, '', `#${v}`)}>
                 <TabsList>

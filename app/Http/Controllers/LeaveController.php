@@ -73,24 +73,15 @@ class LeaveController extends Controller
             'part' => ['required', Rule::in(array_keys(LeaveRecord::PARTS))],
             'note' => ['nullable', 'string', 'max:1000'],
         ], ['end_date.after_or_equal' => 'The last day can\'t be before the first day.']);
-        if ($data['part'] !== 'full' && $data['start_date'] !== $data['end_date']) {
-            throw ValidationException::withMessages(['part' => 'Half-day leave is for a single day.']);
-        }
-        if (CarbonImmutable::parse($data['start_date'])->diffInDays(CarbonImmutable::parse($data['end_date'])) > 366) {
-            throw ValidationException::withMessages(['end_date' => 'Leave can be at most a year long.']);
-        }
-        $clash = LeaveRecord::query()->with('type:id,name')->where('employee_id', $data['employee_id'])
-            ->where('start_date', '<=', $data['end_date'])->where('end_date', '>=', $data['start_date'])->first();
-        if ($clash) {
-            throw ValidationException::withMessages(['start_date' => "Overlaps {$clash->type->name} leave from ".$clash->start_date->format('j M').' to '.$clash->end_date->format('j M').'.']);
-        }
+        self::checkDates($data);
+        self::refuseClash((int) $data['employee_id'], $data['start_date'], $data['end_date']);
 
         $employee = Employee::findOrFail($data['employee_id']);
         $days = self::workingDays($employee, $data['start_date'], $data['end_date'], $data['part']);
         LeaveRecord::create($data + ['days' => $days, 'source' => 'manual', 'created_by' => $request->user()->id]);
 
         return back()->with('success', "Recorded {$days} ".($days == 1 ? 'day' : 'days')." of leave for {$employee->full_name}."
-            .$this->balanceNote($employee, LeaveType::findOrFail($data['leave_type_id']), $data['start_date'], $data['end_date']));
+            .self::balanceNote($employee, LeaveType::findOrFail($data['leave_type_id']), $data['start_date'], $data['end_date']));
     }
 
     public function destroy(LeaveRecord $record): RedirectResponse
@@ -181,7 +172,7 @@ class LeaveController extends Controller
     }
 
     /** " Annual: 3 of 14 days left in 2026." / " Annual: 2 days over the 14 for 2026." / " Longer than the 14-day Wedding allowance (by 3 days)." */
-    private function balanceNote(Employee $employee, LeaveType $type, string $from, string $to): string
+    public static function balanceNote(Employee $employee, LeaveType $type, string $from, string $to): string
     {
         if ($type->per_leave_days !== null) {
             $over = LeaveBalances::overLimit($type, $from, $to);
@@ -204,6 +195,27 @@ class LeaveController extends Controller
     }
 
     // ---------------------------------------------------------------- helpers
+
+    /** Half days are for one day; leave is at most a year. Used by Record leave and leave requests. */
+    public static function checkDates(array $data): void
+    {
+        if ($data['part'] !== 'full' && $data['start_date'] !== $data['end_date']) {
+            throw ValidationException::withMessages(['part' => 'Half-day leave is for a single day.']);
+        }
+        if (CarbonImmutable::parse($data['start_date'])->diffInDays(CarbonImmutable::parse($data['end_date'])) > 366) {
+            throw ValidationException::withMessages(['end_date' => 'Leave can be at most a year long.']);
+        }
+    }
+
+    /** No two leave records for one person on the same day. */
+    public static function refuseClash(int $employeeId, string $from, string $to): void
+    {
+        $clash = LeaveRecord::query()->with('type:id,name')->where('employee_id', $employeeId)
+            ->where('start_date', '<=', $to)->where('end_date', '>=', $from)->first();
+        if ($clash) {
+            throw ValidationException::withMessages(['start_date' => "Overlaps {$clash->type->name} leave from ".$clash->start_date->format('j M').' to '.$clash->end_date->format('j M').'.']);
+        }
+    }
 
     /**
      * Working days in the range for this person: their schedule's working days, minus holidays.

@@ -854,10 +854,11 @@ class HrWorkbookImporter
         $this->orphanFiles = [
             ...DB::table('employee_files')->pluck('path')->all(),
             ...DB::table('employees')->whereNotNull('photo_path')->pluck('photo_path')->all(),
+            ...DB::table('leave_requests')->whereNotNull('attachment_path')->pluck('attachment_path')->all(),
         ];
         $tables = ['activity_log', 'checklist_entries', 'probation_checkins', 'probation_plan_items', 'probation_plans',
             'onboardings', 'offboardings', 'employment_history', 'employee_files', 'employee_work_schedules',
-            'attendance_adjustments', 'attendance_requests', 'leave_records', 'asset_assignments', 'reviews',
+            'attendance_adjustments', 'attendance_requests', 'leave_requests', 'leave_records', 'asset_assignments', 'reviews',
             'issued_letters', 'employee_category'];
         if ($this->path !== null) {
             $tables[] = 'controlled_documents';

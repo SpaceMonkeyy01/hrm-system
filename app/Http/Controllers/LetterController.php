@@ -96,9 +96,16 @@ class LetterController extends Controller
     /** The letter on an A4 page, ready to print (print/letter has no sidebar). */
     public function show(IssuedLetter $letter): Response
     {
+        return self::printPage($letter, null);
+    }
+
+    /** The A4 sheet. $back: where the toolbar's back link goes (the profile for HR; My page for the person). */
+    public static function printPage(IssuedLetter $letter, ?array $back): Response
+    {
         $letter->load(['employee' => fn ($q) => $q->withTrashed()->with('company:id,name'), 'issuer:id,name']);
 
         return Inertia::render('print/letter', [
+            'back' => $back ?? ['href' => "/employees/{$letter->employee->id}", 'label' => $letter->employee->full_name],
             'letter' => [
                 ...$letter->only('id', 'reference', 'subject', 'body'),
                 'issued_on' => $letter->issued_on->toDateString(),

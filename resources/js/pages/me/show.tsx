@@ -1,5 +1,5 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { CheckCircle2, CircleDashed, Send } from 'lucide-react';
+import { CheckCircle2, CircleDashed, ExternalLink, FileText, Send } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { DayStatus, duration, SessionsLine, TimeCell } from '@/components/attendance';
 import { AttendanceHeatmap } from '@/components/attendance-heatmap';
@@ -13,6 +13,8 @@ import { Detail, Field } from '@/components/field';
 import { AssetList } from '@/components/assets';
 import type { AssetRow } from '@/components/assets';
 import { balanceText, leaveDates } from '@/components/leave';
+import { MyLeaveRequests } from '@/components/my-leave-requests';
+import type { LeaveRequestRow, LeaveTypeOption } from '@/components/my-leave-requests';
 import { MyReviews } from '@/components/my-reviews';
 import type { MyReview } from '@/components/my-reviews';
 import type { LeaveBalance, LeaveRecordRow } from '@/components/leave';
@@ -57,6 +59,12 @@ type Props = {
     reviews?: MyReview[];
     scale?: Record<string, string>;
     rules?: { daysBack: number; editable: string[] };
+    leaveRequests?: LeaveRequestRow[];
+    leaveTypes?: LeaveTypeOption[];
+    leaveParts?: Record<string, string>;
+    uploads?: { enabled: boolean; max_mb: number };
+    letters?: { id: number; reference: string; subject: string | null; issued_on: string }[];
+    policies?: { id: number; doc_number: string; name: string; description: string | null; link_url: string | null; issued_on: string | null }[];
     today?: string;
 };
 
@@ -182,6 +190,7 @@ export default function MyPage(props: Props) {
                     <TabsTrigger value="leave">Leave</TabsTrigger>
                     <TabsTrigger value="requests">Requests{pending ? ` (${pending})` : ''}</TabsTrigger>
                     <TabsTrigger value="reviews">Reviews{yourTurn ? ` (${yourTurn})` : ''}</TabsTrigger>
+                    <TabsTrigger value="documents">Documents</TabsTrigger>
                     <TabsTrigger value="details">My details</TabsTrigger>
                 </TabsList>
 
@@ -261,7 +270,10 @@ export default function MyPage(props: Props) {
 
                 <TabsContent value="leave">
                     <div className="grid max-w-3xl gap-4">
-                        <p className="text-sm text-muted-foreground">Approved leave in {props.leave.year}. Apply for leave in HR.my; it shows here, and comes off your balance, once HR records it.</p>
+                        <MyLeaveRequests requests={props.leaveRequests ?? []} types={props.leaveTypes ?? []} parts={props.leaveParts ?? {}}
+                            uploads={props.uploads ?? { enabled: false, max_mb: 10 }} today={today} />
+                        <h2 className="mt-2 font-bold">Approved leave in {props.leave.year}</h2>
+                        <p className="text-sm text-muted-foreground">Once HR approves a request it shows here and comes off your balance.</p>
                         {props.leave.balances.length > 0 && (
                             <div className="flex flex-wrap gap-2 text-sm" aria-label="Leave balance">
                                 {props.leave.balances.map((b) => (
@@ -322,6 +334,43 @@ export default function MyPage(props: Props) {
                                 ))}
                             </ul>
                         )}
+                    </div>
+                </TabsContent>
+
+                <TabsContent value="documents">
+                    <div className="grid max-w-3xl gap-6">
+                        <section className="grid gap-3">
+                            <h2 className="font-bold">Letters HR issued to you</h2>
+                            {(props.letters ?? []).length === 0 ? <EmptyState icon={FileText} title="No letters yet.">Experience, verification and other letters show here once HR issues them.</EmptyState> : (
+                                <ul className="divide-y rounded-lg border">
+                                    {props.letters!.map((l) => (
+                                        <li key={l.id} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
+                                            <span className="flex-1 font-semibold">{l.subject ?? 'Letter'}</span>
+                                            <span className="text-muted-foreground tabular-nums">{l.reference}, {formatDate(l.issued_on)}</span>
+                                            <Button variant="outline" size="sm" asChild><a href={`/me/letters/${l.id}`}>Open</a></Button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </section>
+                        <section className="grid gap-3">
+                            <h2 className="font-bold">Company policies</h2>
+                            {(props.policies ?? []).length === 0 ? <EmptyState icon={FileText} title="No policies published yet." /> : (
+                                <ul className="divide-y rounded-lg border">
+                                    {props.policies!.map((p) => (
+                                        <li key={p.id} className="flex flex-wrap items-start gap-3 px-3 py-2 text-sm">
+                                            <span className="flex-1">
+                                                <span className="font-semibold">{p.name}</span> <span className="text-muted-foreground">{p.doc_number}</span>
+                                                {p.description && <span className="block text-muted-foreground">{p.description}</span>}
+                                            </span>
+                                            {p.link_url ? (
+                                                <Button variant="outline" size="sm" asChild><a href={p.link_url} target="_blank" rel="noreferrer"><ExternalLink /> Read</a></Button>
+                                            ) : <span className="text-xs text-muted-foreground">Ask HR for a copy</span>}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </section>
                     </div>
                 </TabsContent>
 

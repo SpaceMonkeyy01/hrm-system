@@ -5,20 +5,21 @@ import { formatDate } from '@/lib/format';
 import type { SharedProps } from '@/types';
 
 type Props = {
+    back: { href: string; label: string };
     letter: { id: number; reference: string; subject: string | null; body: string; issued_on: string; issued_by: string | null; company: string | null;
         employee: { id: number; name: string } };
 };
 
 /** An issued letter on an A4 sheet. The toolbar doesn't print; "Save as PDF" in the print window gives a PDF. */
-export default function PrintLetter({ letter }: Props) {
+export default function PrintLetter({ letter, back }: Props) {
     const { auth } = usePage<SharedProps>().props;
     return (
         <>
             <Head title={`${letter.subject ?? 'Letter'} ${letter.reference}`} />
             <div className="min-h-svh bg-[#eef1f5] py-6 print:bg-white print:py-0">
                 <div className="mx-auto mb-4 flex max-w-[210mm] flex-wrap items-center justify-between gap-2 px-4 print:hidden">
-                    <Link href={`/employees/${letter.employee.id}`} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-                        <ChevronLeft className="size-4" /> {letter.employee.name}
+                    <Link href={back.href} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+                        <ChevronLeft className="size-4" /> {back.label}
                     </Link>
                     <div className="flex gap-2">
                         {auth.can.admin && (

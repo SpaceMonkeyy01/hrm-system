@@ -83,7 +83,7 @@ class RouteAccessTest extends TestCase
             }
         }
         $expected = ['/', 'account', 'cron/reminders/{token}', 'cron/machine/{token}', 'login', 'logout', 'forgot-password', 'reset-password', 'reset-password/{token}', 'me', 'me/contact', 'me/requests', 'me/requests/{correction}',
-            'me/reviews/{review}', 'me/clock', 'me/reviews/{review}/acknowledge', 'me/photo', 'employees/{employee}/photo', 'storage/{path}', 'up'];
+            'me/reviews/{review}', 'me/clock', 'me/reviews/{review}/acknowledge', 'me/photo', 'me/leave-requests', 'me/leave-requests/{leaveRequest}', 'me/leave-requests/{leaveRequest}/file', 'me/letters/{letter}', 'employees/{employee}/photo', 'storage/{path}', 'up'];
         $this->assertSame([], array_values(array_diff(array_unique($open), $expected)));
     }
 
@@ -154,6 +154,7 @@ class RouteAccessTest extends TestCase
             'network' => \App\Models\OfficeNetwork::create(['name' => 'Test line', 'address' => '198.51.100.1'])->id,
             'device' => \App\Models\AttendanceDevice::create(['name' => 'Test machine', 'host' => '203.0.113.10'])->id,
             'category' => \App\Models\Category::create(['name' => 'Test category'])->id,
+            'leaveRequest' => \App\Models\LeaveRequest::create(['employee_id' => $e->id, 'leave_type_id' => LeaveType::first()->id, 'start_date' => '2026-05-13', 'end_date' => '2026-05-13'])->id,
         ];
         $out = [];
         foreach (Route::getRoutes() as $route) {
