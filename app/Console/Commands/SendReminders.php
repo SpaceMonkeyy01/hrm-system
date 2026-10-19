@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Mail\RemindersDigest;
+use App\Models\Asset;
 use App\Models\User;
 use App\Services\Import\MachineSyncer;
 use App\Services\Reminders;
@@ -29,11 +30,14 @@ class SendReminders extends Command
         $reminders = Reminders::forDate($today);
         $backlog = Reminders::isBacklogDay($today) ? Reminders::documentsBacklog($today) : 0;
         $overdue = MachineSyncer::overdueDevices();
+        $warranties = Asset::query()->warrantyEnding($today->toDateString(), $today->addDays((int) config('hrm.assets.warranty_days', 30))->toDateString())
+            ->orderBy('warranty_until')->get(['asset_tag', 'name', 'warranty_until'])
+            ->map(fn ($a) => ['tag' => $a->asset_tag, 'name' => $a->name, 'until' => $a->warranty_until->toDateString()])->all();
         $recipients = User::query()->where('is_active', true)
             ->whereIn('role', config('hrm.reminders.recipient_roles', ['admin', 'hr']))
             ->orderBy('id')->get(['id', 'name', 'email', 'role']);
 
-        if ($reminders === [] && $backlog === 0 && $overdue === []) {
+        if ($reminders === [] && $backlog === 0 && $overdue === [] && $warranties === []) {
             $this->info("Nothing needs attention on {$today->toDateString()}. No email sent.");
 
             return self::SUCCESS;
@@ -45,6 +49,9 @@ class SendReminders extends Command
             ], $reminders));
             if ($backlog) {
                 $this->line("Weekly line: $backlog older employees still have missing documents.");
+            }
+            foreach ($warranties as $w) {
+                $this->line("Warranty ending: {$w['tag']} {$w['name']} on {$w['until']}.");
             }
             foreach ($overdue as $d) {
                 $this->line("Sync overdue: {$d['name']}, last good sync ".($d['last_ok_at'] ?? 'never').'.');
@@ -62,7 +69,7 @@ class SendReminders extends Command
         }
 
         foreach ($recipients as $user) {
-            Mail::to($user->email, $user->name)->send(new RemindersDigest($today, $reminders, $backlog, $overdue));
+            Mail::to($user->email, $user->name)->send(new RemindersDigest($today, $reminders, $backlog, $overdue, $warranties));
         }
         $this->info('Sent '.count($reminders).' reminders to '.$recipients->count().' '.($recipients->count() === 1 ? 'person' : 'people').'.');
 

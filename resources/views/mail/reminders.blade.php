@@ -23,6 +23,16 @@ Until it syncs again, days show No data or Absent. Check the cron job and that t
 @endforeach
 
 @endforeach
+@if (count($ending))
+## Warranties ending ({{ count($ending) }})
+
+@foreach ($ending as $w)
+- {{ $w['tag'] }} {{ $w['name'] }}: warranty ends {{ $w['date'] }}.
+@endforeach
+
+[See them on the Assets page]({{ $assetsLink }})
+
+@endif
 @if ($backlog)
 ## Older missing documents
 

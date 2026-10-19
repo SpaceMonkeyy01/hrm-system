@@ -220,6 +220,8 @@ Route::middleware('auth')->group(function () {
         Route::middleware('can:edit-hr')->group(function () {
             Route::post('assets', [AssetController::class, 'store'])->name('assets.store');
             Route::put('assets/{asset}', [AssetController::class, 'update'])->name('assets.update');
+            Route::post('assets/types', [AssetController::class, 'storeType'])->name('asset-types.store');
+            Route::put('assets/types/{type}', [AssetController::class, 'updateType'])->name('asset-types.update');
             Route::post('assets/{asset}/assign', [AssetController::class, 'assign'])->name('assets.assign');
             Route::post('assets/{asset}/return', [AssetController::class, 'return'])->name('assets.return');
         });

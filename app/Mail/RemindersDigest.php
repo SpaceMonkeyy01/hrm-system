@@ -18,8 +18,9 @@ class RemindersDigest extends Mailable
      * @param  list<array<string, mixed>>  $reminders  from Reminders::forDate()
      * @param  int  $backlog  from Reminders::documentsBacklog(), only on the weekly backlog day (0 = leave the line out)
      * @param  list<array{name: string, code: ?string, last_ok_at: ?string}>  $overdue  MachineSyncer::overdueDevices()
+     * @param  list<array{tag: string, name: string, until: string}>  $warranties  assets whose warranty ends soon
      */
-    public function __construct(public CarbonInterface $today, public array $reminders, public int $backlog = 0, public array $overdue = []) {}
+    public function __construct(public CarbonInterface $today, public array $reminders, public int $backlog = 0, public array $overdue = [], public array $warranties = []) {}
 
     public function envelope(): Envelope
     {
@@ -28,6 +29,7 @@ class RemindersDigest extends Mailable
         $what = match (true) {
             $n > 0 => "$n ".($n === 1 ? 'item' : 'items'),
             $this->overdue !== [] => 'attendance machine not syncing',
+            $this->warranties !== [] => count($this->warranties).' '.(count($this->warranties) === 1 ? 'warranty' : 'warranties').' ending',
             default => 'older missing documents',
         };
 
@@ -52,6 +54,8 @@ class RemindersDigest extends Mailable
             'backlogLink' => url('/documents?status=Pending'),
             'stalled' => array_map(fn ($d) => $d + ['since' => $d['last_ok_at'] ? \Carbon\CarbonImmutable::parse($d['last_ok_at'])->timezone(config('app.timezone'))->format('j M Y H:i') : null], $this->overdue),
             'devicesLink' => url('/attendance/devices'),
+            'ending' => array_map(fn ($w) => $w + ['date' => \Carbon\CarbonImmutable::parse($w['until'])->format('j M Y')], $this->warranties),
+            'assetsLink' => url('/assets?warranty=ending'),
             'dashboard' => url('/dashboard'),
         ]);
     }

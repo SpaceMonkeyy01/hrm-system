@@ -20,9 +20,10 @@ return [
         'employee' => 'Employee: only their own record',
     ],
 
-    // Asset register (Assets page). Types are a plain list HR picks from; add one here when needed.
+    // Asset register (Assets page). Types are managed by HR on the Assets page (asset_types table).
     'assets' => [
-        'types' => ['Laptop', 'Desktop', 'Monitor', 'Mobile phone', 'SIM card', 'ID card', 'Access card', 'Headset', 'Other'],
+        // The daily HR email lists warranties ending within this many days (assets still in use).
+        'warranty_days' => 30,
         // status => [label, status-pill tone]. "assigned" is set only by giving the asset to someone.
         'statuses' => [
             'in_stock' => ['label' => 'In stock', 'tone' => 'done'],
