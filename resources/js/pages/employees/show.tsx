@@ -22,8 +22,8 @@ import { AdjustDialog, DayStatus, duration, SessionsLine, TimeCell } from '@/com
 import type { AttendanceDay } from '@/components/attendance';
 import { AssetList } from '@/components/assets';
 import type { AssetRow } from '@/components/assets';
-import { balanceText, leaveDates } from '@/components/leave';
-import type { LeaveBalance, LeaveRecordRow } from '@/components/leave';
+import { balanceText, balanceTitle, deductionText, leaveDates } from '@/components/leave';
+import type { LeaveBalance, LeaveCounted, LeaveDeductions, LeaveRecordRow } from '@/components/leave';
 
 type Employee = {
     id: number; system_id: string; employee_code: string; full_name: string; photo: string | null; first_name: string | null; last_name: string | null; cnic: string | null;
@@ -66,7 +66,7 @@ type Props = {
     employmentHistory: HistoryEntry[];
     attendance: AttendanceMonth;
     attendanceYear: AttendanceYear;
-    leave: { year: number; records: LeaveRecordRow[]; totals: Record<string, number>; balances: LeaveBalance[] };
+    leave: { year: number; records: LeaveRecordRow[]; totals: Record<string, number>; balances: LeaveBalance[]; deductions: LeaveDeductions; counted: LeaveCounted[] };
     assets: AssetRow[];
     /** HR and admin only. */
     letters: { id: number; reference: string; subject: string | null; issued_on: string; issued_by: string | null }[] | null;
@@ -185,11 +185,17 @@ function LeaveTab({ leave }: { leave: Props['leave'] }) {
             {leave.balances.length > 0 && (
                 <div className="flex flex-wrap gap-2 text-sm" aria-label="Leave balance">
                     {leave.balances.map((b) => (
-                        <span key={b.type_id} className={`rounded-md border px-2.5 py-1 ${b.left < 0 ? 'border-[#f0b8b8] bg-missing-soft' : ''}`} title={`${b.used} used of ${b.allowance} in ${leave.year}`}>
+                        <span key={b.type_id} className={`rounded-md border px-2.5 py-1 ${b.left < 0 ? 'border-[#f0b8b8] bg-missing-soft' : ''}`} title={balanceTitle(b)}>
                             <span className="text-muted-foreground">{b.type}</span> <span className="font-semibold tabular-nums">{balanceText(b)}</span>
                         </span>
                     ))}
                 </div>
+            )}
+            {leave.deductions.days > 0 && (
+                <p className="text-sm text-muted-foreground">Deducted {leave.deductions.days} {leave.deductions.days === 1 ? 'day' : 'days'} (Casual first, then Annual): {deductionText(leave.deductions)}.</p>
+            )}
+            {leave.counted.length > 0 && (
+                <p className="text-sm text-muted-foreground">Counted in HR's sheet before the app: {leave.counted.map((c) => `${c.type} ${c.days}`).join(', ')}.</p>
             )}
             {totals.length > 0 && (
                 <div className="flex flex-wrap gap-2 text-sm">

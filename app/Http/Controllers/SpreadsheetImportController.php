@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\Import\AssetListImport;
 use App\Services\Import\AttendanceLinksImport;
 use App\Services\Import\EmployeeDetailsImport;
+use App\Services\Import\LeaveSheetImport;
 use App\Services\Import\SpreadsheetImport;
 use App\Support\Csv;
 use Illuminate\Http\RedirectResponse;
@@ -24,7 +25,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class SpreadsheetImportController extends Controller
 {
     /** @var array<string, class-string<SpreadsheetImport>> */
-    public const KINDS = ['details' => EmployeeDetailsImport::class, 'assets' => AssetListImport::class, 'links' => AttendanceLinksImport::class];
+    public const KINDS = ['details' => EmployeeDetailsImport::class, 'assets' => AssetListImport::class, 'links' => AttendanceLinksImport::class, 'leave-sheet' => LeaveSheetImport::class];
 
     public function show(Request $request, string $kind): Response
     {

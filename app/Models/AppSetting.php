@@ -32,7 +32,9 @@ class AppSetting extends Model
     {
         if (self::$cache === null) {
             try {
-                self::$cache = static::query()->pluck('value', 'key')->map(fn ($v) => is_string($v) ? json_decode($v, true) : $v)->all();
+                // pluck() may already have decoded the json cast: decode only what is still json, so a plain string
+                // setting (a date such as "2026-10-12") isn't decoded a second time into null.
+                self::$cache = static::query()->pluck('value', 'key')->map(fn ($v) => is_string($v) && json_validate($v) ? json_decode($v, true) : $v)->all();
             } catch (QueryException) {
                 return $default;   // table not there yet (before the migration runs): behave as before
             }

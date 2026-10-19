@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\Company;
 use App\Models\Employee;
+use App\Models\AppSetting;
 use App\Models\Holiday;
 use App\Models\LeaveRecord;
 use App\Models\LeaveType;
 use App\Services\AttendanceBoard;
 use App\Services\LeaveBalances;
+use App\Services\LeaveSettings;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -52,6 +54,7 @@ class LeaveController extends Controller
             'types' => LeaveType::query()->withCount('records')->orderBy('sort_order')->orderBy('name')->get()
                 ->map(fn ($t) => [...$t->only('id', 'name', 'is_paid', 'is_active', 'sort_order', 'yearly_days', 'per_leave_days'), 'used' => $t->records_count]),
             'balances' => $this->balances($f, $first->year),
+            'settings' => LeaveSettings::all(),
             'holidays' => Holiday::query()->with('company:id,name')->whereYear('date', $first->year)->orderBy('date')->get()
                 ->map(fn ($h) => ['id' => $h->id, 'date' => $h->date->toDateString(), 'name' => $h->name, 'company' => $h->company?->name, 'company_id' => $h->company_id]),
             'year' => $first->year,
@@ -154,6 +157,24 @@ class LeaveController extends Controller
 
     // ---------------------------------------------------------------- balances
 
+    /** Deductions and short leave numbers (LeaveSettings). Each change is in the activity log. */
+    public function updateSettings(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'absent_days' => ['required', 'numeric', 'min:0', 'max:2', 'multiple_of:0.25'],
+            'late_early_days' => ['required', 'numeric', 'min:0', 'max:1', 'multiple_of:0.25'],
+            'short_leave_days' => ['required', 'numeric', 'min:0.25', 'max:1', 'multiple_of:0.25'],
+            'deductions_from' => ['nullable', 'date_format:Y-m-d'],
+        ], ['*.multiple_of' => 'Use quarter days: 0, 0.25, 0.5, 0.75, 1.']);
+        foreach ($data as $key => $value) {
+            AppSetting::put("leave.$key", $key === 'deductions_from' ? ($value ?: null) : (float) $value);
+        }
+
+        return back()->with('success', $data['deductions_from'] ?? null
+            ? 'Saved. Absences and late / early sign-offs count against balances from '.CarbonImmutable::parse($data['deductions_from'])->format('j M Y').'.'
+            : 'Saved. Attendance deductions are off until you pick a start date.');
+    }
+
     /** Balances tab: current staff (same search and department filters as the list), yearly types only. */
     private function balances(array $f, int $year): array
     {
@@ -161,13 +182,14 @@ class LeaveController extends Controller
         $people = Employee::query()->whereIn('status', ['active', 'offboarding'])->with('department:id,name')
             ->search($f['q'] ?? null)->when($f['department'] ?? null, fn ($q, $v) => $q->where('department_id', $v))
             ->orderBy('full_name')->get(['id', 'employee_code', 'full_name', 'department_id', 'company_id', 'start_date']);
-        $rows = LeaveBalances::forEmployees($people, $year, $types);
+        $rows = LeaveBalances::summary($people, $year, $types);
 
         return [
             'year' => $year,
             'types' => $types->map(fn ($t) => ['id' => $t->id, 'name' => $t->name, 'yearly_days' => $t->yearly_days])->values(),
             'rows' => $people->map(fn ($e) => ['id' => $e->id, 'name' => $e->full_name, 'code' => $e->employee_code,
-                'department' => $e->department?->name, 'start_date' => $e->start_date?->toDateString(), 'balances' => $rows[$e->id]])->values(),
+                'department' => $e->department?->name, 'start_date' => $e->start_date?->toDateString(),
+                'balances' => $rows[$e->id]['balances'], 'deductions' => $rows[$e->id]['deductions']])->values(),
         ];
     }
 
@@ -187,7 +209,7 @@ class LeaveController extends Controller
         if (! $b) {
             return '';
         }
-        $n = fn (float $d) => rtrim(rtrim(number_format($d, 1, '.', ''), '0'), '.');
+        $n = fn (float $d) => rtrim(rtrim(number_format($d, 2, '.', ''), '0'), '.');
 
         return $b['left'] >= 0
             ? " {$type->name}: {$n($b['left'])} of {$n($b['allowance'])} days left in $year."
@@ -200,7 +222,7 @@ class LeaveController extends Controller
     public static function checkDates(array $data): void
     {
         if ($data['part'] !== 'full' && $data['start_date'] !== $data['end_date']) {
-            throw ValidationException::withMessages(['part' => 'Half-day leave is for a single day.']);
+            throw ValidationException::withMessages(['part' => 'Half-day and short leave are for a single day.']);
         }
         if (CarbonImmutable::parse($data['start_date'])->diffInDays(CarbonImmutable::parse($data['end_date'])) > 366) {
             throw ValidationException::withMessages(['end_date' => 'Leave can be at most a year long.']);
@@ -219,12 +241,12 @@ class LeaveController extends Controller
 
     /**
      * Working days in the range for this person: their schedule's working days, minus holidays.
-     * Half a day for first_half / second_half. With no schedule, Monday to Friday.
+     * Half a day for first_half / second_half; a short leave counts LeaveSettings short_leave_days. With no schedule, Monday to Friday.
      */
     public static function workingDays(Employee $employee, string $from, string $to, string $part = 'full'): float
     {
         if ($part !== 'full') {
-            return 0.5;
+            return $part === 'short' ? (float) LeaveSettings::get('short_leave_days') : 0.5;
         }
         $board = new AttendanceBoard(collect([$employee]), $from, $to);
         $n = 0;

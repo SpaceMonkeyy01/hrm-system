@@ -84,7 +84,7 @@ class User extends Authenticatable
         'activity_log' => ['user_id'], 'asset_assignments' => ['assigned_by', 'returned_by'], 'attendance_adjustments' => ['updated_by'],
         'attendance_imports' => ['uploaded_by'], 'attendance_requests' => ['requested_by', 'decided_by'], 'checklist_entries' => ['updated_by'],
         'employee_files' => ['uploaded_by'], 'employee_work_schedules' => ['created_by'], 'employment_history' => ['created_by'],
-        'issued_letters' => ['issued_by'], 'leave_records' => ['created_by'], 'leave_requests' => ['requested_by', 'decided_by'], 'machine_syncs' => ['user_id'], 'offboardings' => ['created_by'],
+        'issued_letters' => ['issued_by'], 'leave_records' => ['created_by'], 'leave_requests' => ['requested_by', 'decided_by'], 'leave_adjustments' => ['created_by'], 'machine_syncs' => ['user_id'], 'offboardings' => ['created_by'],
         'office_networks' => ['created_by'], 'review_cycles' => ['created_by'], 'reviews' => ['reviewed_by'],
     ];
 

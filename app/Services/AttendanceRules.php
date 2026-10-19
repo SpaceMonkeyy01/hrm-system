@@ -37,7 +37,7 @@ use Carbon\CarbonInterface;
  *              check-in means the next morning too
  *   holiday    a day off like a weekend (status Holiday, or Worked day off when someone came in)
  *   leave      full day: On leave unless the person punched anyway; half day: no late (first half off) or early
- *              (second half off), and never Half day
+ *              (second half off), and never Half day; short leave: neither late nor early, never Half day
  *
  * Statuses and their colours: config hrm.attendance.statuses.
  */
@@ -180,7 +180,7 @@ class AttendanceRules
             return $result;
         }
 
-        if ($in && $fixed && $working && ! $fullLeave && ($leave['part'] ?? null) !== 'first_half') {
+        if ($in && $fixed && $working && ! $fullLeave && ! in_array($leave['part'] ?? null, ['first_half', 'short'], true)) {
             if (self::minutes($in) > $startMin + $schedule->late_grace_minutes) {
                 $result['late'] = self::minutes($in) - $startMin;
             }
@@ -197,7 +197,7 @@ class AttendanceRules
         // ------------------------------------------------------------ both
         $worked = self::worked($sessions);
         $result['worked'] = $worked;
-        if ($fixed && $working && ! $fullLeave && ($leave['part'] ?? null) !== 'second_half') {
+        if ($fixed && $working && ! $fullLeave && ! in_array($leave['part'] ?? null, ['second_half', 'short'], true)) {
             if (self::minutes($out) < $endMin - $schedule->early_grace_minutes) {
                 $result['early'] = $endMin - self::minutes($out);
             }

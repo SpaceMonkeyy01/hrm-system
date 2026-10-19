@@ -86,7 +86,7 @@ class LeaveBalancesTest extends TestCase
             ->where('balances.rows', function ($rows) {
                 $rows = collect($rows)->keyBy('name');
 
-                return $rows['Old Hand']['balances'][0] == ['type_id' => $this->type('Annual')->id, 'type' => 'Annual', 'allowance' => 14, 'used' => 5, 'left' => 9]
+                return $rows['Old Hand']['balances'][0] == ['type_id' => $this->type('Annual')->id, 'type' => 'Annual', 'allowance' => 14, 'used' => 5, 'deducted' => 0, 'left' => 9]
                     && $rows['New Joiner']['balances'][0]['allowance'] == 7 && $rows['New Joiner']['balances'][1]['allowance'] == 5;
             }));
 

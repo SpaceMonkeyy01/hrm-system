@@ -13,8 +13,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { balanceText, leaveDates } from '@/components/leave';
-import type { LeaveBalance, LeaveRecordRow } from '@/components/leave';
+import { balanceText, balanceTitle, deductionText, leaveDates } from '@/components/leave';
+import type { LeaveBalance, LeaveDeductions, LeaveRecordRow } from '@/components/leave';
 import { formatDate } from '@/lib/format';
 import type { SharedProps } from '@/types';
 
@@ -22,15 +22,16 @@ import type { SharedProps } from '@/types';
 type LeaveType = { id: number; name: string; is_paid: boolean; is_active: boolean; sort_order: number; used: number; yearly_days: number | null; per_leave_days: number | null };
 type Balances = {
     year: number; types: { id: number; name: string; yearly_days: number }[];
-    rows: { id: number; name: string; code: string; department: string | null; start_date: string | null; balances: LeaveBalance[] }[];
+    rows: { id: number; name: string; code: string; department: string | null; start_date: string | null; balances: LeaveBalance[]; deductions: LeaveDeductions }[];
 };
+type Settings = { absent_days: number; late_early_days: number; short_leave_days: number; deductions_from: string | null };
 type Holiday = { id: number; date: string; name: string; company: string | null; company_id: number | null };
 type Company = { id: number; name: string; departments: { id: number; name: string }[] };
 type Props = {
     month: string; today: string; filters: { type?: number; department?: number; q?: string };
     records: LeaveRecordRow[]; onLeaveToday: { id: number; name: string; type: string; part: string }[];
     types: LeaveType[]; holidays: Holiday[]; year: number; people: { id: number; label: string }[]; companies: Company[];
-    parts: Record<string, string>; balances: Balances;
+    parts: Record<string, string>; balances: Balances; settings: Settings;
 };
 
 const opts = { preserveScroll: true, onError: (e: Record<string, string>) => toast.error(Object.values(e)[0] ?? 'Not saved.') };
@@ -155,8 +156,35 @@ function Allowance({ t, can }: { t: LeaveType; can: boolean }) {
     );
 }
 
-function BalancesTab({ balances, go, q, setQ, departments, department }: {
-    balances: Balances; go: (c: Record<string, unknown>) => void; q: string; setQ: (v: string) => void; departments: { value: number; label: string }[]; department?: number;
+/** How absences, late / early sign-offs and short leave count (LeaveSettings). Defaults are HR's own sheet. */
+function DeductionSettings({ settings, can }: { settings: Settings; can: boolean }) {
+    const [d, setD] = useState({ ...settings, deductions_from: settings.deductions_from ?? '' });
+    const [errors, setErrors] = useState<Record<string, string>>({});
+    const num = (k: 'absent_days' | 'late_early_days' | 'short_leave_days', label: string, hint: string) => (
+        <Field label={label} htmlFor={`ls-${k}`} error={errors[k]} hint={hint}>
+            <Input id={`ls-${k}`} type="number" min={0} max={2} step={0.25} className="w-28" disabled={!can} value={d[k]} onChange={(e) => setD((s) => ({ ...s, [k]: Number(e.target.value) }))} />
+        </Field>
+    );
+    return (
+        <form className="grid max-w-2xl gap-4 sm:grid-cols-2" onSubmit={(e) => {
+            e.preventDefault();
+            router.put('/leave/settings', { ...d, deductions_from: d.deductions_from || null }, { preserveScroll: true, onError: setErrors });
+        }}>
+            {num('absent_days', 'An absent day counts as (days)', 'HR\'s sheet: 1. 0 = absences don\'t count.')}
+            {num('late_early_days', 'A late sign-in or early sign-off counts as', 'HR\'s sheet: 0.25 each. Late and early follow the work schedule\'s grace.')}
+            {num('short_leave_days', 'A short leave counts as (days)', 'HR\'s sheet: 0.25.')}
+            <Field label="Count absences and late / early from" htmlFor="ls-from" error={errors.deductions_from}
+                hint="Empty = off. Pick the day after the last month in HR's uploaded sheet, so nothing counts twice.">
+                <Input id="ls-from" type="date" className="w-44" disabled={!can} value={d.deductions_from} onChange={(e) => setD((s) => ({ ...s, deductions_from: e.target.value }))} />
+            </Field>
+            <p className="text-sm text-muted-foreground sm:col-span-2">Deductions come out of Casual until it is used up, then Annual. Only days the attendance board calls Absent count (not "No data" or "Not linked"), and leave days never do.</p>
+            {can && <div className="sm:col-span-2"><Button type="submit" variant="outline"><Check /> Save</Button></div>}
+        </form>
+    );
+}
+
+function BalancesTab({ balances, go, q, setQ, departments, department, can }: {
+    balances: Balances; go: (c: Record<string, unknown>) => void; q: string; setQ: (v: string) => void; departments: { value: number; label: string }[]; department?: number; can: boolean;
 }) {
     const [over, setOver] = useState(false);
     const rows = over ? balances.rows.filter((r) => r.balances.some((b) => b.left < 0)) : balances.rows;
@@ -179,6 +207,7 @@ function BalancesTab({ balances, go, q, setQ, departments, department }: {
                     <Input className="w-56" placeholder="Search name or code" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search" />
                 </form>
                 <label className="flex items-center gap-1.5 text-sm"><input type="checkbox" className="size-4 accent-cascade" checked={over} onChange={(e) => setOver(e.target.checked)} /> Only people over an allowance</label>
+                {can && <Button variant="outline" size="sm" className="ml-auto" asChild><Link href="/imports/leave-sheet">Upload HR's leave sheet</Link></Button>}
             </div>
             {rows.length === 0 ? <EmptyState title="Nobody matches.">Clear a filter to see more people.</EmptyState> : (
                 <div className="overflow-x-auto rounded-lg border">
@@ -187,6 +216,7 @@ function BalancesTab({ balances, go, q, setQ, departments, department }: {
                             <tr>
                                 <th className="px-3 py-2 font-semibold">Employee ({rows.length})</th>
                                 {balances.types.map((t) => <th key={t.id} className="px-3 py-2 font-semibold">{t.name} <span className="font-normal">({t.yearly_days})</span></th>)}
+                                <th className="px-3 py-2 font-semibold">Deducted</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y">
@@ -197,11 +227,12 @@ function BalancesTab({ balances, go, q, setQ, departments, department }: {
                                         <span className="block text-xs text-muted-foreground">{[r.code, r.department].filter(Boolean).join(', ')}</span>
                                     </td>
                                     {r.balances.map((b) => (
-                                        <td key={b.type_id} className={`px-3 py-2 tabular-nums ${b.left < 0 ? 'font-semibold text-missing' : ''}`} title={`${b.used} used of ${b.allowance}`}>
+                                        <td key={b.type_id} className={`px-3 py-2 tabular-nums ${b.left < 0 ? 'font-semibold text-missing' : ''}`} title={balanceTitle(b)}>
                                             {balanceText(b)}
                                             {b.allowance !== balances.types.find((t) => t.id === b.type_id)?.yearly_days && <span className="block text-xs font-normal text-muted-foreground">pro-rated</span>}
                                         </td>
                                     ))}
+                                    <td className="px-3 py-2 text-xs text-muted-foreground tabular-nums">{r.deductions.days ? <><span className="font-semibold text-foreground">{r.deductions.days}</span> {deductionText(r.deductions)}</> : '-'}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -274,7 +305,7 @@ export default function LeaveIndex(props: Props) {
                         <p className="rounded-lg border bg-muted-tone-soft px-4 py-3 text-sm">
                             <span className="font-semibold">On leave today: </span>
                             {props.onLeaveToday.map((p, i) => (
-                                <span key={`${p.id}-${i}`}>{i > 0 && ', '}<Link className="text-cascade hover:underline" href={`/employees/${p.id}#leave`}>{p.name}</Link> ({p.type}{p.part !== 'full' ? ', half day' : ''})</span>
+                                <span key={`${p.id}-${i}`}>{i > 0 && ', '}<Link className="text-cascade hover:underline" href={`/employees/${p.id}#leave`}>{p.name}</Link> ({p.type}{p.part !== 'full' ? (p.part === 'short' ? ', short leave' : ', half day') : ''})</span>
                             ))}
                         </p>
                     )}
@@ -324,7 +355,7 @@ export default function LeaveIndex(props: Props) {
                 </TabsContent>
 
                 <TabsContent value="balances">
-                    <BalancesTab balances={props.balances} go={go} q={q} setQ={setQ} departments={departments} department={props.filters.department} />
+                    <BalancesTab balances={props.balances} go={go} q={q} setQ={setQ} departments={departments} department={props.filters.department} can={can} />
                 </TabsContent>
 
                 <TabsContent value="holidays">
@@ -334,6 +365,9 @@ export default function LeaveIndex(props: Props) {
                 <TabsContent value="types">
                     <Section title="Leave types" description="Switch a type off to stop new leave of that type; past records keep it. Allowance: days a year (working days, pro-rated for new joiners, lapses on 31 Dec) or days each time (calendar days per leave, e.g. Maternity 90).">
                         <Types types={props.types} can={can} />
+                    </Section>
+                    <Section title="Deductions and short leave" description="How absences, late sign-ins / early sign-offs and short leaves count against balances.">
+                        <DeductionSettings settings={props.settings} can={can} />
                     </Section>
                 </TabsContent>
             </Tabs>

@@ -31,7 +31,7 @@ type Props = {
     };
     documents: { population: number; compliant: number; items: DocItem[] };
     attendance: { date: string; statuses: Record<string, number>; late: number; working_days: number; people: number; linked: number } | null;
-    away: { id: number; name: string; photo: string | null; type: string; from: string; to: string; part: 'full' | 'first_half' | 'second_half' }[];
+    away: { id: number; name: string; photo: string | null; type: string; from: string; to: string; part: 'full' | 'first_half' | 'second_half' | 'short' }[];
     newPeople: { id: number; name: string; photo: string | null; role: string | null; start: string }[];
     celebrations: { id: number; name: string; date: string; kind: 'anniversary' | 'birthday'; years: number | null }[];
     holidays: { date: string; name: string; company: string | null }[];
@@ -318,7 +318,7 @@ export default function Dashboard(props: Props) {
                                     <Link href={`/employees/${l.id}`} className="min-w-0 truncate font-semibold hover:text-cascade hover:underline">{l.name}</Link>
                                 </span>
                                 <span className="shrink-0 text-right text-xs text-muted-foreground">
-                                    {l.type}{l.part !== 'full' && ', half day'}
+                                    {l.type}{l.part !== 'full' && (l.part === 'short' ? ', short leave' : ', half day')}
                                     <span className="block tabular-nums">{l.from === l.to ? formatDate(l.from) : `${formatDate(l.from)} to ${formatDate(l.to)}`}</span>
                                 </span>
                             </li>

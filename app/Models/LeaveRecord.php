@@ -11,7 +11,8 @@ class LeaveRecord extends Model
 {
     use LogsActivity;
 
-    public const PARTS = ['full' => 'Full day', 'first_half' => 'First half', 'second_half' => 'Second half'];
+    /** "short": a short leave (an hour or two), counted as LeaveSettings short_leave_days; excuses being late or leaving early. */
+    public const PARTS = ['full' => 'Full day', 'first_half' => 'First half', 'second_half' => 'Second half', 'short' => 'Short leave'];
 
     protected $fillable = ['employee_id', 'leave_type_id', 'start_date', 'end_date', 'part', 'days', 'note', 'source', 'created_by'];
 

@@ -14,7 +14,7 @@ import type { Tone } from '@/types';
 
 /** app/Models/LeaveRequest.php props() */
 export type LeaveRequestRow = {
-    id: number; type: string | null; start_date: string; end_date: string; part: 'full' | 'first_half' | 'second_half'; days: number;
+    id: number; type: string | null; start_date: string; end_date: string; part: 'full' | 'first_half' | 'second_half' | 'short'; days: number;
     reason: string | null; status: 'pending' | 'approved' | 'rejected' | 'cancelled'; status_label: string;
     attachment: { name: string; size: number | null } | null; decision_note: string | null; decided_by: string | null;
     decided_at: string | null; created_at: string | null;

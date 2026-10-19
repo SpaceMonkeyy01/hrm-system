@@ -92,7 +92,14 @@ class EmployeeRecords
             'year' => $year,
             'records' => $records->map(fn ($r) => LeaveController::recordProps($r))->values(),
             'totals' => $records->groupBy(fn ($r) => $r->type->name)->map(fn ($g) => $g->sum('days'))->all(),
-            'balances' => LeaveBalances::forEmployee($employee, $year),
+            ...(function () use ($employee, $year) {
+                $s = LeaveBalances::summary(collect([$employee]), $year)[$employee->id];
+
+                return ['balances' => $s['balances'], 'deductions' => $s['deductions'] + ['from' => LeaveSettings::get('deductions_from')]];
+            })(),
+            // Counted outside the app (HR's sheet before it): type and days
+            'counted' => \App\Models\LeaveAdjustment::query()->with('type:id,name')->where('employee_id', $employee->id)->where('year', $year)
+                ->orderBy('id')->get()->map(fn ($a) => ['type' => $a->type?->name ?? 'Deductions', 'days' => $a->days, 'note' => $a->note])->values(),
         ];
     }
 }

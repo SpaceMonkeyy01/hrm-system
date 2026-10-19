@@ -858,7 +858,7 @@ class HrWorkbookImporter
         ];
         $tables = ['activity_log', 'checklist_entries', 'probation_checkins', 'probation_plan_items', 'probation_plans',
             'onboardings', 'offboardings', 'employment_history', 'employee_files', 'employee_work_schedules',
-            'attendance_adjustments', 'attendance_requests', 'leave_requests', 'leave_records', 'asset_assignments', 'reviews',
+            'attendance_adjustments', 'attendance_requests', 'leave_requests', 'leave_records', 'leave_adjustments', 'asset_assignments', 'reviews',
             'issued_letters', 'employee_category'];
         if ($this->path !== null) {
             $tables[] = 'controlled_documents';

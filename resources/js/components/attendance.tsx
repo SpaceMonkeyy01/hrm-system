@@ -25,7 +25,7 @@ export type AttendanceDay = {
     short: number;
     overtime: number;
     holiday: string | null;
-    leave: { type: string; part: 'full' | 'first_half' | 'second_half' } | null;
+    leave: { type: string; part: 'full' | 'first_half' | 'second_half' | 'short' } | null;
     punches: number;
     working_day: boolean;
     adjusted: boolean;
@@ -162,7 +162,7 @@ export function DayStatus({ day, statuses }: { day: AttendanceDay; statuses: Rec
             {day.overtime > 0 && <StatusPill value={`Overtime ${duration(day.overtime)}`} tone="info" />}
             {day.where === 'remote' && <StatusPill value="Remote" tone="info" />}
             {day.where === 'both' && <StatusPill value="Office + remote" tone="info" />}
-            {day.leave && <span className="text-xs text-muted-foreground">{day.leave.type}{day.leave.part !== 'full' ? `, ${day.leave.part === 'first_half' ? 'first' : 'second'} half off` : ''}</span>}
+            {day.leave && <span className="text-xs text-muted-foreground">{day.leave.type}{day.leave.part !== 'full' ? `, ${day.leave.part === 'short' ? 'short leave' : `${day.leave.part === 'first_half' ? 'first' : 'second'} half off`}` : ''}</span>}
             {day.holiday && <span className="text-xs text-muted-foreground">{day.holiday}</span>}
         </span>
     );

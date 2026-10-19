@@ -111,11 +111,11 @@ Route::middleware('auth')->group(function () {
         Route::middleware('can:edit-hr')->group(function () {
             Route::get('employees/create', [EmployeeController::class, 'create'])->name('employees.create');
             // Spreadsheet imports: download, fill in Excel, upload, preview, save (SpreadsheetImportController::KINDS)
-            Route::get('imports/{kind}', [SpreadsheetImportController::class, 'show'])->whereIn('kind', ['details', 'assets', 'links'])->name('imports.show');
-            Route::get('imports/{kind}/template', [SpreadsheetImportController::class, 'template'])->whereIn('kind', ['details', 'assets', 'links'])->name('imports.template');
-            Route::post('imports/{kind}', [SpreadsheetImportController::class, 'upload'])->whereIn('kind', ['details', 'assets', 'links'])->name('imports.upload');
-            Route::post('imports/{kind}/apply', [SpreadsheetImportController::class, 'apply'])->whereIn('kind', ['details', 'assets', 'links'])->name('imports.apply');
-            Route::delete('imports/{kind}', [SpreadsheetImportController::class, 'discard'])->whereIn('kind', ['details', 'assets', 'links'])->name('imports.discard');
+            Route::get('imports/{kind}', [SpreadsheetImportController::class, 'show'])->whereIn('kind', ['details', 'assets', 'links', 'leave-sheet'])->name('imports.show');
+            Route::get('imports/{kind}/template', [SpreadsheetImportController::class, 'template'])->whereIn('kind', ['details', 'assets', 'links', 'leave-sheet'])->name('imports.template');
+            Route::post('imports/{kind}', [SpreadsheetImportController::class, 'upload'])->whereIn('kind', ['details', 'assets', 'links', 'leave-sheet'])->name('imports.upload');
+            Route::post('imports/{kind}/apply', [SpreadsheetImportController::class, 'apply'])->whereIn('kind', ['details', 'assets', 'links', 'leave-sheet'])->name('imports.apply');
+            Route::delete('imports/{kind}', [SpreadsheetImportController::class, 'discard'])->whereIn('kind', ['details', 'assets', 'links', 'leave-sheet'])->name('imports.discard');
             Route::post('employees', [EmployeeController::class, 'store'])->name('employees.store');
             Route::post('employees/bulk', EmployeeBulkController::class)->name('employees.bulk');
             Route::get('employees/{employee}/edit', [EmployeeController::class, 'edit'])->name('employees.edit');
@@ -214,6 +214,7 @@ Route::middleware('auth')->group(function () {
         Route::middleware('can:edit-hr')->group(function () {
             Route::post('leave', [LeaveController::class, 'store'])->name('leave.store');
             Route::delete('leave/{record}', [LeaveController::class, 'destroy'])->whereNumber('record')->name('leave.destroy');
+            Route::put('leave/settings', [LeaveController::class, 'updateSettings'])->name('leave.settings');
             Route::get('leave/requests', [LeaveRequestController::class, 'index'])->name('leave-requests.index');
             Route::get('leave/requests/{leaveRequest}/file', [LeaveRequestController::class, 'file'])->name('leave-requests.file');
             Route::post('leave/requests/{leaveRequest}/approve', [LeaveRequestController::class, 'approve'])->name('leave-requests.approve');

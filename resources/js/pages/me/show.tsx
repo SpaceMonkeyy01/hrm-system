@@ -12,12 +12,12 @@ import { PhotoEditor } from '@/components/photo-editor';
 import { Detail, Field } from '@/components/field';
 import { AssetList } from '@/components/assets';
 import type { AssetRow } from '@/components/assets';
-import { balanceText, leaveDates } from '@/components/leave';
+import { balanceText, balanceTitle, deductionText, leaveDates } from '@/components/leave';
 import { MyLeaveRequests } from '@/components/my-leave-requests';
 import type { LeaveRequestRow, LeaveTypeOption } from '@/components/my-leave-requests';
 import { MyReviews } from '@/components/my-reviews';
 import type { MyReview } from '@/components/my-reviews';
-import type { LeaveBalance, LeaveRecordRow } from '@/components/leave';
+import type { LeaveBalance, LeaveCounted, LeaveDeductions, LeaveRecordRow } from '@/components/leave';
 import { PageHeader, Section } from '@/components/page-header';
 import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
@@ -53,7 +53,7 @@ type Props = {
     clock?: ClockState;
     attendance?: AttendanceMonth;
     attendanceYear?: AttendanceYear;
-    leave?: { year: number; records: LeaveRecordRow[]; totals: Record<string, number>; balances: LeaveBalance[] };
+    leave?: { year: number; records: LeaveRecordRow[]; totals: Record<string, number>; balances: LeaveBalance[]; deductions: LeaveDeductions; counted: LeaveCounted[] };
     requests?: FixRequest[];
     assets?: AssetRow[];
     reviews?: MyReview[];
@@ -277,11 +277,17 @@ export default function MyPage(props: Props) {
                         {props.leave.balances.length > 0 && (
                             <div className="flex flex-wrap gap-2 text-sm" aria-label="Leave balance">
                                 {props.leave.balances.map((b) => (
-                                    <span key={b.type_id} className="rounded-md border px-2.5 py-1" title={`${b.used} used of ${b.allowance} in ${props.leave!.year}`}>
+                                    <span key={b.type_id} className="rounded-md border px-2.5 py-1" title={balanceTitle(b)}>
                                         <span className="text-muted-foreground">{b.type}</span> <span className="font-semibold tabular-nums">{balanceText(b)}</span>
                                     </span>
                                 ))}
                             </div>
+                        )}
+                        {props.leave.deductions.days > 0 && (
+                            <p className="text-sm text-muted-foreground">Deducted {props.leave.deductions.days} {props.leave.deductions.days === 1 ? 'day' : 'days'} (Casual first, then Annual): {deductionText(props.leave.deductions)}. Ask HR to fix a day if one is wrong.</p>
+                        )}
+                        {props.leave.counted.length > 0 && (
+                            <p className="text-sm text-muted-foreground">Counted in HR's sheet before the app: {props.leave.counted.map((c) => `${c.type} ${c.days}`).join(', ')}.</p>
                         )}
                         {Object.keys(props.leave.totals).length > 0 && (
                             <div className="flex flex-wrap gap-2 text-sm">
