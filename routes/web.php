@@ -143,6 +143,7 @@ Route::middleware('auth')->group(function () {
             Route::put('onboarding/{employee}', [OnboardingController::class, 'update'])->name('onboarding.update');
             Route::post('onboarding/{employee}/start', [OnboardingController::class, 'start'])->name('onboarding.start');
             Route::post('onboarding/close', [OnboardingController::class, 'close'])->name('onboarding.close');
+            Route::post('documents/baseline', [DocumentChecklistController::class, 'baseline'])->name('documents.baseline');
             Route::post('onboarding/{employee}/reopen', [OnboardingController::class, 'reopen'])->name('onboarding.reopen');
             Route::put('checklist/{employee}/{item}', [ChecklistEntryController::class, 'update'])->name('checklist.update');
             Route::post('checklist/bulk', [ChecklistEntryController::class, 'bulk'])->name('checklist.bulk');

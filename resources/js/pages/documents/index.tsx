@@ -1,6 +1,7 @@
 import { Head, router, usePage } from '@inertiajs/react';
-import { Download, FolderOpen, Search, SearchX } from 'lucide-react';
+import { Download, FolderOpen, History, Search, SearchX } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { ChecklistGrid } from '@/components/checklist-grid';
 import type { ExtraColumn, GridRow } from '@/components/checklist-grid';
 import { EmptyState } from '@/components/empty-state';
@@ -9,6 +10,7 @@ import { NativeSelect } from '@/components/native-select';
 import { PageHeader } from '@/components/page-header';
 import { computedTone, StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { query } from '@/lib/utils';
 import type { ChecklistColumn, CompanyOption, OptionSets, SharedProps } from '@/types';
@@ -16,10 +18,61 @@ import type { ChecklistColumn, CompanyOption, OptionSets, SharedProps } from '@/
 type Row = GridRow & { company: string | null; department: string | null; drive_folder_url: string | null; status: string };
 type Filters = Partial<Record<'q' | 'company' | 'department' | 'status' | 'missing' | 'scope', string>>;
 
-export default function DocumentsIndex({ rows, columns, owed, optionSets, filters, companies }: {
-    rows: Row[]; columns: ChecklistColumn[]; owed: Record<string, number>; optionSets: OptionSets; filters: Filters; companies: CompanyOption[];
+type Baseline = { before: string; people: number; cells: number; undated: number; undated_cells: number };
+
+/** Mark blank documents of long-serving staff "Old employee", so Pending means really owed (DocumentChecklistController::baseline). */
+function BaselineDialog({ candidates, onClose }: { candidates: Baseline; onClose: () => void }) {
+    const [before, setBefore] = useState(candidates.before);
+    const [undated, setUndated] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const submit = () => {
+        setBusy(true);
+        router.post('/documents/baseline', { started_before: before, include_undated: undated }, {
+            preserveScroll: true, onSuccess: onClose, onFinish: () => setBusy(false),
+            onError: (e) => toast.error(Object.values(e)[0] ?? 'Not saved.'),
+        });
+    };
+    return (
+        <Dialog open onOpenChange={(o) => !o && onClose()}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Mark old staff</DialogTitle>
+                    <DialogDescription>
+                        Long-serving staff were never put through this checklist, so their blank cells count as Pending. This sets only the
+                        BLANK cells to "Old employee". Anything already filled in (Yes, No, Pending...) stays as it is, and every change is in the activity log.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-3 text-sm">
+                    <label className="grid gap-1">
+                        <span className="font-semibold">Everyone who started before</span>
+                        <Input type="date" className="w-44" value={before} onChange={(e) => setBefore(e.target.value)} />
+                        {before === candidates.before && (
+                            <span className="text-xs text-muted-foreground">
+                                {candidates.cells} blank cells for {candidates.people} people started before this date (6 months ago).
+                            </span>
+                        )}
+                    </label>
+                    {candidates.undated > 0 && (
+                        <label className="flex items-start gap-2">
+                            <input type="checkbox" className="mt-0.5 size-4 accent-cascade" checked={undated} onChange={(e) => setUndated(e.target.checked)} />
+                            <span>Also the {candidates.undated} with no start date ({candidates.undated_cells} blank cells). <span className="text-muted-foreground">Leave this off if some of them might be new joiners.</span></span>
+                        </label>
+                    )}
+                </div>
+                <DialogFooter>
+                    <Button variant="ghost" onClick={onClose}>Cancel</Button>
+                    <Button onClick={submit} disabled={busy || !before}><History /> Mark as Old employee</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+export default function DocumentsIndex({ rows, columns, owed, optionSets, filters, companies, baseline }: {
+    rows: Row[]; columns: ChecklistColumn[]; owed: Record<string, number>; optionSets: OptionSets; filters: Filters; companies: CompanyOption[]; baseline: Baseline | null;
 }) {
     const { auth } = usePage<SharedProps>().props;
+    const [marking, setMarking] = useState(false);
     const [q, setQ] = useState(filters.q ?? '');
     const apply = (patch: Filters) => router.get('/documents', query({ ...filters, ...patch }), { preserveState: true, preserveScroll: true, replace: true });
 
@@ -53,7 +106,10 @@ export default function DocumentsIndex({ rows, columns, owed, optionSets, filter
             <PageHeader
                 title="Document checklist"
                 description={missing ? `People who still owe: ${missing.label}.` : 'The documents HR holds for every current employee. A person is Complete when every document is Yes, Not Required, Old employee or not available.'}
-                actions={<Button variant="outline" asChild><a href="/export/documents"><Download /> Export CSV</a></Button>}
+                actions={<>
+                    {baseline && baseline.cells + baseline.undated_cells > 0 && <Button variant="outline" onClick={() => setMarking(true)}><History /> Mark old staff</Button>}
+                    <Button variant="outline" asChild><a href="/export/documents"><Download /> Export CSV</a></Button>
+                </>}
             >
                 <FilterBar active={[filters.company, filters.department, filters.status, filters.missing, filters.scope].filter(Boolean).length} search={
                         <div className="relative w-full md:w-60">
@@ -71,7 +127,7 @@ export default function DocumentsIndex({ rows, columns, owed, optionSets, filter
                         onChange={(e) => apply({ missing: e.target.value || undefined })} options={columns.map((c) => ({ value: c.key, label: `Owes ${c.label}` }))} />
                     <NativeSelect aria-label="Who" className="w-56" value={filters.scope ?? 'all'}
                         onChange={(e) => apply({ scope: e.target.value === 'all' ? undefined : e.target.value })}
-                        options={[{ value: 'all', label: 'All current employees' }, { value: 'onboarding', label: 'Only people in onboarding' }]} />
+                        options={[{ value: 'all', label: 'All current employees' }, { value: 'onboarding', label: 'Only people in onboarding' }, { value: 'recent', label: 'Joined in the last 6 months' }]} />
                 </FilterBar>
             </PageHeader>
             <ChecklistGrid
@@ -86,6 +142,7 @@ export default function DocumentsIndex({ rows, columns, owed, optionSets, filter
                 headerBadge={(c) => (owed[c.key] ? <span className="mt-1 block text-[11px] font-normal text-muted-foreground">{owed[c.key]} owed</span> : <span className="mt-1 block text-[11px] font-normal text-done">All on file</span>)}
                 empty={<EmptyState icon={SearchX} title="Nobody matches these filters.">Clear a filter to see more people.</EmptyState>}
             />
+            {marking && baseline && <BaselineDialog candidates={baseline} onClose={() => setMarking(false)} />}
         </>
     );
 }
