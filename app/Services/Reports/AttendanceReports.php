@@ -21,7 +21,7 @@ class AttendanceReports
     public const CODES = [
         'Present' => 'P', 'Late' => 'L', 'Half day' => 'HD', 'Absent' => 'A', 'Missing punch' => 'MP', 'On leave' => 'LV',
         'Holiday' => 'H', 'Day off' => 'O', 'Worked day off' => 'W', 'At work' => 'IN', 'Not in yet' => '', 'No punches' => '?',
-        'Not linked' => 'NL', 'No data' => '-',
+        'Not linked' => 'NL', 'No data' => '-', 'Not tracked' => 'NT',
     ];
 
     /** @return array{0: Collection<int, Employee>, 1: AttendanceBoard} */
@@ -93,7 +93,7 @@ class AttendanceReports
                     continue;
                 }
                 // A day no file covers (or a person with no attendance ID) isn't a working day anyone can count.
-                $row['working_days'] += $day['working_day'] && ! in_array($day['status'], ['No data', 'Not linked'], true) ? 1 : 0;
+                $row['working_days'] += $day['working_day'] && ! in_array($day['status'], ['No data', 'Not linked', 'Not tracked'], true) ? 1 : 0;
                 $row['late'] += $day['late'] > 0 ? 1 : 0;
                 $row['late_minutes'] += $day['late'];
                 $row['worked'] += $day['worked'] ?? 0;

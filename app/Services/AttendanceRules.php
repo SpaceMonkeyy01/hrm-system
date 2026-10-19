@@ -21,7 +21,11 @@ use Carbon\CarbonInterface;
  *   late       fixed schedules: in after start + grace; counted from the start time
  *   absent     fixed schedules: not checked in by the schedule's absent cut-off (default the middle of the day, 9-5 ->
  *              13:00). No punches: Not in yet until the cut-off, then Absent. Checked in after it: Absent, with the
- *              times still shown (HR can fix the day). Not applied on a leave day (a half day off moves the start)
+ *              times still shown (HR can fix the day), unless the schedule sets late_half_day_minutes and they worked
+ *              at least that long: then Half day (still At work today while the session is open). Not applied on a
+ *              leave day (a half day off moves the start)
+ *   no clock-in schedules (type none): no punches on a working day = Not tracked; any punches = Present; never late,
+ *              early, short, half day or absent
  *   early      fixed schedules: out before end - grace; counted to the end time
  *   short      flexible schedules: worked less than the day's hours
  *   overtime   worked past the end time (fixed) or past the day's hours (flexible) by more than the schedule's
@@ -142,6 +146,7 @@ class AttendanceRules
                 ! $working => 'Day off',
                 $fullLeave => 'On leave',
                 $schedule === null => 'No punches',
+                $schedule->isUntracked() => 'Not tracked',
                 $date === $today && (! $fixed || self::minutes($now->format('H:i')) < $absentMin) => 'Not in yet',
                 default => 'Absent',
             };
@@ -151,8 +156,26 @@ class AttendanceRules
 
         // A lone punch after the end of the day is a forgotten check-in (Missing punch), not a late arrival.
         if ($in && $fixed && $working && ! $leave && self::minutes($in) > $absentMin && ($out || self::minutes($in) < $endMin)) {
-            $result['status'] = 'Absent';
+            $worked = self::worked($sessions);
+            $halfAfter = $schedule->late_half_day_minutes;
+            $result['worked'] = $worked ?: null;
+            $result['status'] = match (true) {
+                $halfAfter === null => 'Absent',
+                $worked >= $halfAfter => 'Half day',
+                $date === $today && ! $out => 'At work',
+                default => 'Absent',
+            };
+
+            return $result;
+        }
+
+        if ($schedule && $schedule->isUntracked()) {
             $result['worked'] = self::worked($sessions) ?: null;
+            $result['status'] = match (true) {
+                ! $working => 'Worked day off',
+                $date === $today && ! $out => 'At work',
+                default => 'Present',
+            };
 
             return $result;
         }

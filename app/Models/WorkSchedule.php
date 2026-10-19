@@ -8,14 +8,15 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * An office timing profile: fixed hours with grace periods, or flexible hours.
+ * An office timing profile: fixed hours with grace periods, flexible hours, or none (people who don't clock in:
+ * their days are never late, short or absent).
  * Rules that use it: app/Services/AttendanceRules.php.
  */
 class WorkSchedule extends Model
 {
     use LogsActivity;
 
-    protected $fillable = ['name', 'type', 'start_time', 'end_time', 'late_grace_minutes', 'early_grace_minutes', 'absent_after',
+    protected $fillable = ['name', 'type', 'start_time', 'end_time', 'late_grace_minutes', 'early_grace_minutes', 'absent_after', 'late_half_day_minutes',
         'full_day_minutes', 'half_day_minutes', 'overtime_after_minutes', 'working_days', 'missing_checkout', 'is_default', 'notes'];
 
     protected $attributes = ['type' => 'fixed', 'late_grace_minutes' => 0, 'early_grace_minutes' => 0,
@@ -25,7 +26,7 @@ class WorkSchedule extends Model
     {
         return ['working_days' => 'array', 'is_default' => 'boolean', 'late_grace_minutes' => 'integer',
             'early_grace_minutes' => 'integer', 'full_day_minutes' => 'integer', 'half_day_minutes' => 'integer',
-            'overtime_after_minutes' => 'integer'];
+            'overtime_after_minutes' => 'integer', 'late_half_day_minutes' => 'integer'];
     }
 
     public function assignments(): HasMany
@@ -36,6 +37,12 @@ class WorkSchedule extends Model
     public function isFlexible(): bool
     {
         return $this->type === 'flexible';
+    }
+
+    /** "No clock-in": nobody expects punches, so no late, short, half day or absent. */
+    public function isUntracked(): bool
+    {
+        return $this->type === 'none';
     }
 
     /**
@@ -77,6 +84,9 @@ class WorkSchedule extends Model
     public function summary(): string
     {
         $days = WeekDays::label($this->working_days ?? []);
+        if ($this->isUntracked()) {
+            return "$days, no clock-in needed";
+        }
         if ($this->isFlexible()) {
             return "$days, flexible, ".round($this->full_day_minutes / 60, 1).' h a day';
         }

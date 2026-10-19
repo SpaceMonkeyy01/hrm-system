@@ -336,4 +336,27 @@ class AttendanceTest extends TestCase
         $this->assertSame(['In'], AttendancePunch::where('device_user_id', 'BCC-903')->pluck('method')->all());
         $this->assertFalse(AttendancePunch::where('device_user_id', 'BCC-904')->exists());
     }
+
+    public function test_late_half_day_and_no_clock_in_schedules_are_validated(): void
+    {
+        $hr = $this->user('hr');
+        $rules = ['name' => 'Ten to six', 'type' => 'fixed', 'start_time' => '10:00', 'end_time' => '18:00', 'late_grace_minutes' => 10,
+            'early_grace_minutes' => 0, 'full_day_minutes' => 480, 'half_day_minutes' => 240, 'working_days' => [1, 2, 3, 4, 5], 'missing_checkout' => 'flag'];
+        $this->actingAs($hr)->post('/attendance/schedules', ['late_half_day_minutes' => 10] + $rules)->assertSessionHasErrors('late_half_day_minutes');
+        $this->actingAs($hr)->post('/attendance/schedules', ['late_half_day_minutes' => 600] + $rules)->assertSessionHasErrors('late_half_day_minutes');
+        $this->actingAs($hr)->post('/attendance/schedules', ['late_half_day_minutes' => 180] + $rules)->assertSessionHasNoErrors();
+        $this->assertSame(180, WorkSchedule::where('name', 'Ten to six')->sole()->late_half_day_minutes);
+
+        $none = ['name' => 'Management', 'type' => 'none', 'late_half_day_minutes' => 180, 'overtime_after_minutes' => 30] + $rules;
+        $this->actingAs($hr)->post('/attendance/schedules', ['is_default' => true] + $none)->assertSessionHasErrors('is_default');
+        $this->actingAs($hr)->post('/attendance/schedules', $none)->assertSessionHasNoErrors();
+        $m = WorkSchedule::where('name', 'Management')->sole();
+        $this->assertSame([null, null, null, null, null], [$m->start_time, $m->end_time, $m->absent_after, $m->late_half_day_minutes, $m->overtime_after_minutes]);
+
+        // Someone on it with no machine number shows Not tracked, not Not linked
+        $boss = $this->employee($this->company, ['full_name' => 'Boss Person']);
+        $this->actingAs($hr)->post("/attendance/schedules/{$m->id}/assign", ['employee_ids' => [$boss->id], 'starts_on' => '2026-05-01'])->assertSessionHasNoErrors();
+        $board = new \App\Services\AttendanceBoard(collect([$boss->fresh()]), '2026-05-13', '2026-05-13');
+        $this->assertSame('Not tracked', $board->day($boss->fresh(), '2026-05-13', now())['status']);
+    }
 }

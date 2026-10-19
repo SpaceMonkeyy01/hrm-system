@@ -28,7 +28,7 @@ class WorkScheduleController extends Controller
 
         return Inertia::render('attendance/schedules', [
             'schedules' => WorkSchedule::query()->orderByDesc('is_default')->orderBy('name')->get()->map(fn (WorkSchedule $s) => [
-                ...$s->only('id', 'name', 'type', 'start_time', 'end_time', 'late_grace_minutes', 'early_grace_minutes', 'absent_after',
+                ...$s->only('id', 'name', 'type', 'start_time', 'end_time', 'late_grace_minutes', 'early_grace_minutes', 'absent_after', 'late_half_day_minutes',
                     'full_day_minutes', 'half_day_minutes', 'overtime_after_minutes', 'working_days', 'missing_checkout', 'is_default', 'notes'),
                 'summary' => $s->summary(),
                 'absent_after_label' => $s->absentAfterLabel(),
@@ -117,16 +117,17 @@ class WorkScheduleController extends Controller
 
     private function validated(Request $request, ?WorkSchedule $schedule): array
     {
-        $flexible = $request->input('type') === 'flexible';
+        $flexible = in_array($request->input('type'), ['flexible', 'none'], true);   // no start or end time
         $time = ['regex:/^([01]\d|2[0-3]):[0-5]\d$/'];
         $data = $request->validate([
             'name' => ['required', 'string', 'max:80', Rule::unique('work_schedules', 'name')->ignore($schedule?->id)],
-            'type' => ['required', Rule::in(['fixed', 'flexible'])],
+            'type' => ['required', Rule::in(['fixed', 'flexible', 'none'])],
             'start_time' => [$flexible ? 'nullable' : 'required', ...$time],
             'end_time' => [$flexible ? 'nullable' : 'required', ...$time],
             'late_grace_minutes' => ['required', 'integer', 'min:0', 'max:240'],
             'early_grace_minutes' => ['required', 'integer', 'min:0', 'max:240'],
             'absent_after' => ['nullable', ...$time],
+            'late_half_day_minutes' => ['nullable', 'integer', 'min:30', 'lte:full_day_minutes'],
             'full_day_minutes' => ['required', 'integer', 'min:30', 'max:1440'],
             'half_day_minutes' => ['required', 'integer', 'min:0', 'max:1440', 'lte:full_day_minutes'],
             'overtime_after_minutes' => ['nullable', 'integer', 'min:0', 'max:600'],
@@ -140,6 +141,8 @@ class WorkScheduleController extends Controller
             'end_time.regex' => 'Use a 24-hour time like 17:00.',
             'absent_after.regex' => 'Use a 24-hour time like 13:00.',
             'half_day_minutes.lte' => 'Half day must be shorter than a full day.',
+            'late_half_day_minutes.min' => 'Use at least half an hour.',
+            'late_half_day_minutes.lte' => 'Use no more than a full day.',
         ]);
         if (! $flexible && $data['end_time'] === $data['start_time']) {
             throw ValidationException::withMessages(['end_time' => 'The day must end at a different time than it starts. An end before the start means the next morning (night shift).']);
@@ -153,8 +156,14 @@ class WorkScheduleController extends Controller
                 throw ValidationException::withMessages(['absent_after' => 'Pick a time after the start (and its grace) and no later than the end of the day.']);
             }
         }
+        if ($data['type'] === 'none' && ! empty($data['is_default'])) {
+            throw ValidationException::withMessages(['is_default' => "A No clock-in schedule can't be the default: nobody would ever show as absent."]);
+        }
+        if ($data['type'] === 'none') {
+            $data['overtime_after_minutes'] = null;
+        }
         if ($flexible) {
-            $data['start_time'] = $data['end_time'] = $data['absent_after'] = null;
+            $data['start_time'] = $data['end_time'] = $data['absent_after'] = $data['late_half_day_minutes'] = null;
             $data['late_grace_minutes'] = $data['early_grace_minutes'] = 0;
             $data['missing_checkout'] = 'flag';   // no end time to check out at
         }

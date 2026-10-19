@@ -236,4 +236,37 @@ class AttendanceRulesTest extends TestCase
         $this->assertSame(['office', true, '10:00-17:00 office (HR)'], [$d['where'], $d['sessions'][0]['edited'], AttendanceRules::sessionsText($d['sessions'])]);
         $this->assertNull($this->day([], $this->fixed(), ['check_in' => '10:00', 'check_out' => '18:00', 'note' => 'Fixed'])['where']);
     }
+
+    public function test_late_check_in_can_be_a_half_day_when_the_schedule_says_so(): void
+    {
+        // 10-6, cut-off 14:00. Without the setting: Absent however long they stayed (unchanged).
+        $this->assertSame('Absent', $this->day(['14:30:00', '18:30:00'], $this->fixed())['status']);
+        $s = $this->fixed(['late_half_day_minutes' => 180]);
+        $d = $this->day(['14:30:00', '18:00:00'], $s);
+        $this->assertSame(['Half day', 210, 0], [$d['status'], $d['worked'], $d['late']]);
+        $this->assertSame('Absent', $this->day(['15:30:00', '18:00:00'], $s)['status']);   // 2h 30m, under 3 h
+        $this->assertSame('Absent', $this->day(['14:30:00'], $s)['status']);                 // never punched out: nothing worked
+        // today, still in: At work until it is clear
+        $this->assertSame('At work', $this->day(['14:30:00'], $s, null, '2026-05-13', CarbonImmutable::parse('2026-05-13 16:00'))['status']);
+        // in before the cut-off: the usual rules (late, Half day under half_day_minutes) still apply
+        $d = $this->day(['13:00:00', '18:00:00'], $s);
+        $this->assertSame(['Present', 180], [$d['status'], $d['late']]);
+        // nothing changes on a day off or a leave day
+        $this->assertSame('Worked day off', $this->day(['15:00:00', '18:00:00'], $s, null, '2026-05-16')['status']);
+    }
+
+    public function test_no_clock_in_schedule_is_never_absent_or_late(): void
+    {
+        $none = new WorkSchedule(['name' => 'Management', 'type' => 'none', 'full_day_minutes' => 480, 'half_day_minutes' => 240,
+            'working_days' => [1, 2, 3, 4, 5], 'missing_checkout' => 'flag']);
+        $this->assertSame('Not tracked', $this->day([], $none)['status']);
+        $this->assertSame('Not tracked', $this->day([], $none, null, '2026-05-20')['status']);   // today, after midday
+        $this->assertSame('Day off', $this->day([], $none, null, '2026-05-16')['status']);
+        $d = $this->day(['15:00:00', '16:00:00'], $none);
+        $this->assertSame(['Present', 0, 0, 0], [$d['status'], $d['late'], $d['early'], $d['short']]);
+        $this->assertSame('Present', $this->day(['15:00:00'], $none)['status']);   // one punch: not a missing punch
+        $this->assertSame('Worked day off', $this->day(['15:00:00', '16:00:00'], $none, null, '2026-05-16')['status']);
+        $this->assertNull($none->absentAfterMinutes());
+        $this->assertSame('Mon-Fri, no clock-in needed', $none->summary());
+    }
 }

@@ -43,7 +43,7 @@ class EmployeeRecords
     public const YEAR_CODES = [
         'Present' => 'P', 'At work' => 'P', 'Late' => 'L', 'Half day' => 'H', 'Absent' => 'A', 'Missing punch' => 'M',
         'On leave' => 'V', 'Holiday' => 'O', 'Day off' => 'O', 'Worked day off' => 'W', 'Not in yet' => 'N', 'No data' => 'N',
-        'Not linked' => 'N', 'No punches' => 'N',
+        'Not linked' => 'N', 'No punches' => 'N', 'Not tracked' => 'N',
     ];
 
     /**

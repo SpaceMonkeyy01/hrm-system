@@ -178,6 +178,7 @@ return [
             'No punches' => 'neutral',
             'Not linked' => 'neutral',   // no machine or HR.my number, so no punches can arrive
             'No data' => 'neutral',      // no attendance file covers that day yet (AttendanceBoard)
+            'Not tracked' => 'muted',    // on a No clock-in schedule and didn't punch: nothing expected
         ],
     ],
 

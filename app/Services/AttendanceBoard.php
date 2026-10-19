@@ -191,7 +191,7 @@ class AttendanceBoard
                 }
                 $statuses[$day['status']] = ($statuses[$day['status']] ?? 0) + 1;
                 $late += $day['late'] > 0 ? 1 : 0;
-                $working += $day['working_day'] && ! in_array($day['status'], ['Not linked', 'No data'], true) ? 1 : 0;
+                $working += $day['working_day'] && ! in_array($day['status'], ['Not linked', 'No data', 'Not tracked'], true) ? 1 : 0;
             }
         }
 

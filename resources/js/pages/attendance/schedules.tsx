@@ -16,16 +16,18 @@ import { plural } from '@/lib/format';
 import type { SharedProps } from '@/types';
 
 type Schedule = {
-    id: number; name: string; type: 'fixed' | 'flexible'; start_time: string | null; end_time: string | null;
-    late_grace_minutes: number; early_grace_minutes: number; absent_after: string | null; absent_after_label: string | null; full_day_minutes: number; half_day_minutes: number; overtime_after_minutes: number | null;
+    id: number; name: string; type: ScheduleType; start_time: string | null; end_time: string | null;
+    late_grace_minutes: number; early_grace_minutes: number; absent_after: string | null; absent_after_label: string | null; late_half_day_minutes: number | null; full_day_minutes: number; half_day_minutes: number; overtime_after_minutes: number | null;
     working_days: number[]; missing_checkout: 'flag' | 'auto'; is_default: boolean; notes: string | null; summary: string; people: number;
 };
 type Company = { id: number; name: string; departments: { id: number; name: string }[] };
 type Props = { schedules: Schedule[]; unassigned: number; companies: Company[]; today: string };
 
+type ScheduleType = 'fixed' | 'flexible' | 'none';
+
 const DAYS = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [7, 'Sun']] as const;
 const blank = {
-    name: '', type: 'fixed' as 'fixed' | 'flexible', start_time: '09:00', end_time: '17:00', late_grace_minutes: 10, early_grace_minutes: 0, absent_after: '',
+    name: '', type: 'fixed' as ScheduleType, start_time: '09:00', end_time: '17:00', late_grace_minutes: 10, early_grace_minutes: 0, absent_after: '', late_half_day_hours: '' as number | '',
     full_day_hours: 8, half_day_hours: 4, overtime_after: '' as number | '', working_days: [1, 2, 3, 4, 5], missing_checkout: 'flag' as 'flag' | 'auto', is_default: false, notes: '',
 };
 
@@ -45,10 +47,12 @@ function ScheduleDialog({ schedule, onClose }: { schedule: Schedule | null; onCl
         ...schedule, start_time: schedule.start_time ?? '09:00', end_time: schedule.end_time ?? '17:00', absent_after: schedule.absent_after ?? '', notes: schedule.notes ?? '',
         full_day_hours: schedule.full_day_minutes / 60, half_day_hours: schedule.half_day_minutes / 60,
         overtime_after: (schedule.overtime_after_minutes ?? '') as number | '',
+        late_half_day_hours: (schedule.late_half_day_minutes === null ? '' : schedule.late_half_day_minutes / 60) as number | '',
     } : blank);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const set = <K extends keyof typeof d>(k: K, v: (typeof d)[K]) => setD((s) => ({ ...s, [k]: v }));
     const fixed = d.type === 'fixed';
+    const none = d.type === 'none';
 
     const save = (e: FormEvent) => {
         e.preventDefault();
@@ -56,6 +60,7 @@ function ScheduleDialog({ schedule, onClose }: { schedule: Schedule | null; onCl
             name: d.name, type: d.type, start_time: fixed ? d.start_time : null, end_time: fixed ? d.end_time : null,
             late_grace_minutes: Number(d.late_grace_minutes) || 0, early_grace_minutes: Number(d.early_grace_minutes) || 0,
             absent_after: fixed && d.absent_after ? d.absent_after : null,
+            late_half_day_minutes: fixed && d.late_half_day_hours !== '' ? Math.round(Number(d.late_half_day_hours) * 60) : null,
             full_day_minutes: Math.round(Number(d.full_day_hours) * 60), half_day_minutes: Math.round(Number(d.half_day_hours) * 60),
             overtime_after_minutes: d.overtime_after === '' ? null : Number(d.overtime_after),
             working_days: d.working_days, missing_checkout: d.missing_checkout, is_default: d.is_default, notes: d.notes || null,
@@ -78,8 +83,8 @@ function ScheduleDialog({ schedule, onClose }: { schedule: Schedule | null; onCl
                             <Input id="s-name" required value={d.name} placeholder="9 to 5 strict" onChange={(e) => set('name', e.target.value)} />
                         </Field>
                         <Field label="Type" htmlFor="s-type" error={errors.type}>
-                            <NativeSelect id="s-type" value={d.type} onChange={(e) => set('type', e.target.value as 'fixed' | 'flexible')}
-                                options={[{ value: 'fixed', label: 'Fixed hours' }, { value: 'flexible', label: 'Flexible (come and go)' }]} />
+                            <NativeSelect id="s-type" value={d.type} onChange={(e) => set('type', e.target.value as ScheduleType)}
+                                options={[{ value: 'fixed', label: 'Fixed hours' }, { value: 'flexible', label: 'Flexible (come and go)' }, { value: 'none', label: 'No clock-in (not tracked)' }]} />
                         </Field>
                         {fixed && (
                             <>
@@ -102,8 +107,22 @@ function ScheduleDialog({ schedule, onClose }: { schedule: Schedule | null; onCl
                                         {d.absent_after && <Button type="button" variant="ghost" size="sm" onClick={() => set('absent_after', '')}>Use the middle of the day</Button>}
                                     </div>
                                 </Field>
+                                <Field label="...unless they still worked (hours)" htmlFor="s-latehalf" error={errors.late_half_day_minutes} className="sm:col-span-2"
+                                    hint={d.late_half_day_hours === ''
+                                        ? 'Empty = in after the cut-off is always Absent.'
+                                        : `In after the cut-off but worked at least ${d.late_half_day_hours} h = Half day; less = Absent.`}>
+                                    <Input id="s-latehalf" type="number" className="w-40" min={0.5} max={24} step={0.25} value={d.late_half_day_hours} placeholder="Always Absent"
+                                        onChange={(e) => set('late_half_day_hours', e.target.value === '' ? '' : Number(e.target.value))} />
+                                </Field>
                             </>
                         )}
+                        {none && (
+                            <p className="rounded-md border bg-info-soft px-3 py-2 text-sm sm:col-span-2">
+                                For people who aren't expected to punch (management, field staff). Their working days show as Not tracked instead of Absent
+                                or Not linked, and any punches they do make show as Present. Never late, short or absent.
+                            </p>
+                        )}
+                        {!none && <>
                         <Field label={fixed ? 'Full day (hours)' : 'Hours needed a day'} htmlFor="s-full" error={errors.full_day_minutes} hint={fixed ? undefined : 'Less than this shows as Short.'}>
                             <Input id="s-full" type="number" min={0.5} max={24} step={0.25} value={d.full_day_hours} onChange={(e) => set('full_day_hours', Number(e.target.value))} />
                         </Field>
@@ -115,6 +134,7 @@ function ScheduleDialog({ schedule, onClose }: { schedule: Schedule | null; onCl
                             <Input id="s-ot" type="number" min={0} max={600} value={d.overtime_after} placeholder="Not counted"
                                 onChange={(e) => set('overtime_after', e.target.value === '' ? '' : Number(e.target.value))} />
                         </Field>
+                        </>}
                         <Field label="Working days" error={errors.working_days} className="sm:col-span-2">
                             <div className="flex flex-wrap gap-1.5">
                                 {DAYS.map(([n, label]) => {
@@ -137,10 +157,13 @@ function ScheduleDialog({ schedule, onClose }: { schedule: Schedule | null; onCl
                         <Field label="Notes" htmlFor="s-notes" error={errors.notes} className="sm:col-span-2">
                             <Textarea id="s-notes" rows={2} value={d.notes} onChange={(e) => set('notes', e.target.value)} />
                         </Field>
-                        <label className="flex items-center gap-2 text-sm sm:col-span-2">
-                            <input type="checkbox" className="size-4 accent-cascade" checked={d.is_default} onChange={(e) => set('is_default', e.target.checked)} />
-                            Default: use for anyone who hasn't been given a schedule
-                        </label>
+                        {!none && (
+                            <label className="flex items-center gap-2 text-sm sm:col-span-2">
+                                <input type="checkbox" className="size-4 accent-cascade" checked={d.is_default} onChange={(e) => set('is_default', e.target.checked)} />
+                                Default: use for anyone who hasn't been given a schedule
+                            </label>
+                        )}
+                        {errors.is_default && <p className="text-sm text-destructive sm:col-span-2">{errors.is_default}</p>}
                     </div>
                     <DialogFooter>
                         <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
@@ -323,11 +346,11 @@ export default function Schedules({ schedules, unassigned, companies, today }: P
                                 </div>
                                 <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
                                     <div><dt className="text-xs text-muted-foreground">People</dt><dd className="tabular-nums">{s.people}{s.is_default && unassigned ? ` + ${unassigned}` : ''}</dd></div>
-                                    <div><dt className="text-xs text-muted-foreground">Half day under</dt><dd>{s.half_day_minutes / 60} h</dd></div>
-                                    {s.type === 'fixed' && <div><dt className="text-xs text-muted-foreground">Absent if not in by</dt><dd>{s.absent_after_label}{s.absent_after ? '' : ' (mid-day)'}</dd></div>}
+                                    {s.type !== 'none' && <div><dt className="text-xs text-muted-foreground">Half day under</dt><dd>{s.half_day_minutes / 60} h</dd></div>}
+                                    {s.type === 'fixed' && <div><dt className="text-xs text-muted-foreground">Absent if not in by</dt><dd>{s.absent_after_label}{s.absent_after ? '' : ' (mid-day)'}{s.late_half_day_minutes !== null ? `, Half day if worked ${s.late_half_day_minutes / 60} h+` : ''}</dd></div>}
                                     {s.type === 'fixed' && <div><dt className="text-xs text-muted-foreground">Early leave allowed</dt><dd>{s.early_grace_minutes} min</dd></div>}
-                                    <div><dt className="text-xs text-muted-foreground">Overtime</dt><dd>{s.overtime_after_minutes === null ? 'Not counted' : `After ${s.overtime_after_minutes} min`}</dd></div>
-                                    <div><dt className="text-xs text-muted-foreground">No punch out</dt><dd>{s.type === 'fixed' && s.missing_checkout === 'auto' ? 'Auto at end time' : 'HR enters it'}</dd></div>
+                                    {s.type !== 'none' && <div><dt className="text-xs text-muted-foreground">Overtime</dt><dd>{s.overtime_after_minutes === null ? 'Not counted' : `After ${s.overtime_after_minutes} min`}</dd></div>}
+                                    {s.type !== 'none' && <div><dt className="text-xs text-muted-foreground">No punch out</dt><dd>{s.type === 'fixed' && s.missing_checkout === 'auto' ? 'Auto at end time' : 'HR enters it'}</dd></div>}
                                 </dl>
                                 {s.notes && <p className="text-sm whitespace-pre-line text-muted-foreground">{s.notes}</p>}
                             </li>
