@@ -92,6 +92,7 @@ class EmployeeRecords
             'year' => $year,
             'records' => $records->map(fn ($r) => LeaveController::recordProps($r))->values(),
             'totals' => $records->groupBy(fn ($r) => $r->type->name)->map(fn ($g) => $g->sum('days'))->all(),
+            'balances' => LeaveBalances::forEmployee($employee, $year),
         ];
     }
 }

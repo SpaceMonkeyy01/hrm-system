@@ -12,10 +12,10 @@ import { PhotoEditor } from '@/components/photo-editor';
 import { Detail, Field } from '@/components/field';
 import { AssetList } from '@/components/assets';
 import type { AssetRow } from '@/components/assets';
-import { leaveDates } from '@/components/leave';
+import { balanceText, leaveDates } from '@/components/leave';
 import { MyReviews } from '@/components/my-reviews';
 import type { MyReview } from '@/components/my-reviews';
-import type { LeaveRecordRow } from '@/components/leave';
+import type { LeaveBalance, LeaveRecordRow } from '@/components/leave';
 import { PageHeader, Section } from '@/components/page-header';
 import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
@@ -51,7 +51,7 @@ type Props = {
     clock?: ClockState;
     attendance?: AttendanceMonth;
     attendanceYear?: AttendanceYear;
-    leave?: { year: number; records: LeaveRecordRow[]; totals: Record<string, number> };
+    leave?: { year: number; records: LeaveRecordRow[]; totals: Record<string, number>; balances: LeaveBalance[] };
     requests?: FixRequest[];
     assets?: AssetRow[];
     reviews?: MyReview[];
@@ -261,7 +261,16 @@ export default function MyPage(props: Props) {
 
                 <TabsContent value="leave">
                     <div className="grid max-w-3xl gap-4">
-                        <p className="text-sm text-muted-foreground">Approved leave in {props.leave.year}. Apply for leave and see your balance in HR.my; it shows here once HR records it.</p>
+                        <p className="text-sm text-muted-foreground">Approved leave in {props.leave.year}. Apply for leave in HR.my; it shows here, and comes off your balance, once HR records it.</p>
+                        {props.leave.balances.length > 0 && (
+                            <div className="flex flex-wrap gap-2 text-sm" aria-label="Leave balance">
+                                {props.leave.balances.map((b) => (
+                                    <span key={b.type_id} className="rounded-md border px-2.5 py-1" title={`${b.used} used of ${b.allowance} in ${props.leave!.year}`}>
+                                        <span className="text-muted-foreground">{b.type}</span> <span className="font-semibold tabular-nums">{balanceText(b)}</span>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
                         {Object.keys(props.leave.totals).length > 0 && (
                             <div className="flex flex-wrap gap-2 text-sm">
                                 {Object.entries(props.leave.totals).map(([type, days]) => (

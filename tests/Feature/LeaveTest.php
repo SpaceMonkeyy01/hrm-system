@@ -42,7 +42,7 @@ class LeaveTest extends TestCase
         // Mon 11 to Mon 18 May: 6 weekdays, minus the Wednesday holiday = 5.
         $this->actingAs($hr)->post('/leave', ['employee_id' => $e->id, 'leave_type_id' => $this->type('Annual')->id,
             'start_date' => '2026-05-11', 'end_date' => '2026-05-18', 'part' => 'full'])
-            ->assertSessionHas('success', "Recorded 5 days of leave for {$e->full_name}.");
+            ->assertSessionHas('success', "Recorded 5 days of leave for {$e->full_name}. Annual: 9 of 14 days left in 2026.");
         $this->assertSame(5.0, LeaveRecord::sole()->days);
 
         // Overlapping leave is refused; half days are for one day only.

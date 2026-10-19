@@ -8,6 +8,7 @@ use App\Models\Holiday;
 use App\Models\LeaveRecord;
 use App\Models\LeaveType;
 use App\Services\AttendanceBoard;
+use App\Services\LeaveBalances;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -49,7 +50,8 @@ class LeaveController extends Controller
                 ->where('start_date', '<=', $today->toDateString())->where('end_date', '>=', $today->toDateString())->get()
                 ->map(fn ($r) => ['id' => $r->employee->id, 'name' => $r->employee->full_name, 'type' => $r->type->name, 'part' => $r->part])->values(),
             'types' => LeaveType::query()->withCount('records')->orderBy('sort_order')->orderBy('name')->get()
-                ->map(fn ($t) => [...$t->only('id', 'name', 'is_paid', 'is_active', 'sort_order'), 'used' => $t->records_count]),
+                ->map(fn ($t) => [...$t->only('id', 'name', 'is_paid', 'is_active', 'sort_order', 'yearly_days', 'per_leave_days'), 'used' => $t->records_count]),
+            'balances' => $this->balances($f, $first->year),
             'holidays' => Holiday::query()->with('company:id,name')->whereYear('date', $first->year)->orderBy('date')->get()
                 ->map(fn ($h) => ['id' => $h->id, 'date' => $h->date->toDateString(), 'name' => $h->name, 'company' => $h->company?->name, 'company_id' => $h->company_id]),
             'year' => $first->year,
@@ -87,7 +89,8 @@ class LeaveController extends Controller
         $days = self::workingDays($employee, $data['start_date'], $data['end_date'], $data['part']);
         LeaveRecord::create($data + ['days' => $days, 'source' => 'manual', 'created_by' => $request->user()->id]);
 
-        return back()->with('success', "Recorded {$days} ".($days == 1 ? 'day' : 'days')." of leave for {$employee->full_name}.");
+        return back()->with('success', "Recorded {$days} ".($days == 1 ? 'day' : 'days')." of leave for {$employee->full_name}."
+            .$this->balanceNote($employee, LeaveType::findOrFail($data['leave_type_id']), $data['start_date'], $data['end_date']));
     }
 
     public function destroy(LeaveRecord $record): RedirectResponse
@@ -147,10 +150,57 @@ class LeaveController extends Controller
             'name' => ['required', 'string', 'max:60', Rule::unique('leave_types', 'name')->ignore($type->id)],
             'is_paid' => ['required', 'boolean'],
             'is_active' => ['required', 'boolean'],
-        ]);
-        $type->update($data);
+            'yearly_days' => ['nullable', 'numeric', 'min:0', 'max:365', 'multiple_of:0.5'],
+            'per_leave_days' => ['nullable', 'integer', 'min:1', 'max:366'],
+        ], ['yearly_days.multiple_of' => 'Use whole or half days.']);
+        if (($data['yearly_days'] ?? null) !== null && ($data['per_leave_days'] ?? null) !== null) {
+            throw ValidationException::withMessages(['yearly_days' => 'Give a type either a yearly allowance or an allowance per leave, not both.']);
+        }
+        $type->update($data + ['yearly_days' => null, 'per_leave_days' => null]);
 
         return back()->with('success', 'Saved.');
+    }
+
+    // ---------------------------------------------------------------- balances
+
+    /** Balances tab: current staff (same search and department filters as the list), yearly types only. */
+    private function balances(array $f, int $year): array
+    {
+        $types = LeaveBalances::yearlyTypes();
+        $people = Employee::query()->whereIn('status', ['active', 'offboarding'])->with('department:id,name')
+            ->search($f['q'] ?? null)->when($f['department'] ?? null, fn ($q, $v) => $q->where('department_id', $v))
+            ->orderBy('full_name')->get(['id', 'employee_code', 'full_name', 'department_id', 'company_id', 'start_date']);
+        $rows = LeaveBalances::forEmployees($people, $year, $types);
+
+        return [
+            'year' => $year,
+            'types' => $types->map(fn ($t) => ['id' => $t->id, 'name' => $t->name, 'yearly_days' => $t->yearly_days])->values(),
+            'rows' => $people->map(fn ($e) => ['id' => $e->id, 'name' => $e->full_name, 'code' => $e->employee_code,
+                'department' => $e->department?->name, 'start_date' => $e->start_date?->toDateString(), 'balances' => $rows[$e->id]])->values(),
+        ];
+    }
+
+    /** " Annual: 3 of 14 days left in 2026." / " Annual: 2 days over the 14 for 2026." / " Longer than the 14-day Wedding allowance (by 3 days)." */
+    private function balanceNote(Employee $employee, LeaveType $type, string $from, string $to): string
+    {
+        if ($type->per_leave_days !== null) {
+            $over = LeaveBalances::overLimit($type, $from, $to);
+
+            return $over ? " Longer than the {$type->per_leave_days}-day {$type->name} allowance (by $over ".($over === 1 ? 'day' : 'days').').' : '';
+        }
+        if ($type->yearly_days === null) {
+            return '';
+        }
+        $year = (int) substr($from, 0, 4);
+        $b = collect(LeaveBalances::forEmployee($employee, $year))->firstWhere('type_id', $type->id);
+        if (! $b) {
+            return '';
+        }
+        $n = fn (float $d) => rtrim(rtrim(number_format($d, 1, '.', ''), '0'), '.');
+
+        return $b['left'] >= 0
+            ? " {$type->name}: {$n($b['left'])} of {$n($b['allowance'])} days left in $year."
+            : " {$type->name}: {$n(-$b['left'])} ".(-$b['left'] == 1 ? 'day' : 'days')." over the {$n($b['allowance'])} for $year.";
     }
 
     // ---------------------------------------------------------------- helpers

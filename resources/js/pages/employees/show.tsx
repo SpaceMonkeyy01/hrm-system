@@ -22,8 +22,8 @@ import { AdjustDialog, DayStatus, duration, SessionsLine, TimeCell } from '@/com
 import type { AttendanceDay } from '@/components/attendance';
 import { AssetList } from '@/components/assets';
 import type { AssetRow } from '@/components/assets';
-import { leaveDates } from '@/components/leave';
-import type { LeaveRecordRow } from '@/components/leave';
+import { balanceText, leaveDates } from '@/components/leave';
+import type { LeaveBalance, LeaveRecordRow } from '@/components/leave';
 
 type Employee = {
     id: number; system_id: string; employee_code: string; full_name: string; photo: string | null; first_name: string | null; last_name: string | null; cnic: string | null;
@@ -66,7 +66,7 @@ type Props = {
     employmentHistory: HistoryEntry[];
     attendance: AttendanceMonth;
     attendanceYear: AttendanceYear;
-    leave: { year: number; records: LeaveRecordRow[]; totals: Record<string, number> };
+    leave: { year: number; records: LeaveRecordRow[]; totals: Record<string, number>; balances: LeaveBalance[] };
     assets: AssetRow[];
     /** HR and admin only. */
     letters: { id: number; reference: string; subject: string | null; issued_on: string; issued_by: string | null }[] | null;
@@ -181,9 +181,19 @@ function LeaveTab({ leave }: { leave: Props['leave'] }) {
     const totals = Object.entries(leave.totals);
     return (
         <div className="grid max-w-3xl gap-4">
-            <p className="text-sm text-muted-foreground">Approved leave in {leave.year}. Requests and balances are in HR.my; HR records leave on the Leave page.</p>
+            <p className="text-sm text-muted-foreground">Approved leave in {leave.year}. Requests are in HR.my; HR records leave on the Leave page.</p>
+            {leave.balances.length > 0 && (
+                <div className="flex flex-wrap gap-2 text-sm" aria-label="Leave balance">
+                    {leave.balances.map((b) => (
+                        <span key={b.type_id} className={`rounded-md border px-2.5 py-1 ${b.left < 0 ? 'border-[#f0b8b8] bg-missing-soft' : ''}`} title={`${b.used} used of ${b.allowance} in ${leave.year}`}>
+                            <span className="text-muted-foreground">{b.type}</span> <span className="font-semibold tabular-nums">{balanceText(b)}</span>
+                        </span>
+                    ))}
+                </div>
+            )}
             {totals.length > 0 && (
                 <div className="flex flex-wrap gap-2 text-sm">
+                    <span className="py-1 text-muted-foreground">Taken:</span>
                     {totals.map(([type, days]) => (
                         <span key={type} className="rounded-md border px-2.5 py-1"><span className="text-muted-foreground">{type}</span> <span className="font-semibold tabular-nums">{days}</span></span>
                     ))}

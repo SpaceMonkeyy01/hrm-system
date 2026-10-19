@@ -13,20 +13,24 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { leaveDates } from '@/components/leave';
-import type { LeaveRecordRow } from '@/components/leave';
+import { balanceText, leaveDates } from '@/components/leave';
+import type { LeaveBalance, LeaveRecordRow } from '@/components/leave';
 import { formatDate } from '@/lib/format';
 import type { SharedProps } from '@/types';
 
 
-type LeaveType = { id: number; name: string; is_paid: boolean; is_active: boolean; sort_order: number; used: number };
+type LeaveType = { id: number; name: string; is_paid: boolean; is_active: boolean; sort_order: number; used: number; yearly_days: number | null; per_leave_days: number | null };
+type Balances = {
+    year: number; types: { id: number; name: string; yearly_days: number }[];
+    rows: { id: number; name: string; code: string; department: string | null; start_date: string | null; balances: LeaveBalance[] }[];
+};
 type Holiday = { id: number; date: string; name: string; company: string | null; company_id: number | null };
 type Company = { id: number; name: string; departments: { id: number; name: string }[] };
 type Props = {
     month: string; today: string; filters: { type?: number; department?: number; q?: string };
     records: LeaveRecordRow[]; onLeaveToday: { id: number; name: string; type: string; part: string }[];
     types: LeaveType[]; holidays: Holiday[]; year: number; people: { id: number; label: string }[]; companies: Company[];
-    parts: Record<string, string>;
+    parts: Record<string, string>; balances: Balances;
 };
 
 const opts = { preserveScroll: true, onError: (e: Record<string, string>) => toast.error(Object.values(e)[0] ?? 'Not saved.') };
@@ -125,6 +129,89 @@ function Holidays({ holidays, companies, year, month, can }: { holidays: Holiday
     );
 }
 
+/** Allowance per type: none (just counted), working days a year (pro-rated, lapses), or calendar days each time. */
+function Allowance({ t, can }: { t: LeaveType; can: boolean }) {
+    const kind = t.yearly_days !== null ? 'year' : t.per_leave_days !== null ? 'leave' : 'none';
+    const [k, setK] = useState(kind);
+    const [n, setN] = useState(String(t.yearly_days ?? t.per_leave_days ?? ''));
+    if (!can) {
+        return <span className="text-muted-foreground">{kind === 'year' ? `${t.yearly_days} days a year` : kind === 'leave' ? `${t.per_leave_days} days each time` : 'No allowance'}</span>;
+    }
+    const save = (nextK: string, nextN: string) => router.put(`/leave/types/${t.id}`, {
+        name: t.name, is_paid: t.is_paid, is_active: t.is_active,
+        yearly_days: nextK === 'year' && nextN !== '' ? Number(nextN) : null,
+        per_leave_days: nextK === 'leave' && nextN !== '' ? Number(nextN) : null,
+    }, opts);
+    return (
+        <span className="flex items-center gap-1.5">
+            <NativeSelect aria-label={`${t.name} allowance`} className="w-40" value={k}
+                onChange={(e) => { setK(e.target.value); if (e.target.value === 'none') { setN(''); save('none', ''); } }}
+                options={[{ value: 'none', label: 'No allowance' }, { value: 'year', label: 'Days a year' }, { value: 'leave', label: 'Days each time' }]} />
+            {k !== 'none' && (
+                <Input aria-label={`${t.name} days`} type="number" min={k === 'year' ? 0 : 1} step={k === 'year' ? 0.5 : 1} className="w-20" value={n}
+                    onChange={(e) => setN(e.target.value)} onBlur={() => n !== String(t.yearly_days ?? t.per_leave_days ?? '') || k !== kind ? save(k, n) : undefined} />
+            )}
+        </span>
+    );
+}
+
+function BalancesTab({ balances, go, q, setQ, departments, department }: {
+    balances: Balances; go: (c: Record<string, unknown>) => void; q: string; setQ: (v: string) => void; departments: { value: number; label: string }[]; department?: number;
+}) {
+    const [over, setOver] = useState(false);
+    const rows = over ? balances.rows.filter((r) => r.balances.some((b) => b.left < 0)) : balances.rows;
+    if (balances.types.length === 0) {
+        return <EmptyState title="No yearly allowances set.">Give Annual, Casual or Sick a number of days a year on the Leave types tab.</EmptyState>;
+    }
+    return (
+        <div className="grid gap-4">
+            <p className="text-sm text-muted-foreground">
+                Calendar year {balances.year}. {balances.types.map((t) => `${t.name} ${t.yearly_days}`).join(', ')} working days a year; people who started
+                this year get the share for the days left from their start date. Unused days lapse on 31 December. Only leave recorded here counts.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+                <span className="flex gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => go({ month: `${balances.year - 1}-12` })}>{balances.year - 1}</Button>
+                    <Button variant="ghost" size="sm" onClick={() => go({ month: `${balances.year + 1}-01` })}>{balances.year + 1}</Button>
+                </span>
+                <NativeSelect className="w-56" value={department ?? ''} placeholder="All departments" options={departments} aria-label="Department" onChange={(e) => go({ department: e.target.value || undefined })} />
+                <form onSubmit={(e) => { e.preventDefault(); go({ q: q || undefined }); }}>
+                    <Input className="w-56" placeholder="Search name or code" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search" />
+                </form>
+                <label className="flex items-center gap-1.5 text-sm"><input type="checkbox" className="size-4 accent-cascade" checked={over} onChange={(e) => setOver(e.target.checked)} /> Only people over an allowance</label>
+            </div>
+            {rows.length === 0 ? <EmptyState title="Nobody matches.">Clear a filter to see more people.</EmptyState> : (
+                <div className="overflow-x-auto rounded-lg border">
+                    <table className="w-full min-w-[40rem] text-sm">
+                        <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+                            <tr>
+                                <th className="px-3 py-2 font-semibold">Employee ({rows.length})</th>
+                                {balances.types.map((t) => <th key={t.id} className="px-3 py-2 font-semibold">{t.name} <span className="font-normal">({t.yearly_days})</span></th>)}
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                            {rows.map((r) => (
+                                <tr key={r.id}>
+                                    <td className="px-3 py-2">
+                                        <Link href={`/employees/${r.id}#leave`} className="font-semibold hover:text-cascade hover:underline">{r.name}</Link>
+                                        <span className="block text-xs text-muted-foreground">{[r.code, r.department].filter(Boolean).join(', ')}</span>
+                                    </td>
+                                    {r.balances.map((b) => (
+                                        <td key={b.type_id} className={`px-3 py-2 tabular-nums ${b.left < 0 ? 'font-semibold text-missing' : ''}`} title={`${b.used} used of ${b.allowance}`}>
+                                            {balanceText(b)}
+                                            {b.allowance !== balances.types.find((t) => t.id === b.type_id)?.yearly_days && <span className="block text-xs font-normal text-muted-foreground">pro-rated</span>}
+                                        </td>
+                                    ))}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+}
+
 function Types({ types, can }: { types: LeaveType[]; can: boolean }) {
     const [name, setName] = useState('');
     return (
@@ -134,12 +221,13 @@ function Types({ types, can }: { types: LeaveType[]; can: boolean }) {
                     <li key={t.id} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
                         <span className={`flex-1 font-semibold ${t.is_active ? '' : 'text-muted-foreground line-through'}`}>{t.name}</span>
                         <span className="text-muted-foreground">{t.used} recorded</span>
+                        <Allowance t={t} can={can} />
                         {can ? (
                             <>
                                 <label className="flex items-center gap-1.5"><input type="checkbox" className="size-4 accent-cascade" checked={t.is_paid}
-                                    onChange={(e) => router.put(`/leave/types/${t.id}`, { name: t.name, is_paid: e.target.checked, is_active: t.is_active }, opts)} /> Paid</label>
+                                    onChange={(e) => router.put(`/leave/types/${t.id}`, { name: t.name, is_paid: e.target.checked, is_active: t.is_active, yearly_days: t.yearly_days, per_leave_days: t.per_leave_days }, opts)} /> Paid</label>
                                 <label className="flex items-center gap-1.5"><input type="checkbox" className="size-4 accent-cascade" checked={t.is_active}
-                                    onChange={(e) => router.put(`/leave/types/${t.id}`, { name: t.name, is_paid: t.is_paid, is_active: e.target.checked }, opts)} /> In use</label>
+                                    onChange={(e) => router.put(`/leave/types/${t.id}`, { name: t.name, is_paid: t.is_paid, is_active: e.target.checked, yearly_days: t.yearly_days, per_leave_days: t.per_leave_days }, opts)} /> In use</label>
                             </>
                         ) : <StatusPill value={t.is_paid ? 'Paid' : 'Unpaid'} tone="neutral" />}
                     </li>
@@ -169,10 +257,11 @@ export default function LeaveIndex(props: Props) {
             <Head title="Leave" />
             <PageHeader title="Leave" description="Approved leave and public holidays. Approvals stay in HR.my; record the outcome here so attendance is right."
                 actions={can && <Button onClick={() => setAdding(true)}><Plus /> Record leave</Button>} />
-            <Tabs defaultValue={['holidays', 'types'].includes(hash) ? hash : 'records'} className="px-4 pt-4 pb-10 md:px-6"
+            <Tabs defaultValue={['balances', 'holidays', 'types'].includes(hash) ? hash : 'records'} className="px-4 pt-4 pb-10 md:px-6"
                 onValueChange={(v) => history.replaceState(history.state, '', `#${v}`)}>
                 <TabsList>
                     <TabsTrigger value="records">Leave</TabsTrigger>
+                    <TabsTrigger value="balances">Balances</TabsTrigger>
                     <TabsTrigger value="holidays">Public holidays</TabsTrigger>
                     <TabsTrigger value="types">Leave types</TabsTrigger>
                 </TabsList>
@@ -231,12 +320,16 @@ export default function LeaveIndex(props: Props) {
                     )}
                 </TabsContent>
 
+                <TabsContent value="balances">
+                    <BalancesTab balances={props.balances} go={go} q={q} setQ={setQ} departments={departments} department={props.filters.department} />
+                </TabsContent>
+
                 <TabsContent value="holidays">
                     <Holidays holidays={props.holidays} companies={props.companies} year={props.year} month={props.month} can={can} />
                 </TabsContent>
 
                 <TabsContent value="types">
-                    <Section title="Leave types" description="Switch a type off to stop new leave of that type; past records keep it.">
+                    <Section title="Leave types" description="Switch a type off to stop new leave of that type; past records keep it. Allowance: days a year (working days, pro-rated for new joiners, lapses on 31 Dec) or days each time (calendar days per leave, e.g. Maternity 90).">
                         <Types types={props.types} can={can} />
                     </Section>
                 </TabsContent>
