@@ -3,6 +3,7 @@ import { Building2, House, LogIn, LogOut } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { duration, type Place } from '@/components/attendance';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { formatDate } from '@/lib/format';
 
 /** app/Services/AttendanceClock.php state(). at = ISO 8601, time = "H:i" in the office's timezone. */
@@ -10,8 +11,10 @@ export type ClockState = {
     enabled: boolean;
     open: { at: string; time: string; place: Place | null } | null;
     date: string;
-    presses: { at: string; time: string; method: 'In' | 'Out'; place: Place | null }[];
+    presses: { at: string; time: string; method: 'In' | 'Out'; place: Place | null; stated: boolean }[];
     place: Place;
+    /** "09:10": today's machine check-in has no check-out. Clocking in away from the office first asks when they left. */
+    office_open: string | null;
 };
 
 /** The browser's location if the person allows it, else nothing (never blocks the clock-in). */
@@ -37,7 +40,10 @@ export function ClockCard({ clock, today }: { clock: ClockState; today: string }
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [now, setNow] = useState(() => Date.now());
+    const [leftOffice, setLeftOffice] = useState('');
     const open = clock.open;
+    // Checked in on the machine, never checked out, now clocking in from elsewhere: close the office time first.
+    const closeOffice = !open && clock.office_open !== null && clock.place === 'remote';
 
     useEffect(() => {
         if (!open) return;
@@ -48,12 +54,17 @@ export function ClockCard({ clock, today }: { clock: ClockState; today: string }
     if (!clock.enabled) return null;
 
     const press = async () => {
+        if (closeOffice && !leftOffice) {
+            setError('Enter the time you left the office first.');
+            return;
+        }
         setBusy(true);
         setError(null);
         const where = await location();
-        router.post('/me/clock', { action: open ? 'out' : 'in', ...where }, {
+        router.post('/me/clock', { action: open ? 'out' : 'in', ...where, ...(closeOffice ? { left_office: leftOffice } : {}) }, {
             preserveScroll: true,
-            onError: (e) => setError(e.clock ?? Object.values(e)[0] ?? 'Could not save. Try again.'),
+            onSuccess: () => setLeftOffice(''),
+            onError: (e) => setError(e.left_office ?? e.clock ?? Object.values(e)[0] ?? 'Could not save. Try again.'),
             onFinish: () => setBusy(false),
         });
     };
@@ -72,14 +83,30 @@ export function ClockCard({ clock, today }: { clock: ClockState; today: string }
                     <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                         <span className="text-muted-foreground">{clock.date === today ? 'Today' : formatDate(clock.date)}:</span>
                         {clock.presses.map((p) => (
-                            <span key={p.at} className="inline-flex items-center gap-1 tabular-nums">{p.method} {p.time} <PlaceIcon place={p.place} /></span>
+                            <span key={p.at} className="inline-flex items-center gap-1 tabular-nums">
+                                {p.method} {p.time} <PlaceIcon place={p.place} />
+                                {p.stated && <span className="text-xs text-muted-foreground" title="The time you typed for leaving the office">(stated)</span>}
+                            </span>
                         ))}
                     </p>
+                )}
+                {closeOffice && (
+                    <div className="grid gap-2 rounded-md border border-pending/40 bg-pending-soft p-3 text-sm">
+                        <p>
+                            <strong>You checked in at the office at {clock.office_open} and didn't check out.</strong> Before clocking in from here,
+                            enter the time you left the office. It is saved as your office check-out and marked as typed by you.
+                        </p>
+                        <label className="flex flex-wrap items-center gap-2">
+                            <span>I left the office at</span>
+                            <Input type="time" className="h-9 w-32" value={leftOffice} min={clock.office_open ?? undefined}
+                                onChange={(e) => setLeftOffice(e.target.value)} aria-label="Time you left the office" />
+                        </label>
+                    </div>
                 )}
                 {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
             </div>
             <Button size="lg" variant={open ? 'outline' : 'default'} disabled={busy} onClick={press}>
-                {open ? <LogOut /> : <LogIn />} {busy ? 'Saving' : open ? 'Clock out' : 'Clock in'}
+                {open ? <LogOut /> : <LogIn />} {busy ? 'Saving' : open ? 'Clock out' : closeOffice ? 'Check out of office and clock in' : 'Clock in'}
             </Button>
         </section>
     );

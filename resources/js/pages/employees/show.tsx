@@ -162,7 +162,7 @@ function AttendanceTab({ e, a, canEdit }: { e: Employee; a: AttendanceMonth; can
                                     {canEdit && (
                                         <td className="px-3 py-2 text-right">
                                             {d.status !== 'Day off' || d.punches > 0 ? (
-                                                <Button variant="ghost" size="sm" aria-label={`Set times for ${formatDate(d.date)}`} onClick={() => setEditing(d)}><Pencil /></Button>
+                                                <Button variant="ghost" size="sm" aria-label={`Edit day ${formatDate(d.date)}`} onClick={() => setEditing(d)}><Pencil /></Button>
                                             ) : null}
                                         </td>
                                     )}

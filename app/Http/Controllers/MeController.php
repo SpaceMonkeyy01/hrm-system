@@ -122,11 +122,13 @@ class MeController extends Controller
             'latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
             'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
             'accuracy' => ['nullable', 'numeric', 'min:0', 'max:1000000'],
-        ]);
-        $punch = AttendanceClock::press($employee, $data['action'], $request->ip(), $data, now());
+            'left_office' => ['nullable', 'regex:/^([01]\d|2[0-3]):[0-5]\d$/'],
+        ], ['left_office.regex' => 'Use a 24-hour time like 18:00.']);
+        $punch = AttendanceClock::press($employee, $data['action'], $request->ip(), $data, now(), $data['left_office'] ?? null, $closed);
         $where = $punch->place === 'office' ? 'at the office' : 'remote';
 
-        return back()->with('success', ($punch->method === 'In' ? 'Clocked in' : 'Clocked out').' at '.$punch->punched_at->format('H:i')." ($where).");
+        return back()->with('success', ($closed ? "Closed your office time at $closed. " : '')
+            .($punch->method === 'In' ? 'Clocked in' : 'Clocked out').' at '.$punch->punched_at->format('H:i')." ($where).");
     }
 
     public function updateContact(Request $request): RedirectResponse

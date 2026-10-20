@@ -185,8 +185,9 @@ class PunchLogController extends Controller
             'location' => $p->latitude !== null ? ['lat' => $p->latitude, 'lng' => $p->longitude, 'accuracy' => $p->accuracy] : null,
             'device' => $p->attendance_device_id ? (($this->devices ??= AttendanceDevice::query()->get(['id', 'code', 'name'])->mapWithKeys(fn ($d) => [$d->id => trim("{$d->code} {$d->name}")])->all())[$p->attendance_device_id] ?? null) : null,
             // Where the punch came into the app: a machine sync, an uploaded file, or a press on My page.
-            'via' => $p->source === AttendanceClock::SOURCE ? 'Clock-in on My page'
-                : (($this->imports ??= AttendanceImport::query()->pluck('original_name', 'id')->all())[$p->attendance_import_id] ?? 'Unknown'),
+            'via' => $p->stated ? 'Leave time typed on My page (stated)'
+                : ($p->source === AttendanceClock::SOURCE ? 'Clock-in on My page'
+                : (($this->imports ??= AttendanceImport::query()->pluck('original_name', 'id')->all())[$p->attendance_import_id] ?? 'Unknown')),
         ];
     }
 }

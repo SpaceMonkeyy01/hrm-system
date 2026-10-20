@@ -160,7 +160,7 @@ export default function AttendanceIndex(props: Props) {
                                         <td className="px-3 py-2 text-xs text-muted-foreground tabular-nums">{r.punchTimes.join(', ')}</td>
                                         {can && (
                                             <td className="px-3 py-2 text-right">
-                                                <Button variant="ghost" size="sm" aria-label={`Set times for ${r.employee.name}`} onClick={() => setEditing(r)}><Pencil /></Button>
+                                                <Button variant="ghost" size="sm" aria-label={`Edit day for ${r.employee.name}`} onClick={() => setEditing(r)}><Pencil /></Button>
                                             </td>
                                         )}
                                     </tr>

@@ -51,13 +51,15 @@ class AttendanceRules
     /**
      * @param  list<string|array{time: string, source?: ?string, method?: ?string, place?: ?string}>  $punches  "H:i:s" times
      *     on $date, any order; with the source, the In/Out when known (HR.my, app) and the place when the punch has one
-     * @param  array{check_in: ?string, check_out: ?string, note?: ?string}|null  $adjustment
+     * @param  array{check_in: ?string, check_out: ?string, sessions?: ?list<array{in: ?string, out: ?string, place: ?string}>, note?: ?string}|null  $adjustment
+     *         sessions = HR's version of the day, used instead of the punches' sessions
      * @param  array{holiday?: ?string, leave?: ?array{type: string, part: string}}  $context
      * @return array{date: string, status: ?string, in: ?string, out: ?string, in_source: ?string, out_source: ?string,
      *     worked: ?int, late: int, early: int, short: int, overtime: int, punches: int, working_day: bool, adjusted: bool,
      *     note: ?string, holiday: ?string, leave: ?array{type: string, part: string},
      *     sessions: list<array{in: ?string, out: ?string, source: string, minutes: ?int, edited: bool, in_where: ?string, out_where: ?string,
-     *         inside: bool}>,  inside = wholly within another session: shown, adds no time or place
+     *         inside: bool, stated: bool}>,  inside = wholly within another session: shown, adds no time or place;
+     *         stated = an end the employee typed (left the office at ..., AttendanceClock)
      *     where: ?string, in_where: ?string, out_where: ?string}  where = office | remote | both (PLACES), null with no punches
      *         status null = a future day (nothing to show yet)
      */
@@ -70,6 +72,23 @@ class AttendanceRules
         $fullLeave = $leave && $leave['part'] === 'full';
         $working = ($schedule === null || in_array(CarbonImmutable::parse($date)->isoWeekday(), array_map('intval', $schedule->working_days ?? []), true))
             && $holiday === null;
+
+        // HR's own sessions (Edit day) replace the punches' sessions; the punch count stays. A time out before the
+        // time in is the next morning.
+        $hrSessions = $adjustment['sessions'] ?? null;
+        if ($hrSessions) {
+            $sessions = [];
+            foreach ($hrSessions as $h) {
+                [$a, $b] = [$h['in'] ?? null, $h['out'] ?? null];
+                if ($a && $b && self::minutes($b) <= self::minutes($a)) {
+                    $b = self::clock(self::minutes($b) + 1440);
+                }
+                $sessions[] = ['in' => $a, 'out' => $b, 'source' => 'manual', 'in_from' => null, 'out_from' => null,
+                    'in_place' => $a ? ($h['place'] ?? null) : null, 'out_place' => $b ? ($h['place'] ?? null) : null, 'edited' => true];
+            }
+            usort($sessions, fn ($x, $y) => self::minutes($x['in'] ?? $x['out']) <=> self::minutes($y['in'] ?? $y['out']));
+            $adjustment['check_in'] = $adjustment['check_out'] = null;
+        }
 
         // HR's times replace the first start and the last end (where the session happened stays as it was).
         $in = $adjustment['check_in'] ?? null;
@@ -101,6 +120,9 @@ class AttendanceRules
             $out = $sessions[$last]['out'];
             $outSource = 'punch';
         }
+        if ($hrSessions) {
+            [$inSource, $outSource] = [$in ? 'manual' : null, $out ? 'manual' : null];
+        }
         $fixed = $schedule && ! $schedule->isFlexible() && $schedule->start_time && $schedule->end_time;
         $startMin = $fixed ? self::minutes($schedule->start_time) : null;
         $endMin = $fixed ? self::minutes($schedule->end_time) + (self::minutes($schedule->end_time) <= $startMin ? 1440 : 0) : null;
@@ -115,6 +137,7 @@ class AttendanceRules
         foreach ($sessions as &$s) {
             $s['minutes'] = $s['in'] && $s['out'] ? max(0, self::minutes($s['out']) - self::minutes($s['in'])) : null;
             $s['edited'] ??= false;
+            $s['stated'] ??= false;
             $s['in_where'] = $s['in_place'] ?? self::PLACES[$s['in_from'] ?? ''] ?? null;
             $s['out_where'] = $s['out'] ? ($s['out_place'] ?? self::PLACES[$s['out_from'] ?? ''] ?? null) : null;
             unset($s['in_place'], $s['out_place']);
@@ -268,7 +291,8 @@ class AttendanceRules
             $p = is_string($p) ? ['time' => $p] : $p;
             $method = ucfirst(strtolower((string) ($p['method'] ?? '')));
             if (in_array($method, ['In', 'Out'], true)) {
-                $labelled[] = ['time' => $p['time'], 'source' => $p['source'] ?? 'hrmy', 'method' => $method, 'place' => $p['place'] ?? null];
+                $labelled[] = ['time' => $p['time'], 'source' => $p['source'] ?? 'hrmy', 'method' => $method, 'place' => $p['place'] ?? null,
+                    'stated' => ! empty($p['stated'])];
             } else {
                 $plain[$p['source'] ?? 'machine'][] = $p['time'];
             }
@@ -284,13 +308,15 @@ class AttendanceRules
             $t = substr($p['time'], 0, 5);
             if ($p['method'] === 'In') {
                 $open !== null && $remote[] = $open;
-                $open = ['in' => $t, 'out' => null, 'source' => $p['source'], 'in_from' => $p['source'], 'out_from' => null, 'in_place' => $p['place']];
+                $open = ['in' => $t, 'out' => null, 'source' => $p['source'], 'in_from' => $p['source'], 'out_from' => null, 'in_place' => $p['place'],
+                    'stated' => $p['stated']];
             } elseif ($open !== null) {
                 $remote[] = ['in' => $open['in'], 'out' => $t, 'source' => $open['source'] === $p['source'] ? $p['source'] : 'mixed',
-                    'in_from' => $open['in_from'], 'out_from' => $p['source'], 'in_place' => $open['in_place'], 'out_place' => $p['place']];
+                    'in_from' => $open['in_from'], 'out_from' => $p['source'], 'in_place' => $open['in_place'], 'out_place' => $p['place'],
+                    'stated' => $open['stated'] || $p['stated']];
                 $open = null;
             } else {
-                $orphans[] = ['time' => $t, 'source' => $p['source'], 'place' => $p['place']];
+                $orphans[] = ['time' => $t, 'source' => $p['source'], 'place' => $p['place'], 'stated' => $p['stated']];
             }
         }
         $open !== null && $remote[] = $open;
@@ -313,9 +339,11 @@ class AttendanceRules
                 $blocks[$k]['times'][] = $o['time'];
                 $blocks[$k]['out_from'] = $o['source'];
                 $blocks[$k]['out_place'] = $o['place'];
+                $blocks[$k]['stated'] = $o['stated'];   // the employee typed when they left the office (AttendanceClock)
                 $blocks[$k]['source'] = $blocks[$k]['source'] === $o['source'] ? $o['source'] : 'mixed';
             } else {
-                $remote[] = ['in' => null, 'out' => $o['time'], 'source' => $o['source'], 'in_from' => null, 'out_from' => $o['source'], 'out_place' => $o['place']];
+                $remote[] = ['in' => null, 'out' => $o['time'], 'source' => $o['source'], 'in_from' => null, 'out_from' => $o['source'], 'out_place' => $o['place'],
+                    'stated' => $o['stated']];
             }
         }
 
@@ -323,7 +351,7 @@ class AttendanceRules
         foreach ($blocks as $b) {
             $sessions[] = ['in' => $b['times'][0], 'out' => count($b['times']) > 1 ? end($b['times']) : null, 'source' => $b['source'],
                 'in_from' => $b['in_from'], 'out_from' => count($b['times']) > 1 ? ($b['out_from'] ?? $b['in_from']) : null,
-                'out_place' => count($b['times']) > 1 ? ($b['out_place'] ?? null) : null];
+                'out_place' => count($b['times']) > 1 ? ($b['out_place'] ?? null) : null, 'stated' => $b['stated'] ?? false];
         }
         usort($sessions, fn ($a, $b) => strcmp($a['in'] ?? $a['out'], $b['in'] ?? $b['out']));
 
@@ -375,7 +403,8 @@ class AttendanceRules
             $outWhere = $s['out_where'] ?? null;
             $place = $where && $outWhere && $where !== $outWhere ? "$where to $outWhere" : ($where ?? $outWhere ?? '');
 
-            return trim(($s['in'] ?? '?').'-'.($s['out'] ?? '?').' '.$place.(! empty($s['edited']) ? ' (HR)' : '').(! empty($s['inside']) ? ' (within)' : ''));
+            return trim(($s['in'] ?? '?').'-'.($s['out'] ?? '?').' '.$place.(! empty($s['edited']) ? ' (HR)' : '').(! empty($s['stated']) ? ' (stated)' : '')
+                .(! empty($s['inside']) ? ' (within)' : ''));
         }, $sessions));
     }
 

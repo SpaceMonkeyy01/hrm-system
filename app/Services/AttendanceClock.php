@@ -7,6 +7,7 @@ use App\Models\Employee;
 use App\Models\OfficeNetwork;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\IpUtils;
 
@@ -104,11 +105,32 @@ class AttendanceClock
     }
 
     /**
+     * "09:10" when today's machine check-in is still open (one tap, nothing after it closed it): the person forgot
+     * to punch out when they left. Else null. Only today's machine session; HR's own version of the day wins.
+     */
+    public static function officeOpenSince(Employee $employee, CarbonInterface $now): ?string
+    {
+        if (! $employee->attendance_machine_id) {
+            return null;
+        }
+        $today = $now->toDateString();
+        $day = (new AttendanceBoard(collect([$employee]), $today, $today))->day($employee, $today, $now);
+        foreach ($day['sessions'] ?? [] as $s) {
+            if ($s['source'] === 'machine' && $s['in'] && ! $s['out'] && $s['in'] <= $now->format('H:i')) {
+                return $s['in'];
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * What the My page shows: whether a clock-in is open and the presses on the day it belongs to.
      *
      * @return array{enabled: bool, open: ?array{at: string, time: string, place: ?string}, date: string,
-     *     presses: list<array{at: string, time: string, method: string, place: ?string}>, place: string}
-     *     at = ISO 8601, time = "H:i" in the app's timezone
+     *     presses: list<array{at: string, time: string, method: string, place: ?string, stated: bool}>, place: string,
+     *     office_open: ?string}  at = ISO 8601, time = "H:i" in the app's timezone; office_open = officeOpenSince()
+     *     when not clocked in on the app: clocking in away from the office first asks when they left
      */
     public static function state(Employee $employee, CarbonInterface $now, ?string $ip): array
     {
@@ -117,12 +139,13 @@ class AttendanceClock
 
         return [
             'enabled' => self::enabled(),
+            'office_open' => $open ? null : self::officeOpenSince($employee, $now),
             'open' => $open ? ['at' => $open->punched_at->toIso8601String(), 'time' => $open->punched_at->format('H:i'), 'place' => $open->place] : null,
             'date' => $date,
             'presses' => AttendancePunch::query()->where('source', self::SOURCE)->where('device_user_id', (string) $employee->id)
-                ->whereDate('work_date', $date)->orderBy('punched_at')->get(['punched_at', 'method', 'place'])
+                ->whereDate('work_date', $date)->orderBy('punched_at')->get(['punched_at', 'method', 'place', 'stated'])
                 ->map(fn (AttendancePunch $p) => ['at' => $p->punched_at->toIso8601String(), 'time' => $p->punched_at->format('H:i'),
-                    'method' => $p->method, 'place' => $p->place])
+                    'method' => $p->method, 'place' => $p->place, 'stated' => $p->stated])
                 ->all(),
             // Where a press right now would count, so the page can say "You're clocking in from the office".
             'place' => self::placeFor($ip),
@@ -132,9 +155,14 @@ class AttendanceClock
     /**
      * Records a press. $action is the button the page showed: "in" or "out".
      *
+     * Clocking in away from the office while today's machine check-in is still open (officeOpenSince) needs
+     * $leftOffice, the "H:i" they left: that is saved first as a stated Out at the office, closing the office session,
+     * then the clock-in. $closedOffice is set to that time when it happened.
+     *
      * @param  array{latitude?: ?float, longitude?: ?float, accuracy?: ?int}  $location
      */
-    public static function press(Employee $employee, string $action, ?string $ip, array $location, CarbonInterface $now): AttendancePunch
+    public static function press(Employee $employee, string $action, ?string $ip, array $location, CarbonInterface $now,
+        ?string $leftOffice = null, ?string &$closedOffice = null): AttendancePunch
     {
         if (! self::enabled()) {
             throw ValidationException::withMessages(['clock' => 'Clocking in on the app is switched off. Use the attendance machine or ask HR.']);
@@ -155,7 +183,33 @@ class AttendanceClock
         if ($action === 'out' && ! $open) {
             throw ValidationException::withMessages(['clock' => 'You\'re not clocked in, so there is nothing to clock out of.']);
         }
+        $place = self::placeFor($ip);
+        $since = ! $open && $place === 'remote' ? self::officeOpenSince($employee, $now) : null;
+        if ($since) {
+            if (! $leftOffice) {
+                throw ValidationException::withMessages(['left_office' => "You checked in at the office at $since and didn't check out. Enter the time you left the office."]);
+            }
+            if ($leftOffice <= $since || $leftOffice > $now->format('H:i')) {
+                throw ValidationException::withMessages(['left_office' => "Enter a time after $since and not later than now."]);
+            }
+        }
 
+        return DB::transaction(function () use ($employee, $open, $place, $since, $leftOffice, $ip, $location, $now, $today, &$closedOffice) {
+            if ($since) {
+                AttendancePunch::create([
+                    'source' => self::SOURCE, 'device_user_id' => (string) $employee->id, 'device_name' => $employee->full_name,
+                    'punched_at' => CarbonImmutable::parse("$today $leftOffice"), 'work_date' => $today,
+                    'method' => 'Out', 'place' => 'office', 'stated' => true,
+                ]);
+                $closedOffice = $leftOffice;
+            }
+
+            return self::record($employee, $open, $place, $ip, $location, $now, $today);
+        });
+    }
+
+    private static function record(Employee $employee, ?AttendancePunch $open, string $place, ?string $ip, array $location, CarbonInterface $now, string $today): AttendancePunch
+    {
         return AttendancePunch::create([
             'source' => self::SOURCE,
             'device_user_id' => (string) $employee->id,
@@ -163,7 +217,7 @@ class AttendanceClock
             'punched_at' => CarbonImmutable::instance($now)->startOfSecond(),
             'work_date' => $open ? $open->work_date->toDateString() : $today,
             'method' => $open ? 'Out' : 'In',
-            'place' => self::placeFor($ip),
+            'place' => $place,
             'ip' => $ip,
             'latitude' => $location['latitude'] ?? null,
             'longitude' => $location['longitude'] ?? null,

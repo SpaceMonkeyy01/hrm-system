@@ -1,8 +1,9 @@
 import { Link, router } from '@inertiajs/react';
-import { Building2, House, RefreshCw } from 'lucide-react';
+import { Building2, House, Plus, RefreshCw, X } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Field } from '@/components/field';
+import { NativeSelect } from '@/components/native-select';
 import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -38,6 +39,8 @@ export type AttendanceDay = {
         edited: boolean; in_where: Place | null; out_where: Place | null;
         /** wholly within another session (HR.my tapped during the office day): shown, adds no time or place */
         inside: boolean;
+        /** an end the employee typed ("left the office at 18:00") when clocking in from home after a forgotten punch-out */
+        stated: boolean;
     }[];
     /** office = machine punches or app clock-ins from the office network, remote = HR.my or the app elsewhere, both = some of each */
     where: Place | 'both' | null;
@@ -52,10 +55,10 @@ const plainTime = (t: string | null) => (t ? `${String(Number(t.slice(0, 2)) % 2
 export function SessionsLine({ day, className }: { day: Pick<AttendanceDay, 'sessions'>; className?: string }) {
     if (day.sessions.length < 2) return null;
     return (
-        <span className={`block text-xs font-normal text-muted-foreground ${className ?? ''}`} title="Each stretch of work. The time between them isn't counted; one marked (within) lies inside another and adds no time.">
+        <span className={`block text-xs font-normal text-muted-foreground ${className ?? ''}`} title="Each stretch of work. The time between them isn't counted; one marked (within) lies inside another and adds no time; (stated) = the employee typed when they left the office.">
             {day.sessions.map((s) => {
                 const where = s.in_where && s.out_where && s.in_where !== s.out_where ? `${s.in_where} to ${s.out_where}` : (s.in_where ?? s.out_where ?? '');
-                return `${plainTime(s.in)}-${plainTime(s.out)} ${where}${s.edited ? ' (HR)' : ''}${s.inside ? ' (within)' : ''}`.trim();
+                return `${plainTime(s.in)}-${plainTime(s.out)} ${where}${s.edited ? ' (HR)' : ''}${s.stated ? ' (stated)' : ''}${s.inside ? ' (within)' : ''}`.trim();
             }).join(', ')}
         </span>
     );
@@ -188,51 +191,69 @@ export function TimeCell({ time, source, where }: { time: string | null; source:
     );
 }
 
-/** HR sets the check-in / check-out for one day, with a reason. */
+type SessionRow = { in: string; out: string; place: Place | '' };
+
+/** HR's version of one day as a list of sessions (start, end, place), with a reason. The punches stay as they were. */
 export function AdjustDialog({ open, onClose, employee, day, only }: {
     open: boolean; onClose: () => void; employee: { id: number; name: string }; day: AttendanceDay; only?: string[];
 }) {
-    // "30:00" (next morning) shows as 06:00 in the time box; the rules put it on the next day again.
-    const clock = (t: string | null) => (t ? `${String(Number(t.slice(0, 2)) % 24).padStart(2, '0')}${t.slice(2)}` : '');
-    const [checkIn, setCheckIn] = useState(day.in_source === 'manual' ? clock(day.in) : '');
-    const [checkOut, setCheckOut] = useState(day.out_source === 'manual' ? clock(day.out) : '');
+    // "30:00" (next morning) shows as 06:00 in the time box; an end before the start goes on the next day again.
+    const clock = (t: string | null) => (t ? `${String(Number(t.slice(0, 2)) % 24).padStart(2, '0')}${t.slice(2, 5)}` : '');
+    const [rows, setRows] = useState<SessionRow[]>(() => day.sessions.length
+        ? day.sessions.map((s) => ({ in: clock(s.in), out: clock(s.out), place: s.in_where ?? s.out_where ?? '' }))
+        : [{ in: '', out: '', place: '' }]);
     const [note, setNote] = useState(day.note ?? '');
     const [errors, setErrors] = useState<Record<string, string>>({});
     const opts = { preserveScroll: true, only, onSuccess: () => onClose(), onError: setErrors };
+    const set = (i: number, patch: Partial<SessionRow>) => setRows((r) => r.map((row, j) => (j === i ? { ...row, ...patch } : row)));
+    const rowErrors = Object.entries(errors).filter(([k]) => k.startsWith('sessions')).map(([, v]) => v);
 
     const save = (e: FormEvent) => {
         e.preventDefault();
-        router.put(`/attendance/${employee.id}/${day.date}`, { check_in: checkIn || null, check_out: checkOut || null, note }, opts);
+        router.put(`/attendance/${employee.id}/${day.date}`, {
+            sessions: rows.map((r) => ({ in: r.in || null, out: r.out || null, place: r.place || null })), note,
+        }, opts);
     };
 
     return (
         <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-            <DialogContent>
+            <DialogContent className="sm:max-w-xl">
                 <form onSubmit={save} className="grid gap-4">
                     <DialogHeader>
                         <DialogTitle>{employee.name}, {formatDate(day.date)}</DialogTitle>
                         <DialogDescription>
                             Punches: {day.punchTimes.length ? day.punchTimes.join(', ') : 'none'}.
-                            {day.sessions.length > 1 && ' This day has more than one session: check-in changes the first one, check-out the last one.'}
-                            {' '}Leave a time empty to use the punch.
+                            {' '}Each row is one stretch of work; the time between rows isn't counted. A row with no end is a missing punch;
+                            an end before the start is the next morning. The punches stay as they were.
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <Field label="Check-in" htmlFor="adj-in" error={errors.check_in}>
-                            <Input id="adj-in" type="time" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} />
-                        </Field>
-                        <Field label="Check-out" htmlFor="adj-out" error={errors.check_out}>
-                            <Input id="adj-out" type="time" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} />
-                        </Field>
-                        <Field label="Reason" htmlFor="adj-note" error={errors.note} className="sm:col-span-2">
-                            <Textarea id="adj-note" rows={2} required value={note} placeholder="Forgot to punch out, confirmed by manager" onChange={(e) => setNote(e.target.value)} />
-                        </Field>
+                    <div className="grid gap-2">
+                        <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 text-xs font-semibold text-muted-foreground">
+                            <span>Start</span><span>End</span><span>Place</span><span className="w-9" />
+                        </div>
+                        {rows.map((r, i) => (
+                            <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] items-center gap-2">
+                                <Input type="time" aria-label={`Session ${i + 1} start`} value={r.in} onChange={(e) => set(i, { in: e.target.value })} />
+                                <Input type="time" aria-label={`Session ${i + 1} end`} value={r.out} onChange={(e) => set(i, { out: e.target.value })} />
+                                <NativeSelect aria-label={`Session ${i + 1} place`} value={r.place} placeholder="Not set"
+                                    options={[{ value: 'office', label: 'Office' }, { value: 'remote', label: 'Remote' }]}
+                                    onChange={(e) => set(i, { place: e.target.value as Place | '' })} />
+                                <Button type="button" variant="ghost" size="icon" aria-label={`Remove session ${i + 1}`} disabled={rows.length === 1}
+                                    onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}><X /></Button>
+                            </div>
+                        ))}
+                        {rowErrors.map((m) => <p key={m} className="text-sm text-destructive">{m}</p>)}
+                        <Button type="button" variant="outline" size="sm" className="justify-self-start"
+                            onClick={() => setRows((rs) => [...rs, { in: '', out: '', place: '' }])}><Plus /> Add session</Button>
                     </div>
+                    <Field label="Reason" htmlFor="adj-note" error={errors.note}>
+                        <Textarea id="adj-note" rows={2} required value={note} placeholder="Forgot to punch out, confirmed by manager" onChange={(e) => setNote(e.target.value)} />
+                    </Field>
                     <DialogFooter className="gap-2 sm:justify-between">
                         {day.adjusted ? (
-                            <Button type="button" variant="ghost" onClick={() => router.delete(`/attendance/${employee.id}/${day.date}`, opts)}>Remove manual times</Button>
+                            <Button type="button" variant="ghost" onClick={() => router.delete(`/attendance/${employee.id}/${day.date}`, opts)}>Go back to the punches</Button>
                         ) : <span />}
-                        <Button type="submit">Save times</Button>
+                        <Button type="submit">Save day</Button>
                     </DialogFooter>
                 </form>
             </DialogContent>

@@ -15,11 +15,12 @@ class AttendancePunch extends Model
     public const UPDATED_AT = null;
 
     protected $fillable = ['source', 'device_user_id', 'device_name', 'punched_at', 'work_date', 'method', 'attendance_import_id',
-        'attendance_device_id', 'place', 'ip', 'latitude', 'longitude', 'accuracy'];
+        'attendance_device_id', 'place', 'ip', 'latitude', 'longitude', 'accuracy', 'stated'];
 
     protected function casts(): array
     {
-        return ['punched_at' => 'datetime', 'work_date' => 'date:Y-m-d', 'latitude' => 'float', 'longitude' => 'float', 'accuracy' => 'integer'];
+        return ['punched_at' => 'datetime', 'work_date' => 'date:Y-m-d', 'latitude' => 'float', 'longitude' => 'float', 'accuracy' => 'integer',
+            'stated' => 'boolean'];
     }
 
     /** The device (attendance_devices.id) a machine number last punched on, or null if it never came from a synced machine. */

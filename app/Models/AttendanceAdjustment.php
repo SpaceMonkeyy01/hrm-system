@@ -6,16 +6,19 @@ use App\Models\Concerns\LogsActivity;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/** HR's manual check-in / check-out for one day, e.g. a forgotten punch-out. Overrides the punches it sets. */
+/**
+ * HR's version of one day. Either sessions (list of {in, out, place}: replaces the punches' sessions, Edit day) or
+ * a check-in / check-out that moves the first start and last end (approved "ask HR" requests, older edits).
+ */
 class AttendanceAdjustment extends Model
 {
     use LogsActivity;
 
-    protected $fillable = ['employee_id', 'date', 'check_in', 'check_out', 'note', 'updated_by'];
+    protected $fillable = ['employee_id', 'date', 'check_in', 'check_out', 'sessions', 'note', 'updated_by'];
 
     protected function casts(): array
     {
-        return ['date' => 'date:Y-m-d'];
+        return ['date' => 'date:Y-m-d', 'sessions' => 'array'];
     }
 
     public function employee(): BelongsTo

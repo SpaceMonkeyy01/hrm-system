@@ -232,6 +232,30 @@ class AttendanceRulesTest extends TestCase
         $this->assertSame([540, '18:00', 'office'], [$d['worked'], $d['out'], $d['where']]);
     }
 
+    public function test_stated_leave_time_closes_the_office_session(): void
+    {
+        // Machine 09:10, never punched out; at home typed "left at 18:00", then clocked in 21:00-23:00 on the app.
+        $app = fn ($t, $m, $place, $stated = false) => ['time' => $t, 'source' => 'app', 'method' => $m, 'place' => $place, 'stated' => $stated];
+        $d = $this->day([self::m('09:10:00'), $app('18:00:00', 'Out', 'office', true), $app('21:00:00', 'In', 'remote'), $app('23:00:00', 'Out', 'remote')], $this->fixed());
+        $this->assertSame('09:10-18:00 office (stated), 21:00-23:00 remote', AttendanceRules::sessionsText($d['sessions']));
+        $this->assertSame(['Present', '09:10', '23:00', 650, 'both'], [$d['status'], $d['in'], $d['out'], $d['worked'], $d['where']]);
+    }
+
+    public function test_hr_sessions_replace_the_punches(): void
+    {
+        $adj = ['check_in' => null, 'check_out' => null, 'note' => 'Fixed', 'sessions' => [
+            ['in' => '21:00', 'out' => '02:00', 'place' => 'remote'],   // the next morning
+            ['in' => '10:00', 'out' => '13:00', 'place' => 'office'],
+        ]];
+        $d = $this->day([self::m('10:05:00'), self::h('16:26:00', 'In')], $this->fixed(), $adj);
+        $this->assertSame('10:00-13:00 office (HR), 21:00-26:00 remote (HR)', AttendanceRules::sessionsText($d['sessions']));
+        $this->assertSame(['10:00', '26:00', 'manual', 'manual', 480, 'both', 2], [$d['in'], $d['out'], $d['in_source'], $d['out_source'], $d['worked'], $d['where'], $d['punches']]);
+
+        // A session left open by HR is a missing punch.
+        $d = $this->day([self::m('10:05:00')], $this->fixed(), ['check_in' => null, 'check_out' => null, 'sessions' => [['in' => '10:00', 'out' => null, 'place' => null]]]);
+        $this->assertSame(['Missing punch', null], [$d['status'], $d['out']]);
+    }
+
     public function test_hr_times_move_the_first_start_and_last_end_of_a_split_day(): void
     {
         $d = $this->day([self::m('10:20:00'), self::m('14:00:00'), self::h('20:00:00', 'In')], $this->fixed(), ['check_in' => '10:00', 'check_out' => '22:00', 'note' => 'Fixed']);

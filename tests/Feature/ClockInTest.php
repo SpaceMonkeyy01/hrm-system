@@ -281,4 +281,41 @@ class ClockInTest extends TestCase
         $this->actingAs($this->user('admin'))->get('/attendance/clock-ins')->assertOk();
         $this->assertSame(0, OfficeNetwork::count());
     }
+
+    public function test_clocking_in_from_home_first_closes_a_forgotten_machine_check_in(): void
+    {
+        $this->me->update(['attendance_machine_id' => '55']);
+        AttendancePunch::create(['source' => 'machine', 'device_user_id' => '55', 'punched_at' => '2026-05-20 09:10:00', 'work_date' => '2026-05-20', 'method' => 'FACE']);
+        $this->travelTo(CarbonImmutable::parse('2026-05-20 21:00'));
+
+        $this->actingAs($this->login)->withServerVariables(['REMOTE_ADDR' => '10.0.0.5'])->get('/me')
+            ->assertInertia(fn (AssertableInertia $p) => $p->where('clock.office_open', '09:10'));
+        $this->press('in')->assertSessionHasErrors('left_office');
+        $this->press('in', '10.0.0.5', ['left_office' => '09:00'])->assertSessionHasErrors('left_office');   // before the check-in
+        $this->press('in', '10.0.0.5', ['left_office' => '21:30'])->assertSessionHasErrors('left_office');   // later than now
+        $this->assertSame(0, $this->punches()->count());
+
+        $this->press('in', '10.0.0.5', ['left_office' => '18:00'])->assertSessionHasNoErrors()
+            ->assertSessionHas('success', 'Closed your office time at 18:00. Clocked in at 21:00 (remote).');
+        $this->assertSame([['18:00', 'Out', 'office', true], ['21:00', 'In', 'remote', false]],
+            $this->punches()->map(fn ($p) => [$p->punched_at->format('H:i'), $p->method, $p->place, $p->stated])->all());
+        $day = $this->day('2026-05-20');
+        $this->assertSame('09:10-18:00 office (stated), 21:00-? remote', AttendanceRules::sessionsText($day['sessions']));
+        $this->assertSame(530, $day['worked']);
+
+        // Clocked out and in again later: the office session is closed, nothing more to ask.
+        $this->travelTo(CarbonImmutable::parse('2026-05-20 22:00'));
+        $this->press('out')->assertSessionHasNoErrors();
+        $this->travelTo(CarbonImmutable::parse('2026-05-20 22:30'));
+        $this->press('in')->assertSessionHasNoErrors();
+    }
+
+    public function test_no_leave_time_needed_on_the_office_network(): void
+    {
+        $this->me->update(['attendance_machine_id' => '55']);
+        AttendancePunch::create(['source' => 'machine', 'device_user_id' => '55', 'punched_at' => '2026-05-20 09:10:00', 'work_date' => '2026-05-20', 'method' => 'FACE']);
+        $this->travelTo(CarbonImmutable::parse('2026-05-20 14:00'));
+        $this->press('in', '203.0.113.7')->assertSessionHasNoErrors();
+        $this->assertSame(['In'], $this->punches()->pluck('method')->all());
+    }
 }

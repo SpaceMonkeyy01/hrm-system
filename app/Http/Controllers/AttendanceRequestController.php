@@ -71,7 +71,13 @@ class AttendanceRequestController extends Controller
                 'check_out' => $correction->check_out ?? $existing?->check_out,
                 'note' => $note, 'updated_by' => $request->user()->id,
             ];
-            if ($existing) {
+            if ($existing?->sessions) {
+                // HR already set the day as sessions: the request moves the first start / the last end of those.
+                $sessions = $existing->sessions;
+                $correction->check_in && $sessions[0]['in'] = substr($correction->check_in, 0, 5);
+                $correction->check_out && $sessions[array_key_last($sessions)]['out'] = substr($correction->check_out, 0, 5);
+                $existing->update(['sessions' => $sessions, 'note' => $note, 'updated_by' => $request->user()->id]);
+            } elseif ($existing) {
                 $existing->update($values);
             } else {
                 AttendanceAdjustment::create($values + ['employee_id' => $correction->employee_id, 'date' => $correction->date->toDateString()]);

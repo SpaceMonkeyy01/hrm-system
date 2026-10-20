@@ -85,14 +85,15 @@ class AttendanceBoard
                 ->where(fn ($m) => $m->where('source', 'machine')->whereIn('device_user_id', array_map('strval', array_keys($byDevice['machine']))))
                 ->orWhere(fn ($h) => $h->where('source', 'hrmy')->whereIn('device_user_id', array_map('strval', array_keys($byDevice['hrmy']))))
                 ->orWhere(fn ($a) => $a->where('source', AttendanceClock::SOURCE)->whereIn('device_user_id', array_map('strval', $ids))));
-        foreach ($query->toBase()->get(['source', 'device_user_id', 'punched_at', 'work_date', 'method', 'place']) as $p) {
+        foreach ($query->toBase()->get(['source', 'device_user_id', 'punched_at', 'work_date', 'method', 'place', 'stated']) as $p) {
             $employeeId = $byDevice[$p->source][$p->device_user_id] ?? null;
             if ($employeeId) {
                 $at = CarbonImmutable::parse($p->punched_at);
                 $day = substr((string) $p->work_date, 0, 10);
                 // A punch the next morning on a night shift: 09:00 the day after reads "33:00:00".
                 $hours = (int) $at->format('H') + 24 * (int) CarbonImmutable::parse($day)->diffInDays($at->startOfDay());
-                $this->punches[$employeeId][$day][] = ['time' => sprintf('%02d', $hours).$at->format(':i:s'), 'source' => $p->source, 'method' => $p->method, 'place' => $p->place];
+                $this->punches[$employeeId][$day][] = ['time' => sprintf('%02d', $hours).$at->format(':i:s'), 'source' => $p->source, 'method' => $p->method, 'place' => $p->place,
+                    'stated' => (bool) $p->stated];
             }
         }
 
@@ -105,8 +106,8 @@ class AttendanceBoard
         }
 
         foreach (AttendanceAdjustment::query()->whereIn('employee_id', $ids)->whereBetween('date', [$from, $to])
-            ->get(['employee_id', 'date', 'check_in', 'check_out', 'note']) as $a) {
-            $this->adjustments[$a->employee_id][$a->date->toDateString()] = $a->only('check_in', 'check_out', 'note');
+            ->get(['employee_id', 'date', 'check_in', 'check_out', 'sessions', 'note']) as $a) {
+            $this->adjustments[$a->employee_id][$a->date->toDateString()] = $a->only('check_in', 'check_out', 'sessions', 'note');
         }
 
         foreach (Holiday::query()->whereBetween('date', [$from, $to])->get(['date', 'name', 'company_id']) as $h) {

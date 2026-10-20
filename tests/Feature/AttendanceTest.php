@@ -161,6 +161,38 @@ class AttendanceTest extends TestCase
         $this->assertSame(0, AttendanceAdjustment::count());
     }
 
+    public function test_hr_edits_a_split_day_as_sessions(): void
+    {
+        $this->schedule(['is_default' => true]);
+        $e = $this->employee($this->company, ['attendance_machine_id' => '1']);
+        $this->upload([['A', '1', '5/13/2026 10:00:00 AM']]);
+        $hr = $this->user('hr');
+        $url = "/attendance/{$e->id}/2026-05-13";
+
+        $this->actingAs($hr)->put($url, ['sessions' => [['in' => null, 'out' => null]], 'note' => 'x'])->assertSessionHasErrors('sessions.0.in');
+        $this->actingAs($hr)->put($url, ['sessions' => [['in' => '10:00', 'out' => '10:00']], 'note' => 'x'])->assertSessionHasErrors('sessions.0.out');
+        $this->actingAs($hr)->put($url, ['sessions' => [['in' => '10:00', 'out' => '18:00', 'place' => 'moon']], 'note' => 'x'])->assertSessionHasErrors('sessions.0.place');
+        $this->actingAs($hr)->put($url, ['note' => 'Left at 6, home 8-10', 'sessions' => [
+            ['in' => '20:00', 'out' => '22:00', 'place' => 'remote'], ['in' => '10:00', 'out' => '18:00', 'place' => 'office'],
+        ]])->assertSessionHasNoErrors();
+        $this->assertSame([['in' => '10:00', 'out' => '18:00', 'place' => 'office'], ['in' => '20:00', 'out' => '22:00', 'place' => 'remote']],
+            AttendanceAdjustment::first()->sessions);   // kept in time order
+
+        $day = fn () => collect($this->actingAs($hr)->get("/employees/{$e->id}?month=2026-05")->viewData('page')['props']['attendance']['days'])->firstWhere('date', '2026-05-13');
+        $this->assertSame(['Present', 600, 'both'], [$day()['status'], $day()['worked'], $day()['where']]);
+
+        // An approved "ask HR" request on that day moves the first start / last end of HR's sessions.
+        $staff = $this->user('employee', ['employee_id' => $e->id]);
+        $this->actingAs($staff)->post('/me/requests', ['date' => '2026-05-13', 'check_out' => '23:00', 'reason' => 'Worked late from home']);
+        $request = \App\Models\AttendanceRequest::first();
+        $this->actingAs($hr)->post("/attendance/requests/{$request->id}/approve")->assertSessionHasNoErrors();
+        $this->assertSame('23:00', AttendanceAdjustment::first()->sessions[1]['out']);
+
+        // The old check-in / check-out form clears HR's sessions.
+        $this->actingAs($hr)->put($url, ['check_out' => '19:00', 'note' => 'x'])->assertSessionHasNoErrors();
+        $this->assertNull(AttendanceAdjustment::first()->sessions);
+    }
+
     public function test_schedules_are_managed_by_hr_and_assigned_by_department(): void
     {
         $hr = $this->user('hr');

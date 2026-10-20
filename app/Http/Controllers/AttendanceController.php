@@ -106,6 +106,9 @@ class AttendanceController extends Controller
     {
         abort_unless(preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) && strtotime($date), 404);
         $time = ['nullable', 'regex:/^([01]\d|2[0-3]):[0-5]\d$/'];
+        if ($request->has('sessions')) {
+            return $this->saveSessions($request, $employee, $date, $time);
+        }
         $data = $request->validate([
             'check_in' => $time,
             'check_out' => [...$time],
@@ -121,10 +124,42 @@ class AttendanceController extends Controller
         }
         AttendanceAdjustment::updateOrCreate(
             ['employee_id' => $employee->id, 'date' => $date],
-            ['check_in' => $data['check_in'] ?? null, 'check_out' => $data['check_out'] ?? null, 'note' => $data['note'], 'updated_by' => $request->user()->id],
+            ['check_in' => $data['check_in'] ?? null, 'check_out' => $data['check_out'] ?? null, 'sessions' => null, 'note' => $data['note'], 'updated_by' => $request->user()->id],
         );
 
         return back()->with('success', "Saved {$employee->full_name}'s times for ".CarbonImmutable::parse($date)->format('j M').'.');
+    }
+
+    /** Edit day: HR's list of sessions replaces the punches' sessions for the day (the punches themselves stay). */
+    private function saveSessions(Request $request, Employee $employee, string $date, array $time): RedirectResponse
+    {
+        $data = $request->validate([
+            'sessions' => ['required', 'array', 'min:1', 'max:12'],
+            'sessions.*.in' => $time,
+            'sessions.*.out' => $time,
+            'sessions.*.place' => ['nullable', 'in:office,remote'],
+            'note' => ['required', 'string', 'max:500'],
+        ], ['sessions.*.in.regex' => 'Use a 24-hour time like 09:00.', 'sessions.*.out.regex' => 'Use a 24-hour time like 18:00.',
+            'sessions.required' => 'Add at least one session, or remove HR\'s changes to go back to the punches.',
+            'note.required' => 'Say why, e.g. "Forgot to punch out, confirmed by manager".']);
+        $sessions = [];
+        foreach ($data['sessions'] as $i => $s) {
+            [$in, $out] = [$s['in'] ?? null, $s['out'] ?? null];
+            if (! $in && ! $out) {
+                throw ValidationException::withMessages(["sessions.$i.in" => 'Session '.($i + 1).': enter a start or an end time, or remove the row.']);
+            }
+            if ($in && $in === $out) {
+                throw ValidationException::withMessages(["sessions.$i.out" => 'Session '.($i + 1).': the end can\'t be the same time as the start.']);
+            }
+            $sessions[] = ['in' => $in, 'out' => $out, 'place' => $s['place'] ?? null];
+        }
+        usort($sessions, fn ($a, $b) => strcmp($a['in'] ?? $a['out'], $b['in'] ?? $b['out']));
+        AttendanceAdjustment::updateOrCreate(
+            ['employee_id' => $employee->id, 'date' => $date],
+            ['check_in' => null, 'check_out' => null, 'sessions' => $sessions, 'note' => $data['note'], 'updated_by' => $request->user()->id],
+        );
+
+        return back()->with('success', "Saved {$employee->full_name}'s day for ".CarbonImmutable::parse($date)->format('j M').'.');
     }
 
     public function clearAdjustment(Employee $employee, string $date): RedirectResponse
