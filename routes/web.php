@@ -276,6 +276,7 @@ Route::middleware('auth')->group(function () {
         Route::post('users/staff-logins', [StaffLoginController::class, 'store'])->name('users.staff-logins');
 
             Route::get('structure', [StructureController::class, 'index'])->name('structure.index');
+            Route::put('companies/{company}/email', [StructureController::class, 'updateCompanyEmail'])->name('companies.email');
             Route::post('departments', [StructureController::class, 'storeDepartment'])->name('departments.store');
             Route::put('departments/{department}', [StructureController::class, 'updateDepartment'])->name('departments.update');
             Route::put('departments/{department}/head', [StructureController::class, 'setHead'])->name('departments.head');

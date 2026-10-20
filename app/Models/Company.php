@@ -12,7 +12,15 @@ class Company extends Model
 
     protected $attributes = ['employee_code_digits' => 3];
 
-    protected $fillable = ['name', 'code', 'employee_code_prefix', 'employee_code_digits'];
+    protected $fillable = ['name', 'code', 'employee_code_prefix', 'employee_code_digits', 'hr_email'];
+
+    /** [address, name] that emails to this person come from: their company's HR address, else null (the app default). */
+    public static function mailFromFor(User $user): ?array
+    {
+        $company = $user->employee?->company;
+
+        return $company?->hr_email ? [$company->hr_email, "{$company->name} HR"] : null;
+    }
 
     public function departments(): HasMany
     {

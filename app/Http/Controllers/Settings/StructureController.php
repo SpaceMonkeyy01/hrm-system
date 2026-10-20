@@ -30,7 +30,7 @@ class StructureController extends Controller
 
         return Inertia::render('settings/structure', [
             'companies' => $companies->map(fn ($c) => [
-                'id' => $c->id, 'name' => $c->name, 'code' => $c->code, 'prefix' => $c->employee_code_prefix,
+                'id' => $c->id, 'name' => $c->name, 'code' => $c->code, 'prefix' => $c->employee_code_prefix, 'hr_email' => $c->hr_email,
                 'employees' => $c->employees_count, 'current' => $c->current_count,
                 'departments' => $c->departments->map(fn ($d) => [
                     'id' => $d->id, 'name' => $d->name, 'employees' => $d->employees_count, 'current' => $d->current_count, 'head_id' => $d->head_employee_id,
@@ -70,6 +70,22 @@ class StructureController extends Controller
         $category->delete();
 
         return back()->with('success', "Deleted {$category->name}.");
+    }
+
+    /** The address emails to this company's staff come from. Only the default sender's domain is verified for sending. */
+    public function updateCompanyEmail(Request $request, Company $company): RedirectResponse
+    {
+        $domain = strtolower((string) strrchr((string) config('mail.from.address'), '@'));
+        $data = $request->validate(['hr_email' => ['nullable', 'email', 'max:190', function ($attr, $value, $fail) use ($domain) {
+            if ($domain && ! str_ends_with(strtolower($value), $domain)) {
+                $fail("Use an address ending in $domain: that is the domain set up for sending.");
+            }
+        }]]);
+        $company->update(['hr_email' => $data['hr_email'] ? strtolower($data['hr_email']) : null]);
+
+        return back()->with('success', $company->hr_email
+            ? "Emails to {$company->name} staff now come from {$company->hr_email}."
+            : "Emails to {$company->name} staff now come from the default address.");
     }
 
     public function storeDepartment(Request $request): RedirectResponse

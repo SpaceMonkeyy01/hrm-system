@@ -18,28 +18,28 @@ import { useSessionState } from '@/lib/use-session-state';
 type Team = { id: number; name: string; employees: number; current: number };
 type Department = { id: number; name: string; employees: number; current: number; head_id: number | null; teams: Team[] };
 type Option = { value: number; label: string };
-type Company = { id: number; name: string; code: string; prefix: string; employees: number; current: number; departments: Department[] };
+type Company = { id: number; name: string; code: string; prefix: string; hr_email: string | null; employees: number; current: number; departments: Department[] };
 type Category = { id: number; name: string; employees: number };
 type Props = { companies: Company[]; categories: Category[]; people: Record<number, Option[]> };
 
 const opts = { preserveScroll: true, preserveState: true, onError: (e: Record<string, string>) => toast.error(Object.values(e)[0] ?? 'Not saved.') };
 
-/** Click the name to rename it in place. */
-function Rename({ value, url, label, className }: { value: string; url: string; label: string; className?: string }) {
+/** Click the name to rename it in place. field / empty: edit another text field (blank allowed, shown as `empty`). */
+function Rename({ value, url, label, className, field = 'name', empty }: { value: string | null; url: string; label: string; className?: string; field?: string; empty?: string }) {
     const [editing, setEditing] = useState(false);
-    const [name, setName] = useState(value);
+    const [name, setName] = useState(value ?? '');
     if (!editing) {
         return (
             <button type="button" className={`group inline-flex items-center gap-1.5 text-left hover:text-cascade ${className ?? 'font-semibold'}`}
-                onClick={() => { setName(value); setEditing(true); }} aria-label={`Rename ${label}`}>
-                {value} <Pencil className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100" />
+                onClick={() => { setName(value ?? ''); setEditing(true); }} aria-label={field === 'name' ? `Rename ${label}` : `Change ${label}`}>
+                {value || empty} <Pencil className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100" />
             </button>
         );
     }
-    const save = (e: FormEvent) => { e.preventDefault(); router.put(url, { name }, { ...opts, onSuccess: () => setEditing(false) }); };
+    const save = (e: FormEvent) => { e.preventDefault(); router.put(url, { [field]: name.trim() || null }, { ...opts, onSuccess: () => setEditing(false) }); };
     return (
         <form onSubmit={save} className="flex items-center gap-1">
-            <Input value={name} onChange={(e) => setName(e.target.value)} className="h-8 w-48" autoFocus aria-label={`New name for ${label}`}
+            <Input value={name} onChange={(e) => setName(e.target.value)} className="h-8 w-64" autoFocus aria-label={field === 'name' ? `New name for ${label}` : label}
                 onKeyDown={(e) => e.key === 'Escape' && setEditing(false)} />
             <Button size="sm" type="submit" aria-label="Save name"><Check /></Button>
             <Button size="sm" type="button" variant="ghost" onClick={() => setEditing(false)} aria-label="Cancel"><X /></Button>
@@ -172,6 +172,11 @@ function CompanyTab({ company, people }: { company: Company; people: Option[] })
                 {plural(company.current, 'current employee')} in {plural(company.departments.length, 'department')}. New employee codes look like {company.prefix}001.
                 Click a name to rename it, and a team for its options.
             </p>
+            <div className="flex flex-wrap items-center gap-x-2 text-sm">
+                <span className="text-muted-foreground">Emails to {company.name} staff (login links) come from</span>
+                <Rename value={company.hr_email} url={`/settings/companies/${company.id}/email`} label={`HR email for ${company.name}`}
+                    field="hr_email" empty="the default address" className="font-medium" />
+            </div>
 
             <div className="overflow-x-auto rounded-lg border">
                 <table className="w-full min-w-[56rem] text-sm">

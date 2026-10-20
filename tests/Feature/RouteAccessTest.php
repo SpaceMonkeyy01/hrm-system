@@ -135,6 +135,7 @@ class RouteAccessTest extends TestCase
             'document' => ControlledDocument::create(['doc_number' => 'BCC-0001', 'name' => 'Test policy', 'doc_type' => 'Policy', 'status' => 'Active'])->id,
             'user' => $this->user('viewer')->id,
             'department' => $dept->id,
+            'company' => $dept->company_id,
             'team' => Team::create(['department_id' => $dept->id, 'name' => 'Test team'])->id,
             'file' => EmployeeFile::create(['employee_id' => $e->id, 'original_name' => 'x.pdf', 'path' => 'employee-files/none.pdf', 'mime' => 'application/pdf', 'size' => 1])->id,
             'schedule' => WorkSchedule::create(['name' => 'Test schedule', 'start_time' => '10:00', 'end_time' => '18:00', 'working_days' => [1, 2, 3, 4, 5]])->id,

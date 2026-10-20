@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Models\Company;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
@@ -23,8 +24,7 @@ class SetPasswordNotification extends Notification
         $url = url(route('password.reset', ['token' => $this->token, 'email' => $notifiable->getEmailForPasswordReset()] + ($this->invite ? ['invite' => 1] : []), false));
         $hours = (int) round(config('auth.passwords.'.($this->invite ? 'invites' : 'users').'.expire') / 60);
         $app = config('app.name');
-
-        return $this->invite
+        $mail = $this->invite
             ? (new MailMessage)->subject("Your $app login")
                 ->greeting("Hello {$notifiable->name},")
                 ->line("HR has set up a login for you on $app. ".($notifiable->role === 'employee'
@@ -36,5 +36,12 @@ class SetPasswordNotification extends Notification
                 ->line('Someone asked to reset the password for this login.')
                 ->action('Choose a new password', $url)
                 ->line("The link works for $hours ".($hours === 1 ? 'hour' : 'hours').'. If you didn\'t ask for this, ignore this email: your password stays the same.');
+
+        // Staff hear from their own company's HR address (Settings > Departments and teams); others from the default.
+        if ($from = Company::mailFromFor($notifiable)) {
+            $mail->from(...$from);
+        }
+
+        return $mail;
     }
 }

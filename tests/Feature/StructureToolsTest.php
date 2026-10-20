@@ -6,6 +6,7 @@ use App\Models\Company;
 use App\Models\Department;
 use App\Models\EmploymentHistory;
 use App\Models\Team;
+use App\Notifications\SetPasswordNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
@@ -86,5 +87,22 @@ class StructureToolsTest extends TestCase
             ->assertSessionHas('success', 'Joined Outreach with the Outreach team in HR.');
         $this->assertSame([$this->dept->id, $hrOutreach->id], [$p->fresh()->department_id, $p->fresh()->team_id]);
         $this->assertNull(Team::find($team->id));
+    }
+
+    public function test_staff_emails_come_from_their_company_hr_address(): void
+    {
+        config(['mail.from.address' => 'hr@example.com']);
+        $admin = $this->user('admin');
+        $this->actingAs($admin)->put("/settings/companies/{$this->company->id}/email", ['hr_email' => 'hr@elsewhere.org'])
+            ->assertSessionHasErrors('hr_email');   // only the sending domain is verified
+        $this->actingAs($admin)->put("/settings/companies/{$this->company->id}/email", ['hr_email' => 'HR.BCC@example.com'])
+            ->assertSessionHas('success', 'Emails to BCC staff now come from hr.bcc@example.com.');
+
+        $staff = $this->user('employee', ['employee_id' => $this->employee($this->company)->id]);
+        $this->assertSame(['hr.bcc@example.com', 'BCC HR'], (new SetPasswordNotification('t', invite: true))->toMail($staff)->from);
+        $this->assertSame([], (new SetPasswordNotification('t'))->toMail($admin)->from);   // no company: the default sender
+
+        $this->actingAs($admin)->put("/settings/companies/{$this->company->id}/email", ['hr_email' => ''])->assertSessionHasNoErrors();
+        $this->assertSame([], (new SetPasswordNotification('t'))->toMail($staff->fresh())->from);
     }
 }
