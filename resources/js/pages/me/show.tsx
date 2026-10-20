@@ -17,6 +17,8 @@ import { MyLeaveRequests } from '@/components/my-leave-requests';
 import type { LeaveRequestRow, LeaveTypeOption } from '@/components/my-leave-requests';
 import { MyReviews } from '@/components/my-reviews';
 import { MyWfhRequests } from '@/components/my-wfh-requests';
+import { MyLoans } from '@/components/loans';
+import type { LoanRow } from '@/components/loans';
 import { MyFeedback } from '@/components/feedback';
 import type { ConductRow, MeetingRow } from '@/components/feedback';
 import type { WfhRequestRow } from '@/components/my-wfh-requests';
@@ -65,6 +67,7 @@ type Props = {
     rules?: { daysBack: number; editable: string[] };
     leaveRequests?: LeaveRequestRow[];
     wfhRequests?: WfhRequestRow[];
+    loans?: LoanRow[];
     conduct?: ConductRow[];
     meetings?: MeetingRow[];
     leaveTypes?: LeaveTypeOption[];
@@ -176,7 +179,8 @@ export default function MyPage(props: Props) {
     }
     const a = props.attendance;
     const today = props.today;
-    const pending = props.requests.filter((r) => r.status === 'pending').length + (props.wfhRequests ?? []).filter((r) => r.status === 'pending').length;
+    const pending = props.requests.filter((r) => r.status === 'pending').length + (props.wfhRequests ?? []).filter((r) => r.status === 'pending').length
+        + (props.loans ?? []).filter((l) => l.status === 'pending').length;
     const yourTurn = (props.reviews ?? []).filter((r) => r.canSelfReview || (r.status === 'completed' && !r.acknowledged_at)).length;
     const owed = props.documents.filter((d) => !d.done);
     const toAck = [...(props.conduct ?? []), ...(props.meetings ?? [])].filter((x) => !x.acknowledged_at).length;
@@ -322,6 +326,7 @@ export default function MyPage(props: Props) {
                 <TabsContent value="requests">
                     <div className="grid max-w-3xl gap-4">
                         <MyWfhRequests requests={props.wfhRequests ?? []} today={today} />
+                        <MyLoans loans={props.loans ?? []} />
                         <h2 className="mt-2 font-bold">Attendance fixes</h2>
                         <p className="text-sm text-muted-foreground">Fixes you asked HR for. Once approved, the new times count in your attendance.</p>
                         {props.requests.length === 0 ? (

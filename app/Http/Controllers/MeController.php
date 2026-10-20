@@ -11,6 +11,7 @@ use App\Models\IssuedLetter;
 use App\Models\LeaveRecord;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
+use App\Models\Loan;
 use App\Models\Meeting;
 use App\Models\Review;
 use App\Models\WfhRequest;
@@ -104,6 +105,8 @@ class MeController extends Controller
                 ->latest('happened_on')->latest('id')->get()->map->props(),
             'meetings' => Meeting::query()->with('author:id,name')->where('employee_id', $employee->id)->where('shared', true)
                 ->latest('held_on')->latest('id')->get()->map->props(),
+            'loans' => Loan::query()->with('decider:id,name', 'repayments')->where('employee_id', $employee->id)
+                ->latest('id')->limit(30)->get()->map->props(),
             'wfhRequests' => WfhRequest::query()->with('decider:id,name')->where('employee_id', $employee->id)
                 ->latest('id')->limit(30)->get()->map->props(),
             'leaveTypes' => LeaveType::query()->where('is_active', true)->orderBy('sort_order')->orderBy('name')->get(['id', 'name', 'yearly_days', 'per_leave_days']),
@@ -339,6 +342,33 @@ class MeController extends Controller
         $wfhRequest->update(['status' => 'cancelled']);
 
         return back()->with('success', 'Request cancelled.');
+    }
+
+    public function storeLoan(Request $request): RedirectResponse
+    {
+        $employee = $this->employee($request);
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'min:1000', 'max:10000000'],
+            'months' => ['required', 'integer', 'min:1', 'max:60'],
+            'reason' => ['required', 'string', 'max:1000'],
+        ], ['amount.min' => 'The smallest loan is Rs 1,000.', 'months.max' => 'Repay it in at most 60 months.', 'reason.required' => 'Say what the loan is for.']);
+        if (Loan::query()->where('employee_id', $employee->id)->where('status', 'pending')->exists()) {
+            throw ValidationException::withMessages(['amount' => 'You already have a loan request waiting for HR. Cancel it first to send a new one.']);
+        }
+        Loan::create($data + ['employee_id' => $employee->id, 'requested_by' => $request->user()->id]);
+
+        return back()->with('success', 'Sent to HR. You\'ll see the answer here.');
+    }
+
+    public function cancelLoan(Request $request, Loan $loan): RedirectResponse
+    {
+        abort_unless($loan->employee_id === $this->employee($request)->id, 404);
+        if ($loan->status !== 'pending') {
+            throw ValidationException::withMessages(['status' => 'Only a request HR hasn\'t answered yet can be cancelled.']);
+        }
+        $loan->update(['status' => 'cancelled']);
+
+        return back()->with('success', 'Loan request cancelled.');
     }
 
     public function acknowledgeConduct(Request $request, ConductEntry $entry): RedirectResponse

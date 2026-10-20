@@ -23,6 +23,7 @@ use App\Http\Controllers\ExportController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\LeaveRequestController;
 use App\Http\Controllers\FeedbackController;
+use App\Http\Controllers\LoanController;
 use App\Http\Controllers\RequestsInboxController;
 use App\Http\Controllers\WfhRequestController;
 use App\Http\Controllers\LetterController;
@@ -95,6 +96,8 @@ Route::middleware('auth')->group(function () {
         Route::get('me/leave-requests/{leaveRequest}/file', [MeController::class, 'leaveRequestFile'])->name('me.leave-requests.file');
         Route::post('me/wfh-requests', [MeController::class, 'storeWfhRequest'])->middleware('throttle:20,1')->name('me.wfh-requests.store');
         Route::delete('me/wfh-requests/{wfhRequest}', [MeController::class, 'cancelWfhRequest'])->name('me.wfh-requests.cancel');
+        Route::post('me/loans', [MeController::class, 'storeLoan'])->middleware('throttle:20,1')->name('me.loans.store');
+        Route::delete('me/loans/{loan}', [MeController::class, 'cancelLoan'])->name('me.loans.cancel');
         Route::post('me/conduct/{entry}/acknowledge', [MeController::class, 'acknowledgeConduct'])->name('me.conduct.acknowledge');
         Route::post('me/meetings/{meeting}/acknowledge', [MeController::class, 'acknowledgeMeeting'])->name('me.meetings.acknowledge');
         Route::get('me/letters/{letter}', [MeController::class, 'letter'])->name('me.letters.show');
@@ -227,6 +230,11 @@ Route::middleware('auth')->group(function () {
             Route::post('leave/requests/{leaveRequest}/approve', [LeaveRequestController::class, 'approve'])->name('leave-requests.approve');
             Route::post('leave/requests/{leaveRequest}/reject', [LeaveRequestController::class, 'reject'])->name('leave-requests.reject');
             Route::get('requests', [RequestsInboxController::class, 'index'])->name('requests.index');
+            Route::get('loans', [LoanController::class, 'index'])->name('loans.index');
+            Route::post('loans/{loan}/approve', [LoanController::class, 'approve'])->name('loans.approve');
+            Route::post('loans/{loan}/reject', [LoanController::class, 'reject'])->name('loans.reject');
+            Route::post('loans/{loan}/repayments', [LoanController::class, 'storeRepayment'])->name('loans.repayments.store');
+            Route::delete('loan-repayments/{repayment}', [LoanController::class, 'destroyRepayment'])->name('loans.repayments.destroy');
             Route::post('employees/{employee}/conduct', [FeedbackController::class, 'storeConduct'])->name('conduct.store');
             Route::put('conduct/{entry}', [FeedbackController::class, 'updateConduct'])->name('conduct.update');
             Route::delete('conduct/{entry}', [FeedbackController::class, 'destroyConduct'])->name('conduct.destroy');
