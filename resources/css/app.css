@@ -188,7 +188,8 @@
 
 /*
  * Brand backgrounds, after the wireframe hero on bluecascade.org. Decorative only, never behind data:
- *   .bg-blueprint  login screen: perspective wireframe (public/images/blueprint.svg)
+ *   .bg-blueprint  login screen form side: perspective wireframe (public/images/blueprint.svg)
+ *   .bg-blueprint-dark  login screen brand panel: the wireframe in white on navy (blueprint-light.svg)
  *   .bg-grid-faint page header band: a faint square grid that fades out to the right
  */
 @layer components {
@@ -197,6 +198,14 @@
         background-image: url('/images/blueprint.svg');
         background-size: cover;
         background-position: center;
+    }
+
+    /* The same wireframe in white on navy: the brand panel of the login screen. */
+    .bg-blueprint-dark {
+        background-color: var(--color-cascade);
+        background-image: url('/images/blueprint-light.svg'), radial-gradient(120% 90% at 20% 10%, rgb(255 255 255 / 0.08), transparent 60%);
+        background-size: cover, cover;
+        background-position: center, center;
     }
 
     .bg-grid-faint {
