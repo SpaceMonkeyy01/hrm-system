@@ -15,7 +15,7 @@ export default function Login() {
     return (
         <>
             <Head title="Log in" />
-            <h1 className="font-display text-xl font-semibold">Log in</h1>
+            <h1 className="font-display text-xl font-semibold">Log in to HRM System</h1>
             <p className="mt-1 text-sm text-muted-foreground">Use the email your HR admin set up for you.</p>
             <form onSubmit={submit} className="mt-6 grid gap-4">
                 <Field label="Email" htmlFor="email" error={form.errors.email}>
