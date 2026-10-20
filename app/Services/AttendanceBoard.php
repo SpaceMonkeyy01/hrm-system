@@ -128,9 +128,9 @@ class AttendanceBoard
         }
         foreach (LeaveRecord::query()->with('type:id,name')->whereIn('employee_id', $ids)
             ->where('start_date', '<=', $to)->where('end_date', '>=', $from)
-            ->get(['employee_id', 'leave_type_id', 'start_date', 'end_date', 'part']) as $l) {
+            ->get(['id', 'employee_id', 'leave_type_id', 'start_date', 'end_date', 'part']) as $l) {
             $this->leave[$l->employee_id][] = ['from' => $l->start_date->toDateString(), 'to' => $l->end_date->toDateString(),
-                'type' => $l->type?->name ?? 'Leave', 'part' => $l->part];
+                'type' => $l->type?->name ?? 'Leave', 'part' => $l->part, 'id' => $l->id];
         }
     }
 
@@ -186,6 +186,13 @@ class AttendanceBoard
         // Work from home: approved days say so; remote time on a working day without approval is flagged (never blocked),
         // except for people whose work mode is Remote or Hybrid.
         $day['wfh'] = $this->wfhOn($e->id, $date);
+        // The leave record behind the day, so Edit day can remove it (the whole record, which may span several days).
+        $day['leave_record'] = null;
+        foreach ($this->leave[$e->id] ?? [] as $l) {
+            if ($l['from'] <= $date && $l['to'] >= $date) {
+                $day['leave_record'] = ['id' => $l['id'], 'from' => $l['from'], 'to' => $l['to']];
+            }
+        }
         $day['remote_unapproved'] = ! $day['wfh'] && $day['working_day'] && in_array($day['where'], ['remote', 'both'], true)
             && ! in_array($this->workModes[$e->id] ?? null, ['Remote', 'Hybrid'], true);
 

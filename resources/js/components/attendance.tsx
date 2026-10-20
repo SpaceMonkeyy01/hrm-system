@@ -1,6 +1,6 @@
 import { Link, router } from '@inertiajs/react';
 import { Building2, House, Plus, RefreshCw, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Field } from '@/components/field';
 import { NativeSelect } from '@/components/native-select';
@@ -27,6 +27,8 @@ export type AttendanceDay = {
     overtime: number;
     holiday: string | null;
     leave: { type: string; part: 'full' | 'first_half' | 'second_half' | 'short' } | null;
+    /** AttendanceBoard: the leave record behind the day (it may span several days) */
+    leave_record?: { id: number; from: string; to: string } | null;
     punches: number;
     working_day: boolean;
     adjusted: boolean;
@@ -196,6 +198,70 @@ export function TimeCell({ time, source, where }: { time: string | null; source:
     );
 }
 
+type DayLeaveOptions = { types: { id: number; name: string; left: number | null; per_leave_days: number | null }[]; parts: Record<string, string> };
+
+/** Edit day, Leave: record leave for this one day (as Leave & holidays does), or remove the leave behind it. */
+function LeavePanel({ employee, day, only, onClose }: { employee: { id: number; name: string }; day: AttendanceDay; only?: string[]; onClose: () => void }) {
+    const [options, setOptions] = useState<DayLeaveOptions | null>(null);
+    const [typeId, setTypeId] = useState('');
+    const [part, setPart] = useState('full');
+    const [note, setNote] = useState('');
+    const [errors, setErrors] = useState<Record<string, string>>({});
+    // On a profile only some props reload: the leave balances change too.
+    const opts = { preserveScroll: true, only: only ? [...only, 'leave'] : undefined, onSuccess: () => onClose(), onError: setErrors };
+    const record = day.leave_record;
+
+    useEffect(() => {
+        if (record) return;
+        fetch(`/leave/day-options?employee=${employee.id}&date=${day.date}`, { headers: { Accept: 'application/json' } })
+            .then((r) => r.json()).then(setOptions).catch(() => setErrors({ leave_type_id: 'Could not load the leave types. Try again.' }));
+    }, [record, employee.id, day.date]);
+
+    if (record && day.leave) {
+        const range = record.from === record.to ? formatDate(record.from) : `${formatDate(record.from)} to ${formatDate(record.to)}`;
+        const remove = () => {
+            if (record.from !== record.to && !confirm(`This removes the whole leave, ${range}, not just ${formatDate(day.date)}. Continue?`)) return;
+            router.delete(`/leave/${record.id}`, opts);
+        };
+        return (
+            <div className="grid gap-4">
+                <p className="text-sm">
+                    <span className="font-semibold">On leave: {day.leave.type}</span>
+                    {day.leave.part !== 'full' && ` (${day.leave.part === 'short' ? 'short leave' : `${day.leave.part === 'first_half' ? 'first' : 'second'} half`})`}, {range}.
+                    {' '}Removing it puts the day back to what the punches say, and the days go back on their balance.
+                </p>
+                <DialogFooter><Button type="button" variant="destructive" onClick={remove}>Remove leave</Button></DialogFooter>
+            </div>
+        );
+    }
+    const type = options?.types.find((t) => String(t.id) === typeId);
+    const save = (e: FormEvent) => {
+        e.preventDefault();
+        router.post('/leave', { employee_id: employee.id, leave_type_id: typeId, start_date: day.date, end_date: day.date, part, note: note || null }, opts);
+    };
+    return (
+        <form onSubmit={save} className="grid gap-4">
+            <p className="text-sm text-muted-foreground">Records leave for {formatDate(day.date)} only, the same as Leave & holidays does. For several days, use Record leave there.</p>
+            <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Leave type" htmlFor="dl-type" error={errors.leave_type_id}
+                    hint={type ? (type.left !== null ? `${type.left} ${type.left === 1 ? 'day' : 'days'} left this year.` : type.per_leave_days ? `Up to ${type.per_leave_days} days each time.` : undefined) : undefined}>
+                    <NativeSelect id="dl-type" required value={typeId} placeholder={options ? 'Pick a type' : 'Loading'}
+                        options={(options?.types ?? []).map((t) => ({ value: t.id, label: t.left !== null ? `${t.name} (${t.left} left)` : t.name }))}
+                        onChange={(e) => setTypeId(e.target.value)} />
+                </Field>
+                <Field label="Day" htmlFor="dl-part" error={errors.part}>
+                    <NativeSelect id="dl-part" value={part} options={Object.entries(options?.parts ?? { full: 'Full day' }).map(([value, label]) => ({ value, label }))}
+                        onChange={(e) => setPart(e.target.value)} />
+                </Field>
+            </div>
+            <Field label="Note (optional)" htmlFor="dl-note" error={errors.note ?? errors.start_date ?? errors.end_date}>
+                <Textarea id="dl-note" rows={2} value={note} placeholder="Called in sick, confirmed by manager" onChange={(e) => setNote(e.target.value)} />
+            </Field>
+            <DialogFooter><Button type="submit" disabled={!typeId}>Record leave</Button></DialogFooter>
+        </form>
+    );
+}
+
 type SessionRow = { in: string; out: string; place: Place | '' };
 
 /** HR's version of one day as a list of sessions (start, end, place), with a reason. The punches stay as they were. */
@@ -209,6 +275,7 @@ export function AdjustDialog({ open, onClose, employee, day, only }: {
         : [{ in: '', out: '', place: '' }]);
     const [note, setNote] = useState(day.note ?? '');
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const [mode, setMode] = useState<'times' | 'leave'>(day.leave_record ? 'leave' : 'times');
     const opts = { preserveScroll: true, only, onSuccess: () => onClose(), onError: setErrors };
     const set = (i: number, patch: Partial<SessionRow>) => setRows((r) => r.map((row, j) => (j === i ? { ...row, ...patch } : row)));
     const rowErrors = Object.entries(errors).filter(([k]) => k.startsWith('sessions')).map(([, v]) => v);
@@ -223,15 +290,23 @@ export function AdjustDialog({ open, onClose, employee, day, only }: {
     return (
         <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
             <DialogContent className="sm:max-w-xl">
+                <DialogHeader>
+                    <DialogTitle>{employee.name}, {formatDate(day.date)}</DialogTitle>
+                    <DialogDescription>Punches: {day.punchTimes.length ? day.punchTimes.join(', ') : 'none'}. Status now: {day.status}.</DialogDescription>
+                </DialogHeader>
+                <div className="inline-flex justify-self-start rounded-md border p-0.5" role="group" aria-label="What to change">
+                    {(['times', 'leave'] as const).map((m) => (
+                        <Button key={m} type="button" size="sm" variant={mode === m ? 'default' : 'ghost'} onClick={() => setMode(m)}>
+                            {m === 'times' ? 'Times' : day.leave_record ? 'Leave' : 'Mark as leave'}
+                        </Button>
+                    ))}
+                </div>
+                {mode === 'leave' ? <LeavePanel employee={employee} day={day} only={only} onClose={onClose} /> : (
                 <form onSubmit={save} className="grid gap-4">
-                    <DialogHeader>
-                        <DialogTitle>{employee.name}, {formatDate(day.date)}</DialogTitle>
-                        <DialogDescription>
-                            Punches: {day.punchTimes.length ? day.punchTimes.join(', ') : 'none'}.
-                            {' '}Each row is one stretch of work; the time between rows isn't counted. A row with no end is a missing punch;
-                            an end before the start is the next morning. The punches stay as they were.
-                        </DialogDescription>
-                    </DialogHeader>
+                    <p className="text-sm text-muted-foreground">
+                        Each row is one stretch of work; the time between rows isn't counted. A row with no end is a missing punch;
+                        an end before the start is the next morning. The punches stay as they were.
+                    </p>
                     <div className="grid gap-2">
                         <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 text-xs font-semibold text-muted-foreground">
                             <span>Start</span><span>End</span><span>Place</span><span className="w-9" />
@@ -261,6 +336,7 @@ export function AdjustDialog({ open, onClose, employee, day, only }: {
                         <Button type="submit">Save day</Button>
                     </DialogFooter>
                 </form>
+                )}
             </DialogContent>
         </Dialog>
     );

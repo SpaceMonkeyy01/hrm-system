@@ -12,6 +12,7 @@ use App\Services\AttendanceBoard;
 use App\Services\LeaveBalances;
 use App\Services\LeaveSettings;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -85,6 +86,20 @@ class LeaveController extends Controller
 
         return back()->with('success', "Recorded {$days} ".($days == 1 ? 'day' : 'days')." of leave for {$employee->full_name}."
             .self::balanceNote($employee, LeaveType::findOrFail($data['leave_type_id']), $data['start_date'], $data['end_date']));
+    }
+
+    /** For "Mark as leave" on Edit day: the active types with what is left of each this year, and the day parts. */
+    public function dayOptions(Request $request): JsonResponse
+    {
+        $f = $request->validate(['employee' => ['required', 'integer'], 'date' => ['required', 'date_format:Y-m-d']]);
+        $employee = Employee::findOrFail($f['employee']);
+        $left = collect(LeaveBalances::forEmployee($employee, (int) substr($f['date'], 0, 4)))->pluck('left', 'type_id');
+
+        return response()->json([
+            'types' => LeaveType::query()->where('is_active', true)->orderBy('sort_order')->orderBy('name')->get(['id', 'name', 'per_leave_days'])
+                ->map(fn (LeaveType $t) => ['id' => $t->id, 'name' => $t->name, 'left' => $left[$t->id] ?? null, 'per_leave_days' => $t->per_leave_days]),
+            'parts' => LeaveRecord::PARTS,
+        ]);
     }
 
     public function destroy(LeaveRecord $record): RedirectResponse

@@ -225,6 +225,7 @@ Route::middleware('auth')->group(function () {
             Route::post('leave', [LeaveController::class, 'store'])->name('leave.store');
             Route::delete('leave/{record}', [LeaveController::class, 'destroy'])->whereNumber('record')->name('leave.destroy');
             Route::put('leave/settings', [LeaveController::class, 'updateSettings'])->name('leave.settings');
+            Route::get('leave/day-options', [LeaveController::class, 'dayOptions'])->name('leave.day-options');
             Route::get('leave/requests', [LeaveRequestController::class, 'index'])->name('leave-requests.index');
             Route::get('leave/requests/{leaveRequest}/file', [LeaveRequestController::class, 'file'])->name('leave-requests.file');
             Route::post('leave/requests/{leaveRequest}/approve', [LeaveRequestController::class, 'approve'])->name('leave-requests.approve');

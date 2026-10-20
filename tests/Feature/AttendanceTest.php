@@ -161,6 +161,31 @@ class AttendanceTest extends TestCase
         $this->assertSame(0, AttendanceAdjustment::count());
     }
 
+    public function test_an_absent_day_marked_as_leave_from_edit_day(): void
+    {
+        $this->schedule(['is_default' => true]);
+        $e = $this->employee($this->company, ['attendance_machine_id' => '1', 'start_date' => '2026-01-01']);
+        $this->upload([['A', '2', '5/13/2026 10:00:00 AM']]);   // someone else punched, so the day is covered
+        $hr = $this->user('hr');
+        $day = fn () => collect($this->actingAs($hr)->get("/employees/{$e->id}?month=2026-05")->viewData('page')['props']['attendance']['days'])->firstWhere('date', '2026-05-13');
+        $this->assertSame(['Absent', null], [$day()['status'], $day()['leave_record']]);
+
+        // The dialog's options: active types with what is left this year.
+        $casual = \App\Models\LeaveType::where('name', 'Casual')->first();
+        $this->actingAs($this->user('viewer'))->getJson("/leave/day-options?employee={$e->id}&date=2026-05-13")->assertForbidden();
+        $this->actingAs($hr)->getJson("/leave/day-options?employee={$e->id}&date=2026-05-13")
+            ->assertOk()->assertJsonPath('parts.full', 'Full day')
+            ->assertJson(fn ($j) => $j->where('types', fn ($t) => collect($t)->firstWhere('id', $casual->id)['left'] == 10)->etc());
+
+        $this->actingAs($hr)->post('/leave', ['employee_id' => $e->id, 'leave_type_id' => $casual->id, 'start_date' => '2026-05-13', 'end_date' => '2026-05-13', 'part' => 'full'])
+            ->assertSessionHasNoErrors();
+        $record = \App\Models\LeaveRecord::sole();
+        $this->assertSame(['On leave', ['id' => $record->id, 'from' => '2026-05-13', 'to' => '2026-05-13']], [$day()['status'], $day()['leave_record']]);
+
+        $this->actingAs($hr)->delete("/leave/{$record->id}")->assertSessionHasNoErrors();
+        $this->assertSame('Absent', $day()['status']);
+    }
+
     public function test_hr_edits_a_split_day_as_sessions(): void
     {
         $this->schedule(['is_default' => true]);
