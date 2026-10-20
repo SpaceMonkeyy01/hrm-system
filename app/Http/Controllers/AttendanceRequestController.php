@@ -6,6 +6,7 @@ use App\Models\AttendanceAdjustment;
 use App\Models\AttendanceRequest;
 use App\Models\Employee;
 use App\Services\AttendanceBoard;
+use App\Services\StaffMail;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -85,7 +86,12 @@ class AttendanceRequestController extends Controller
             $correction->update(['status' => 'approved', 'decided_by' => $request->user()->id, 'decided_at' => now(), 'decision_note' => $data['note'] ?? null]);
         });
 
-        return back()->with('success', 'Approved. The new times count on '.$correction->date->format('j M').'.');
+        $sent = StaffMail::send($correction->employee_id, 'Your attendance fix was approved', [
+            'Your request to fix '.$correction->date->format('j M Y').' was approved. The new times count in your attendance.',
+            ...StaffMail::hrNote($data['note'] ?? null),
+        ], '/me#requests');
+
+        return back()->with('success', 'Approved. The new times count on '.$correction->date->format('j M').'.'.StaffMail::note($sent, 'They'));
     }
 
     public function reject(Request $request, AttendanceRequest $correction): RedirectResponse
@@ -94,7 +100,11 @@ class AttendanceRequestController extends Controller
         $this->mustBePending($correction);
         $correction->update(['status' => 'rejected', 'decided_by' => $request->user()->id, 'decided_at' => now(), 'decision_note' => $data['note']]);
 
-        return back()->with('success', 'Marked as not approved. The person sees your reason on their page.');
+        $sent = StaffMail::send($correction->employee_id, 'Your attendance fix was not approved', [
+            'Your request to fix '.$correction->date->format('j M Y').' was not approved.', ...StaffMail::hrNote($data['note']),
+        ], '/me#requests');
+
+        return back()->with('success', 'Marked as not approved. The person sees your reason on their page.'.StaffMail::note($sent, 'They'));
     }
 
     private function mustBePending(AttendanceRequest $correction): void

@@ -75,7 +75,7 @@ class LeaveRequestTest extends TestCase
         $this->actingAs($this->user('viewer'))->get('/leave/requests')->assertForbidden();
 
         $this->actingAs($hr)->post("/leave/requests/{$r->id}/approve", ['note' => 'Form checked'])
-            ->assertSessionHas('success', "Approved Fake Me's Casual leave. Casual: 7 of 10 days left in 2026.");
+            ->assertSessionHas('success', "Approved Fake Me's Casual leave. Casual: 7 of 10 days left in 2026. Fake Me was emailed.");
         $record = LeaveRecord::sole();
         $this->assertSame(['request', 3.0, $record->id, 'approved'], [$record->source, $record->days, $r->fresh()->leave_record_id, $r->fresh()->status]);
         $this->actingAs($hr)->post("/leave/requests/{$r->id}/reject", ['note' => 'x'])->assertSessionHasErrors('status');

@@ -30,16 +30,20 @@ class RequestsInboxController extends Controller
         return array_map(fn ($q) => $q[0]::query()->where('status', 'pending')->whereHas('employee')->count(), self::QUEUES);
     }
 
-    public function index(): Response
+    /** @return list<array{key: string, title: string, description: string, href: string, pending: int, oldest: ?string}> */
+    public static function queues(): array
     {
         $counts = self::pendingCounts();
 
-        return Inertia::render('requests', [
-            'queues' => collect(self::QUEUES)->map(fn ($q, $key) => [
-                'key' => $key, 'title' => $q[1], 'description' => $q[2], 'href' => $q[3], 'pending' => $counts[$key],
-                'oldest' => $counts[$key]
-                    ? CarbonImmutable::parse($q[0]::query()->where('status', 'pending')->whereHas('employee')->min('created_at'))->toIso8601String() : null,
-            ])->values(),
-        ]);
+        return collect(self::QUEUES)->map(fn ($q, $key) => [
+            'key' => $key, 'title' => $q[1], 'description' => $q[2], 'href' => $q[3], 'pending' => $counts[$key],
+            'oldest' => $counts[$key]
+                ? CarbonImmutable::parse($q[0]::query()->where('status', 'pending')->whereHas('employee')->min('created_at'))->toIso8601String() : null,
+        ])->values()->all();
+    }
+
+    public function index(): Response
+    {
+        return Inertia::render('requests', ['queues' => self::queues()]);
     }
 }

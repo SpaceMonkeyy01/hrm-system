@@ -23,7 +23,7 @@ export type MeetingRow = {
     acknowledged_at: string | null; employee_comment: string | null; by: string | null; created_at: string | null;
 };
 /** app/Http/Controllers/FeedbackController.php forEmployee() */
-export type Feedback = { conduct: ConductRow[]; meetings: MeetingRow[]; conductTypes: Record<string, string>; meetingTypes: Record<string, string> };
+export type Feedback = { conduct: ConductRow[]; meetings: MeetingRow[]; conductTypes: Record<string, string>; meetingTypes: Record<string, string>; canEmail: boolean };
 
 export const conductTone = (type: string): Tone => (type === 'appreciation' ? 'done' : type === 'verbal_warning' ? 'pending' : 'missing');
 const options = (o: Record<string, string>) => Object.entries(o).map(([value, label]) => ({ value, label }));
@@ -38,8 +38,18 @@ function Acknowledged({ at, comment, who }: { at: string | null; comment: string
     );
 }
 
-function ConductDialog({ employeeId, entry, types, today, onClose }: { employeeId: number; entry: ConductRow | null; types: Record<string, string>; today: string; onClose: () => void }) {
-    const form = useForm({ type: entry?.type ?? 'appreciation', happened_on: entry?.happened_on ?? today, title: entry?.title ?? '', details: entry?.details ?? '' });
+/** "Email them": only the fact that something is waiting, never the text. */
+function NotifyBox({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+    return (
+        <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" className="size-4 accent-cascade" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+            Email them that there is something to read on My page (not what it says)
+        </label>
+    );
+}
+
+function ConductDialog({ employeeId, entry, types, today, canEmail, onClose }: { employeeId: number; entry: ConductRow | null; types: Record<string, string>; today: string; canEmail: boolean; onClose: () => void }) {
+    const form = useForm({ type: entry?.type ?? 'appreciation', happened_on: entry?.happened_on ?? today, title: entry?.title ?? '', details: entry?.details ?? '', notify: canEmail });
     const submit = (e: FormEvent) => {
         e.preventDefault();
         if (entry) form.put(`/conduct/${entry.id}`, { ...opts, onSuccess: onClose });
@@ -70,6 +80,7 @@ function ConductDialog({ employeeId, entry, types, today, onClose }: { employeeI
                     <Field label="Details" htmlFor="ce-details" error={form.errors.details}>
                         <Textarea id="ce-details" rows={4} value={form.data.details} onChange={(e) => form.setData('details', e.target.value)} />
                     </Field>
+                    {canEmail && (!entry || entry.acknowledged_at) && <NotifyBox checked={form.data.notify} onChange={(v) => form.setData('notify', v)} />}
                     <DialogFooter>
                         <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
                         <Button type="submit" disabled={form.processing}>Save</Button>
@@ -80,10 +91,10 @@ function ConductDialog({ employeeId, entry, types, today, onClose }: { employeeI
     );
 }
 
-function MeetingDialog({ employeeId, meeting, types, today, onClose }: { employeeId: number; meeting: MeetingRow | null; types: Record<string, string>; today: string; onClose: () => void }) {
+function MeetingDialog({ employeeId, meeting, types, today, canEmail, onClose }: { employeeId: number; meeting: MeetingRow | null; types: Record<string, string>; today: string; canEmail: boolean; onClose: () => void }) {
     const form = useForm({
         type: meeting?.type ?? 'one_to_one', held_on: meeting?.held_on ?? today, attendees: meeting?.attendees ?? '',
-        notes: meeting?.notes ?? '', actions: meeting?.actions ?? '', shared: meeting?.shared ?? false,
+        notes: meeting?.notes ?? '', actions: meeting?.actions ?? '', shared: meeting?.shared ?? false, notify: canEmail,
     });
     const submit = (e: FormEvent) => {
         e.preventDefault();
@@ -119,6 +130,7 @@ function MeetingDialog({ employeeId, meeting, types, today, onClose }: { employe
                         <input type="checkbox" className="size-4 accent-cascade" checked={form.data.shared} onChange={(e) => form.setData('shared', e.target.checked)} />
                         Share with the person (they see the notes and actions on My page and acknowledge them)
                     </label>
+                    {canEmail && form.data.shared && <NotifyBox checked={form.data.notify} onChange={(v) => form.setData('notify', v)} />}
                     <DialogFooter>
                         <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
                         <Button type="submit" disabled={form.processing}>Save</Button>
@@ -195,8 +207,8 @@ export function FeedbackPanel({ employeeId, feedback, today }: { employeeId: num
                     </ul>
                 )}
             </section>
-            {conduct && <ConductDialog employeeId={employeeId} entry={conduct === 'new' ? null : conduct} types={feedback.conductTypes} today={today} onClose={() => setConduct(null)} />}
-            {meeting && <MeetingDialog employeeId={employeeId} meeting={meeting === 'new' ? null : meeting} types={feedback.meetingTypes} today={today} onClose={() => setMeeting(null)} />}
+            {conduct && <ConductDialog employeeId={employeeId} entry={conduct === 'new' ? null : conduct} types={feedback.conductTypes} today={today} canEmail={feedback.canEmail} onClose={() => setConduct(null)} />}
+            {meeting && <MeetingDialog employeeId={employeeId} meeting={meeting === 'new' ? null : meeting} types={feedback.meetingTypes} today={today} canEmail={feedback.canEmail} onClose={() => setMeeting(null)} />}
         </div>
     );
 }

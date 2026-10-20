@@ -17,15 +17,17 @@ type Props = {
     details: string;
     draft: { body: string; missing: string[] } | null;
     reference: string;
+    /** they have a login, so issuing can email them */
+    canEmail: boolean;
 };
 
-export default function LetterDraft({ employee, templates, template, details, draft, reference }: Props) {
+export default function LetterDraft({ employee, templates, template, details, draft, reference, canEmail }: Props) {
     const [extra, setExtra] = useState(details);
-    const form = useForm({ template_id: template?.id ?? null, subject: template?.subject ?? '', body: draft?.body ?? '' });
+    const form = useForm({ template_id: template?.id ?? null, subject: template?.subject ?? '', body: draft?.body ?? '', notify: canEmail });
 
     // A new template or new details give a fresh draft from the server (it fills the fields).
     useEffect(() => {
-        form.setData({ template_id: template?.id ?? null, subject: template?.subject ?? '', body: draft?.body ?? '' });
+        form.setData((d) => ({ ...d, template_id: template?.id ?? null, subject: template?.subject ?? '', body: draft?.body ?? '' }));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [template?.id, draft?.body]);
 
@@ -67,6 +69,12 @@ export default function LetterDraft({ employee, templates, template, details, dr
                                 <p className="mt-1">{draft.missing.join(', ')}. They show in [brackets] in the letter: type them in, or add them to the profile and pick the letter again.</p>
                             </div>
                         )}
+                        {canEmail ? (
+                            <label className="flex items-start gap-2 text-sm">
+                                <input type="checkbox" className="mt-0.5 size-4 accent-cascade" checked={form.data.notify} onChange={(e) => form.setData('notify', e.target.checked)} />
+                                Email {employee.name} that the letter is on their My page (the letter itself isn't in the email)
+                            </label>
+                        ) : <p className="text-sm text-muted-foreground">{employee.name} has no login yet, so they won't get an email. The letter still shows on their My page once they have one.</p>}
                         <Button disabled={form.processing || !form.data.body.trim()} onClick={() => form.post(`/employees/${employee.id}/letters`)}>
                             <FileText /> Issue letter
                         </Button>

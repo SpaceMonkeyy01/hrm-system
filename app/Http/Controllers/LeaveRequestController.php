@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\LeaveRecord;
 use App\Models\LeaveRequest;
 use App\Services\LeaveBalances;
+use App\Services\StaffMail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -74,8 +75,13 @@ class LeaveRequestController extends Controller
                 'decision_note' => $data['note'] ?? null, 'leave_record_id' => $record->id]);
         });
 
+        $sent = StaffMail::send($leaveRequest->employee, 'Your leave was approved', [
+            "Your {$leaveRequest->type->name} leave for ".StaffMail::dates($leaveRequest->start_date, $leaveRequest->end_date).' was approved.',
+            ...StaffMail::hrNote($data['note'] ?? null),
+        ], '/me#leave');
+
         return back()->with('success', "Approved {$leaveRequest->employee->full_name}'s {$leaveRequest->type->name} leave."
-            .LeaveController::balanceNote($leaveRequest->employee, $leaveRequest->type, $from, $to));
+            .LeaveController::balanceNote($leaveRequest->employee, $leaveRequest->type, $from, $to).StaffMail::note($sent, $leaveRequest->employee->full_name));
     }
 
     public function reject(Request $request, LeaveRequest $leaveRequest): RedirectResponse
@@ -83,8 +89,13 @@ class LeaveRequestController extends Controller
         $data = $request->validate(['note' => ['required', 'string', 'max:500']], ['note.required' => 'Say why, so the person knows what to do next.']);
         $this->mustBePending($leaveRequest);
         $leaveRequest->update(['status' => 'rejected', 'decided_by' => $request->user()->id, 'decided_at' => now(), 'decision_note' => $data['note']]);
+        $leaveRequest->loadMissing('employee', 'type');
+        $sent = StaffMail::send($leaveRequest->employee, 'Your leave request was not approved', [
+            'Your '.($leaveRequest->type?->name ?? '').' leave request for '.StaffMail::dates($leaveRequest->start_date, $leaveRequest->end_date).' was not approved.',
+            ...StaffMail::hrNote($data['note']),
+        ], '/me#leave');
 
-        return back()->with('success', 'Not approved. The person sees your reason on My page.');
+        return back()->with('success', 'Not approved. The person sees your reason on My page.'.StaffMail::note($sent, $leaveRequest->employee->full_name));
     }
 
     /** Opens a request's attachment; the caller checks who may see it. */

@@ -15,6 +15,16 @@
 Until it syncs again, days show No data or Absent. Check the cron job and that the machine is reachable. [Open Devices]({{ $devicesLink }})
 
 @endif
+@if (count($waiting))
+## Requests waiting for HR
+
+@foreach ($waiting as $q)
+- [{{ $q['title'] }}]({{ $q['link'] }}): {{ $q['pending'] }} waiting{{ $q['since'] ? ', oldest sent '.$q['since'] : '' }}.
+@endforeach
+
+[Open Requests]({{ $inboxLink }})
+
+@endif
 @foreach ($groups as $group)
 ## {{ $group['heading'] }} ({{ count($group['rows']) }})
 

@@ -9,6 +9,7 @@ use App\Models\Employee;
 use App\Models\IssuedLetter;
 use App\Models\LetterTemplate;
 use App\Services\LetterRenderer;
+use App\Services\StaffMail;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -65,6 +66,7 @@ class LetterController extends Controller
             'details' => $f['details'] ?? '',
             'draft' => $draft,
             'reference' => LetterRenderer::nextReference($employee),
+            'canEmail' => StaffMail::reachable($employee->id),
         ]);
     }
 
@@ -74,6 +76,7 @@ class LetterController extends Controller
             'template_id' => ['nullable', 'integer', Rule::exists('letter_templates', 'id')],
             'subject' => ['nullable', 'string', 'max:200'],
             'body' => ['required', 'string', 'max:20000'],
+            'notify' => ['boolean'],
         ], ['body.required' => 'The letter is empty.']);
         $template = isset($data['template_id']) ? LetterTemplate::find($data['template_id']) : null;
         $employee->loadMissing('company:id,code');
@@ -97,7 +100,14 @@ class LetterController extends Controller
             return $letter;
         });
 
-        return redirect()->route('letters.show', $letter)->with('success', "Issued {$letter->reference}. Print it, or choose Save as PDF in the print window.");
+        // Tell them it's on My page (the letter itself stays out of the email).
+        $sent = $request->boolean('notify', true) && StaffMail::send($employee, 'HR has issued you a letter', [
+            'HR has issued you a letter'.($letter->subject ? ": {$letter->subject}" : '').'.',
+            'Open the Documents tab on your My page to read or print it.'.($template?->conduct_type ? ' It is also on your Feedback tab for you to acknowledge.' : ''),
+        ], '/me#documents');
+
+        return redirect()->route('letters.show', $letter)->with('success', "Issued {$letter->reference}.".StaffMail::note($sent, $employee->full_name)
+            .' Print it, or choose Save as PDF in the print window.');
     }
 
     /** The letter on an A4 page, ready to print (print/letter has no sidebar). */

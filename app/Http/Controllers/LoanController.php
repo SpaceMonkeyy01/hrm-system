@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Loan;
 use App\Models\LoanRepayment;
+use App\Services\StaffMail;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -57,8 +58,14 @@ class LoanController extends Controller
             'first_month' => $data['first_month'].'-01', 'decided_by' => $request->user()->id, 'decided_at' => now(), 'decision_note' => $data['note'] ?? null,
         ]);
 
-        return back()->with('success', "Approved {$loan->employee->full_name}'s loan: Rs ".number_format($loan->installment).' a month for '.$loan->months.' months from '
-            .CarbonImmutable::parse($loan->first_month)->format('M Y').'.');
+        $plan = 'Rs '.number_format($loan->installment).' a month for '.$loan->months.' months from '.CarbonImmutable::parse($loan->first_month)->format('M Y');
+        $sent = StaffMail::send($loan->employee, 'Your loan was approved', [
+            "Your loan request was approved. Rs ".number_format($loan->installment).' will be deducted from your salary each month for '.$loan->months
+                .' months, starting '.CarbonImmutable::parse($loan->first_month)->format('F Y').'.',
+            ...StaffMail::hrNote($data['note'] ?? null),
+        ], '/me#requests');
+
+        return back()->with('success', "Approved {$loan->employee->full_name}'s loan: $plan.".StaffMail::note($sent, $loan->employee->full_name));
     }
 
     public function reject(Request $request, Loan $loan): RedirectResponse
@@ -66,8 +73,9 @@ class LoanController extends Controller
         $data = $request->validate(['note' => ['required', 'string', 'max:500']], ['note.required' => 'Say why, so the person knows what to do next.']);
         $this->mustBe($loan, 'pending');
         $loan->update(['status' => 'rejected', 'decided_by' => $request->user()->id, 'decided_at' => now(), 'decision_note' => $data['note']]);
+        $sent = StaffMail::send($loan->employee, 'Your loan request was not approved', ['Your loan request was not approved.', ...StaffMail::hrNote($data['note'])], '/me#requests');
 
-        return back()->with('success', 'Not approved. The person sees your reason on My page.');
+        return back()->with('success', 'Not approved. The person sees your reason on My page.'.StaffMail::note($sent, $loan->employee->full_name));
     }
 
     /** A month's deduction. When the deductions reach the amount, the loan closes as Repaid. */

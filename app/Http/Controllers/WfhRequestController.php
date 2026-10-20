@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\WfhRequest;
+use App\Services\StaffMail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -39,8 +40,19 @@ class WfhRequestController extends Controller
         $data = $request->validate(['note' => ['nullable', 'string', 'max:500']]);
         $this->mustBePending($wfhRequest);
         $wfhRequest->update(['status' => 'approved', 'decided_by' => $request->user()->id, 'decided_at' => now(), 'decision_note' => $data['note'] ?? null]);
+        $sent = $this->tell($wfhRequest, 'approved', $data['note'] ?? null);
 
-        return back()->with('success', "Approved {$wfhRequest->employee->full_name}'s work from home.");
+        return back()->with('success', "Approved {$wfhRequest->employee->full_name}'s work from home.".StaffMail::note($sent, $wfhRequest->employee->full_name));
+    }
+
+    private function tell(WfhRequest $r, string $outcome, ?string $note): bool
+    {
+        $when = StaffMail::dates($r->start_date, $r->end_date);
+
+        return StaffMail::send($r->employee, $outcome === 'approved' ? 'Work from home approved' : 'Work from home not approved', [
+            "Your request to work from home on $when was ".($outcome === 'approved' ? 'approved. Clock in on My page from home as usual.' : 'not approved.'),
+            ...StaffMail::hrNote($note),
+        ], '/me#requests');
     }
 
     public function reject(Request $request, WfhRequest $wfhRequest): RedirectResponse
@@ -48,8 +60,9 @@ class WfhRequestController extends Controller
         $data = $request->validate(['note' => ['required', 'string', 'max:500']], ['note.required' => 'Say why, so the person knows what to do next.']);
         $this->mustBePending($wfhRequest);
         $wfhRequest->update(['status' => 'rejected', 'decided_by' => $request->user()->id, 'decided_at' => now(), 'decision_note' => $data['note']]);
+        $sent = $this->tell($wfhRequest, 'rejected', $data['note']);
 
-        return back()->with('success', 'Not approved. The person sees your reason on My page.');
+        return back()->with('success', 'Not approved. The person sees your reason on My page.'.StaffMail::note($sent, $wfhRequest->employee->full_name));
     }
 
     private function mustBePending(WfhRequest $r): void
