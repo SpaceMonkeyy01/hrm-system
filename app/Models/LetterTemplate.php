@@ -10,7 +10,7 @@ class LetterTemplate extends Model
 {
     use LogsActivity;
 
-    protected $fillable = ['name', 'subject', 'body', 'details_label', 'checklist_key', 'is_active', 'sort_order'];
+    protected $fillable = ['name', 'subject', 'body', 'details_label', 'checklist_key', 'conduct_type', 'is_active', 'sort_order'];
 
     protected $attributes = ['is_active' => true, 'sort_order' => 0];
 

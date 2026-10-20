@@ -4,12 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\AssetAssignment;
 use App\Models\AttendanceRequest;
+use App\Models\ConductEntry;
 use App\Models\ControlledDocument;
 use App\Models\Employee;
 use App\Models\IssuedLetter;
 use App\Models\LeaveRecord;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
+use App\Models\Meeting;
 use App\Models\Review;
 use App\Models\WfhRequest;
 use App\Services\AttendanceClock;
@@ -97,6 +99,11 @@ class MeController extends Controller
                 ->latest('id')->limit(30)->get()->map->props(),
             'leaveRequests' => LeaveRequest::query()->with('type:id,name', 'decider:id,name')->where('employee_id', $employee->id)
                 ->latest('id')->limit(30)->get()->map->props(),
+            // Their conduct record (all of it) and the meeting notes HR shared with them.
+            'conduct' => ConductEntry::query()->with('author:id,name', 'letter:id,reference')->where('employee_id', $employee->id)
+                ->latest('happened_on')->latest('id')->get()->map->props(),
+            'meetings' => Meeting::query()->with('author:id,name')->where('employee_id', $employee->id)->where('shared', true)
+                ->latest('held_on')->latest('id')->get()->map->props(),
             'wfhRequests' => WfhRequest::query()->with('decider:id,name')->where('employee_id', $employee->id)
                 ->latest('id')->limit(30)->get()->map->props(),
             'leaveTypes' => LeaveType::query()->where('is_active', true)->orderBy('sort_order')->orderBy('name')->get(['id', 'name', 'yearly_days', 'per_leave_days']),
@@ -332,6 +339,32 @@ class MeController extends Controller
         $wfhRequest->update(['status' => 'cancelled']);
 
         return back()->with('success', 'Request cancelled.');
+    }
+
+    public function acknowledgeConduct(Request $request, ConductEntry $entry): RedirectResponse
+    {
+        abort_unless($entry->employee_id === $this->employee($request)->id, 404);
+
+        return $this->acknowledge($request, $entry);
+    }
+
+    public function acknowledgeMeeting(Request $request, Meeting $meeting): RedirectResponse
+    {
+        abort_unless($meeting->employee_id === $this->employee($request)->id && $meeting->shared, 404);
+
+        return $this->acknowledge($request, $meeting);
+    }
+
+    /** "I've read this", with an optional comment HR sees. Once per version: HR changing it asks again. */
+    private function acknowledge(Request $request, ConductEntry|Meeting $item): RedirectResponse
+    {
+        $data = $request->validate(['comment' => ['nullable', 'string', 'max:1000']]);
+        if ($item->acknowledged_at) {
+            throw ValidationException::withMessages(['comment' => 'You already acknowledged this.']);
+        }
+        $item->update(['acknowledged_at' => now(), 'employee_comment' => $data['comment'] ?? $item->employee_comment]);
+
+        return back()->with('success', 'Acknowledged. HR can see that you read it'.(! empty($data['comment']) ? ', and your comment.' : '.'));
     }
 
     public function leaveRequestFile(Request $request, LeaveRequest $leaveRequest): StreamedResponse

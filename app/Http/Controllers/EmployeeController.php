@@ -194,6 +194,8 @@ class EmployeeController extends Controller
             'assets' => AssetAssignment::rowsFor($employee->id),
             // Letters carry CNIC numbers: HR and admin only.
             'letters' => $private ? LetterController::letterRows($employee->id) : null,
+            // Warnings, appreciation and meeting notes: HR and admin only.
+            'feedback' => $private ? FeedbackController::forEmployee($employee->id) : null,
             'employmentHistory' => $employee->employmentHistory->map(fn (EmploymentHistory $h) => [
                 'id' => $h->id, 'effective_date' => $h->effective_date->toDateString(), 'change_type' => $h->change_type,
                 'changes' => $h->changes ?? [], 'note' => $h->note, 'by' => $h->author?->name,

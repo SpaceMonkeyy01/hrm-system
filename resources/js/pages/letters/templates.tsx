@@ -9,18 +9,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 
-type Template = { id: number; name: string; subject: string | null; body: string; details_label: string | null; checklist_key: string | null; is_active: boolean };
+type Template = { id: number; name: string; subject: string | null; body: string; details_label: string | null; checklist_key: string | null; conduct_type: string | null; is_active: boolean };
 type Option = { value: string; label: string };
-type Props = { templates: Template[]; fields: Record<string, string>; checklistItems: Option[] };
+type Props = { templates: Template[]; fields: Record<string, string>; checklistItems: Option[]; conductTypes: Record<string, string> };
 
-function TemplateForm({ t, checklistItems, onDone }: { t: Template | null; checklistItems: Option[]; onDone?: () => void }) {
+function TemplateForm({ t, checklistItems, conductTypes, onDone }: { t: Template | null; checklistItems: Option[]; conductTypes: Record<string, string>; onDone?: () => void }) {
     const form = useForm({
         name: t?.name ?? '', subject: t?.subject ?? '', body: t?.body ?? '', details_label: t?.details_label ?? '',
-        checklist_key: t?.checklist_key ?? '', is_active: t?.is_active ?? true,
+        checklist_key: t?.checklist_key ?? '', conduct_type: t?.conduct_type ?? '', is_active: t?.is_active ?? true,
     });
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        form.transform((d) => ({ ...d, subject: d.subject || null, details_label: d.details_label || null, checklist_key: d.checklist_key || null }));
+        form.transform((d) => ({ ...d, subject: d.subject || null, details_label: d.details_label || null, checklist_key: d.checklist_key || null, conduct_type: d.conduct_type || null }));
         const opts = { preserveScroll: true, onSuccess: () => { form.setDefaults(); onDone?.(); } };
         if (t) form.put(`/letters/templates/${t.id}`, opts);
         else form.post('/letters/templates', opts);
@@ -46,6 +46,11 @@ function TemplateForm({ t, checklistItems, onDone }: { t: Template | null; check
                     <NativeSelect id={`c-${t?.id ?? 'new'}`} value={form.data.checklist_key} placeholder="Nothing" options={checklistItems}
                         onChange={(e) => form.setData('checklist_key', e.target.value)} />
                 </Field>
+                <Field label="Issuing it adds to the conduct record" htmlFor={`k-${t?.id ?? 'new'}`} error={form.errors.conduct_type}
+                    hint="For warning and appreciation letters: the person sees it on My page and acknowledges it.">
+                    <NativeSelect id={`k-${t?.id ?? 'new'}`} value={form.data.conduct_type} placeholder="Nothing"
+                        options={Object.entries(conductTypes).map(([value, label]) => ({ value, label }))} onChange={(e) => form.setData('conduct_type', e.target.value)} />
+                </Field>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <label className="flex items-center gap-2 text-sm">
@@ -58,7 +63,7 @@ function TemplateForm({ t, checklistItems, onDone }: { t: Template | null; check
     );
 }
 
-export default function LetterTemplates({ templates, fields, checklistItems }: Props) {
+export default function LetterTemplates({ templates, fields, checklistItems, conductTypes }: Props) {
     const [adding, setAdding] = useState(false);
     return (
         <>
@@ -68,11 +73,11 @@ export default function LetterTemplates({ templates, fields, checklistItems }: P
             <div className="grid gap-8 px-4 py-6 md:px-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
                 <div className="grid content-start gap-6">
                     {adding && (
-                        <Section title="New template"><TemplateForm t={null} checklistItems={checklistItems} onDone={() => setAdding(false)} /></Section>
+                        <Section title="New template"><TemplateForm t={null} checklistItems={checklistItems} conductTypes={conductTypes} onDone={() => setAdding(false)} /></Section>
                     )}
                     {templates.map((t) => (
                         <Section key={t.id} title={<span className="flex items-center gap-2">{t.name} {!t.is_active && <StatusPill value="Switched off" tone="neutral" />}</span>}>
-                            <TemplateForm t={t} checklistItems={checklistItems} />
+                            <TemplateForm t={t} checklistItems={checklistItems} conductTypes={conductTypes} />
                         </Section>
                     ))}
                 </div>

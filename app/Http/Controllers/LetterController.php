@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ChecklistEntry;
 use App\Models\ChecklistItem;
+use App\Models\ConductEntry;
 use App\Models\Employee;
 use App\Models\IssuedLetter;
 use App\Models\LetterTemplate;
@@ -26,7 +27,8 @@ class LetterController extends Controller
     {
         return Inertia::render('letters/templates', [
             'templates' => LetterTemplate::query()->orderBy('sort_order')->orderBy('name')->get()
-                ->map->only('id', 'name', 'subject', 'body', 'details_label', 'checklist_key', 'is_active'),
+                ->map->only('id', 'name', 'subject', 'body', 'details_label', 'checklist_key', 'conduct_type', 'is_active'),
+            'conductTypes' => ConductEntry::TYPES,
             'fields' => LetterRenderer::FIELDS,
             'checklistItems' => ChecklistItem::where('list', 'offboarding')->where('is_active', true)->orderBy('sort_order')->get(['key', 'label'])
                 ->map(fn ($i) => ['value' => $i->key, 'label' => $i->label]),
@@ -86,6 +88,11 @@ class LetterController extends Controller
             if ($template?->checklist_key && ($item = ChecklistItem::where('list', 'offboarding')->where('key', $template->checklist_key)->first())) {
                 ChecklistEntry::updateOrCreate(['employee_id' => $employee->id, 'checklist_item_id' => $item->id], ['status' => 'Done']);
             }
+            // A warning or appreciation letter goes on the conduct record too (Feedback tab, and the person's My page).
+            if ($template?->conduct_type) {
+                ConductEntry::create(['employee_id' => $employee->id, 'type' => $template->conduct_type, 'happened_on' => $letter->issued_on->toDateString(),
+                    'title' => $letter->subject ?: $template->name, 'issued_letter_id' => $letter->id, 'created_by' => $request->user()->id]);
+            }
 
             return $letter;
         });
@@ -140,6 +147,7 @@ class LetterController extends Controller
             'body' => ['required', 'string', 'max:20000'],
             'details_label' => ['nullable', 'string', 'max:150'],
             'checklist_key' => ['nullable', 'string', Rule::exists('checklist_items', 'key')->where('list', 'offboarding')],
+            'conduct_type' => ['nullable', Rule::in(array_keys(ConductEntry::TYPES))],
             'is_active' => ['boolean'],
         ], ['name.unique' => 'Another template already has this name.']);
     }

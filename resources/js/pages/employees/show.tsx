@@ -18,6 +18,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { formatDate, formatDateTime } from '@/lib/format';
 import type { ActivityItem, ChecklistColumn, OptionSets, SharedProps, Tone } from '@/types';
+import { FeedbackPanel } from '@/components/feedback';
+import type { Feedback } from '@/components/feedback';
 import { AdjustDialog, DayStatus, duration, SessionsLine, TimeCell } from '@/components/attendance';
 import type { AttendanceDay } from '@/components/attendance';
 import { AssetList } from '@/components/assets';
@@ -70,6 +72,8 @@ type Props = {
     assets: AssetRow[];
     /** HR and admin only. */
     letters: { id: number; reference: string; subject: string | null; issued_on: string; issued_by: string | null }[] | null;
+    /** HR and admin only (null for viewers) */
+    feedback: Feedback | null;
     /** HR and admin only. */
     completeness: { done: number; total: number; missing: string[] } | null;
     /** Null for viewer logins: they only get fileCount. */
@@ -389,7 +393,7 @@ function describe(a: ActivityItem): string {
 const TAB_ALIASES: Record<string, string> = { attendance: 'time', leave: 'time', assets: 'documents', job: 'history', offboarding: 'history' };
 function tabFromHash(): string {
     const hash = typeof window !== 'undefined' ? window.location.hash.slice(1) : '';
-    return TAB_ALIASES[hash] ?? (['overview', 'onboarding', 'documents', 'time', 'history'].includes(hash) ? hash : 'overview');
+    return TAB_ALIASES[hash] ?? (['overview', 'onboarding', 'documents', 'time', 'feedback', 'history'].includes(hash) ? hash : 'overview');
 }
 
 export default function EmployeeShow(props: Props) {
@@ -489,6 +493,7 @@ export default function EmployeeShow(props: Props) {
                     <TabsTrigger value="onboarding">Onboarding {o && <StatusPill value={o.status === 'Onboarding Complete' ? 'Complete' : 'In progress'} tone={computedTone(o.status)} />}</TabsTrigger>
                     <TabsTrigger value="documents">Documents and assets <StatusPill value={props.documentStatus} tone={computedTone(props.documentStatus)} /></TabsTrigger>
                     <TabsTrigger value="time">Attendance and leave</TabsTrigger>
+                    {props.feedback && <TabsTrigger value="feedback">Feedback</TabsTrigger>}
                     <TabsTrigger value="history">History</TabsTrigger>
                 </TabsList>
 
@@ -708,6 +713,12 @@ export default function EmployeeShow(props: Props) {
                     <LeaveTab leave={props.leave} />
                     </section>
                 </TabsContent>
+
+                {props.feedback && (
+                    <TabsContent value="feedback">
+                        <FeedbackPanel employeeId={e.id} feedback={props.feedback} today={new Date().toLocaleDateString('en-CA')} />
+                    </TabsContent>
+                )}
 
                 <TabsContent value="history" className="grid gap-10">
                     <section className="grid gap-3">

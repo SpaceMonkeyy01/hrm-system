@@ -17,6 +17,8 @@ import { MyLeaveRequests } from '@/components/my-leave-requests';
 import type { LeaveRequestRow, LeaveTypeOption } from '@/components/my-leave-requests';
 import { MyReviews } from '@/components/my-reviews';
 import { MyWfhRequests } from '@/components/my-wfh-requests';
+import { MyFeedback } from '@/components/feedback';
+import type { ConductRow, MeetingRow } from '@/components/feedback';
 import type { WfhRequestRow } from '@/components/my-wfh-requests';
 import type { MyReview } from '@/components/my-reviews';
 import type { LeaveBalance, LeaveCounted, LeaveDeductions, LeaveRecordRow } from '@/components/leave';
@@ -63,6 +65,8 @@ type Props = {
     rules?: { daysBack: number; editable: string[] };
     leaveRequests?: LeaveRequestRow[];
     wfhRequests?: WfhRequestRow[];
+    conduct?: ConductRow[];
+    meetings?: MeetingRow[];
     leaveTypes?: LeaveTypeOption[];
     leaveParts?: Record<string, string>;
     uploads?: { enabled: boolean; max_mb: number };
@@ -175,6 +179,7 @@ export default function MyPage(props: Props) {
     const pending = props.requests.filter((r) => r.status === 'pending').length + (props.wfhRequests ?? []).filter((r) => r.status === 'pending').length;
     const yourTurn = (props.reviews ?? []).filter((r) => r.canSelfReview || (r.status === 'completed' && !r.acknowledged_at)).length;
     const owed = props.documents.filter((d) => !d.done);
+    const toAck = [...(props.conduct ?? []), ...(props.meetings ?? [])].filter((x) => !x.acknowledged_at).length;
     const order = ['Present', 'Late', 'Half day', 'Missing punch', 'Absent', 'On leave', 'Holiday', 'Worked day off'];
 
     return (
@@ -193,6 +198,7 @@ export default function MyPage(props: Props) {
                     <TabsTrigger value="leave">Leave</TabsTrigger>
                     <TabsTrigger value="requests">Requests{pending ? ` (${pending})` : ''}</TabsTrigger>
                     <TabsTrigger value="reviews">Reviews{yourTurn ? ` (${yourTurn})` : ''}</TabsTrigger>
+                    <TabsTrigger value="feedback">Feedback{toAck ? ` (${toAck})` : ''}</TabsTrigger>
                     <TabsTrigger value="documents">Documents</TabsTrigger>
                     <TabsTrigger value="details">My details</TabsTrigger>
                 </TabsList>
@@ -383,6 +389,10 @@ export default function MyPage(props: Props) {
                             )}
                         </section>
                     </div>
+                </TabsContent>
+
+                <TabsContent value="feedback">
+                    <MyFeedback conduct={props.conduct ?? []} meetings={props.meetings ?? []} />
                 </TabsContent>
 
                 <TabsContent value="reviews">
