@@ -36,6 +36,8 @@ export type AttendanceDay = {
     sessions: {
         in: string | null; out: string | null; source: 'machine' | 'hrmy' | 'app' | 'manual' | 'mixed'; minutes: number | null;
         edited: boolean; in_where: Place | null; out_where: Place | null;
+        /** wholly within another session (HR.my tapped during the office day): shown, adds no time or place */
+        inside: boolean;
     }[];
     /** office = machine punches or app clock-ins from the office network, remote = HR.my or the app elsewhere, both = some of each */
     where: Place | 'both' | null;
@@ -50,10 +52,10 @@ const plainTime = (t: string | null) => (t ? `${String(Number(t.slice(0, 2)) % 2
 export function SessionsLine({ day, className }: { day: Pick<AttendanceDay, 'sessions'>; className?: string }) {
     if (day.sessions.length < 2) return null;
     return (
-        <span className={`block text-xs font-normal text-muted-foreground ${className ?? ''}`} title="Each stretch of work. The time between them isn't counted.">
+        <span className={`block text-xs font-normal text-muted-foreground ${className ?? ''}`} title="Each stretch of work. The time between them isn't counted; one marked (within) lies inside another and adds no time.">
             {day.sessions.map((s) => {
                 const where = s.in_where && s.out_where && s.in_where !== s.out_where ? `${s.in_where} to ${s.out_where}` : (s.in_where ?? s.out_where ?? '');
-                return `${plainTime(s.in)}-${plainTime(s.out)} ${where}${s.edited ? ' (HR)' : ''}`.trim();
+                return `${plainTime(s.in)}-${plainTime(s.out)} ${where}${s.edited ? ' (HR)' : ''}${s.inside ? ' (within)' : ''}`.trim();
             }).join(', ')}
         </span>
     );

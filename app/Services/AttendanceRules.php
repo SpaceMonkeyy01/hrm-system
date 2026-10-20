@@ -10,13 +10,14 @@ use Carbon\CarbonInterface;
  * Attendance status for one person on one day: the only place it is worked out (like HrRules for onboarding).
  * Inputs are the day's punch times, HR's manual adjustment and the work schedule that applied that day.
  *
- *   sessions   the day's punches as stretches of work. Machine punches in a row are one block, first to last
- *              (a lunch break inside it counts as work). HR.my punches carry In/Out and pair up in order. So
- *              office 09:00-14:00 then remote 20:00-23:00 is two sessions, and the evening at home isn't work.
- *              An In with no Out, or a block with one punch, is an open session
+ *   sessions   the day's punches as stretches of work, one loop per source. A machine's punches are one block,
+ *              first to last (a lunch break inside it counts as work). HR.my / app punches carry In/Out and pair up
+ *              in order. So office 09:00-14:00 then remote 20:00-23:00 is two sessions, and the evening at home
+ *              isn't work. An In with no Out, or a block with one punch, is an open session. A session lying wholly
+ *              inside another (an HR.my tap during the office day) is shown but adds no time and no place
  *   check-in   HR's time, else the first session's start
- *   check-out  HR's time, else the last session's end (open last session = missing), else the schedule's end
- *              time when the schedule auto-checks-out, else missing
+ *   check-out  HR's time, else the end of the session that finishes last (still open = missing), else the
+ *              schedule's end time when the schedule auto-checks-out, else missing
  *   worked     the sessions added up (overlaps counted once); HR's times move the first start and the last end
  *   late       fixed schedules: in after start + grace; counted from the start time
  *   absent     fixed schedules: not checked in by the schedule's absent cut-off (default the middle of the day, 9-5 ->
@@ -55,7 +56,8 @@ class AttendanceRules
      * @return array{date: string, status: ?string, in: ?string, out: ?string, in_source: ?string, out_source: ?string,
      *     worked: ?int, late: int, early: int, short: int, overtime: int, punches: int, working_day: bool, adjusted: bool,
      *     note: ?string, holiday: ?string, leave: ?array{type: string, part: string},
-     *     sessions: list<array{in: ?string, out: ?string, source: string, minutes: ?int, edited: bool, in_where: ?string, out_where: ?string}>,
+     *     sessions: list<array{in: ?string, out: ?string, source: string, minutes: ?int, edited: bool, in_where: ?string, out_where: ?string,
+     *         inside: bool}>,  inside = wholly within another session: shown, adds no time or place
      *     where: ?string, in_where: ?string, out_where: ?string}  where = office | remote | both (PLACES), null with no punches
      *         status null = a future day (nothing to show yet)
      */
@@ -86,16 +88,17 @@ class AttendanceRules
         if ($out && $in && self::minutes($out) <= self::minutes($in)) {
             $out = self::clock(self::minutes($out) + 1440);   // HR typed 06:00 for a night shift: next morning
         }
+        $last = self::lastSession($sessions);   // the session that finishes the day (not always the last to start)
         if ($out) {
-            $last = array_key_last($sessions);
             if ($last === null) {
                 $sessions[] = ['in' => null, 'out' => $out, 'source' => 'manual', 'in_from' => null, 'out_from' => null, 'edited' => true];
+                $last = 0;
             } else {
                 $sessions[$last]['out'] = $out;
                 $sessions[$last]['edited'] = true;
             }
-        } elseif ($sessions && end($sessions)['out']) {
-            $out = end($sessions)['out'];
+        } elseif ($last !== null && $sessions[$last]['out']) {
+            $out = $sessions[$last]['out'];
             $outSource = 'punch';
         }
         $fixed = $schedule && ! $schedule->isFlexible() && $schedule->start_time && $schedule->end_time;
@@ -104,21 +107,31 @@ class AttendanceRules
         $absentMin = $fixed ? $schedule->absentAfterMinutes() : null;
         // One punch after the end of the day is not a check-in to close.
         if ($in && ! $out && $date < $today && $fixed && $schedule->missing_checkout === 'auto'
-            && self::minutes(end($sessions)['in'] ?? $in) < $endMin) {
+            && self::minutes($sessions[$last]['in'] ?? $in) < $endMin) {
             $out = self::clock($endMin);
             $outSource = 'auto';
-            $sessions[array_key_last($sessions)]['out'] = $out;
+            $sessions[$last]['out'] = $out;
         }
-        $places = [];
         foreach ($sessions as &$s) {
             $s['minutes'] = $s['in'] && $s['out'] ? max(0, self::minutes($s['out']) - self::minutes($s['in'])) : null;
             $s['edited'] ??= false;
             $s['in_where'] = $s['in_place'] ?? self::PLACES[$s['in_from'] ?? ''] ?? null;
             $s['out_where'] = $s['out'] ? ($s['out_place'] ?? self::PLACES[$s['out_from'] ?? ''] ?? null) : null;
             unset($s['in_place'], $s['out_place']);
-            $places += array_flip(array_filter([$s['in_where'], $s['out_where']]));
         }
         unset($s);
+        // A session wholly inside another (HR.my tapped during the office day) adds no time and doesn't make the day
+        // "office + remote". Two identical sessions: the first one counts.
+        $places = [];
+        foreach ($sessions as $i => $s) {
+            $sessions[$i]['inside'] = $s['minutes'] !== null && (bool) array_filter(array_keys($sessions), fn ($j) => $j !== $i
+                && ($o = $sessions[$j])['minutes'] !== null
+                && self::minutes($o['in']) <= self::minutes($s['in']) && self::minutes($s['out']) <= self::minutes($o['out'])
+                && ($o['minutes'] > $s['minutes'] || $j < $i));
+            if (! $sessions[$i]['inside']) {
+                $places += array_flip(array_filter([$s['in_where'], $s['out_where']]));
+            }
+        }
         $where = match (true) {
             isset($places['office'], $places['remote']) => 'both',
             isset($places['remote']) => 'remote',
@@ -132,7 +145,7 @@ class AttendanceRules
             'adjusted' => $adjustment !== null, 'note' => $adjustment['note'] ?? null, 'holiday' => $holiday, 'leave' => $leave,
             'sessions' => $sessions, 'where' => $where,
             'in_where' => $in ? ($sessions[0]['in_where'] ?? null) : null,
-            'out_where' => $out && $outSource !== 'auto' ? ($sessions[array_key_last($sessions)]['out_where'] ?? null) : null,
+            'out_where' => $out && $outSource !== 'auto' ? ($sessions[$last]['out_where'] ?? null) : null,
         ];
 
         if ($date > $today) {
@@ -208,7 +221,8 @@ class AttendanceRules
         $dayOut = $out;
         if ($endMin !== null) {
             $before = array_filter($sessions, fn ($s) => $s['in'] && $s['out'] && self::minutes($s['in']) < $endMin);
-            $dayOut = $before ? end($before)['out'] : null;   // only after-hours sessions: nothing runs on past the end
+            // The latest end among them; only after-hours sessions: nothing runs on past the end.
+            $dayOut = $before ? self::clock(max(array_map(fn ($s) => self::minutes($s['out']), $before))) : null;
         }
         $result['overtime'] = $dayOut === null && $working ? 0 : self::overtime($schedule, $dayOut ?? $out, $worked, $working, $endMin);
         $result['status'] = match (true) {
@@ -235,10 +249,10 @@ class AttendanceRules
     }
 
     /**
-     * The day's punches as sessions, in time order. HR.my In/Out pairs make one session each. Machine (and
-     * unlabelled) punches make one block from first to last, split only where a whole HR.my session lies between
-     * two of them. An Out with no In ends the block before it (in at the office, out from home). Known limit: the
-     * machine has no In/Out, so leaving the office and punching back in later the same day stays one block.
+     * The day's punches as sessions, in time order. Each source is its own loop: HR.my / app In/Out pairs make one
+     * session each; machine (and unlabelled) punches make one block from first to last, whatever other sources did
+     * in between. An Out with no In ends the block before it (in at the office, out from home). Known limit: the
+     * machine has no In/Out, so office, home, office again the same day stays one block (the gap counts as work).
      *
      * @param  list<string|array{time: string, source?: ?string, method?: ?string, place?: ?string}>  $punches
      * @param  int|null  $count  set to the number of punches kept (double taps dropped)
@@ -281,24 +295,14 @@ class AttendanceRules
         }
         $open !== null && $remote[] = $open;
 
-        // 2. Machine: punches in a row are one block, split only where a whole HR.my session lies between two punches
-        //    (office, then a stretch from home, then the office again).
+        // 2. Machine: all of a source's punches are one block, first to last. Other sources never split it.
         $blocks = [];
         foreach ($plain as $source => $times) {
             $times = self::dedupe($times);
             $count += count($times);
-            $block = null;
-            foreach ($times as $time) {
-                $t = substr($time, 0, 5);
-                $splits = $block !== null && array_filter($remote, fn ($r) => $r['in'] && $r['out']
-                    && strcmp($r['in'], end($block['times'])) > 0 && strcmp($r['out'], $t) < 0);
-                if ($block === null || $splits) {
-                    $block !== null && $blocks[] = $block;
-                    $block = ['source' => $source, 'in_from' => $source, 'times' => []];
-                }
-                $block['times'][] = $t;
+            if ($times) {
+                $blocks[] = ['source' => $source, 'in_from' => $source, 'times' => array_map(fn ($t) => substr($t, 0, 5), $times)];
             }
-            $block !== null && $blocks[] = $block;
         }
 
         // 3. An Out with no In ends the block before it (in at the office, out from home).
@@ -324,6 +328,20 @@ class AttendanceRules
         usort($sessions, fn ($a, $b) => strcmp($a['in'] ?? $a['out'], $b['in'] ?? $b['out']));
 
         return $sessions;
+    }
+
+    /** Index of the session that finishes the day: the latest end (or start, while open); a tie goes to the later one. */
+    private static function lastSession(array $sessions): ?int
+    {
+        $last = null;
+        foreach ($sessions as $i => $s) {
+            $at = self::minutes($s['out'] ?? $s['in']);
+            if ($last === null || $at >= $best) {
+                [$last, $best] = [$i, $at];
+            }
+        }
+
+        return $last;
     }
 
     /** Minutes covered by the closed sessions, overlaps counted once. */
@@ -357,7 +375,7 @@ class AttendanceRules
             $outWhere = $s['out_where'] ?? null;
             $place = $where && $outWhere && $where !== $outWhere ? "$where to $outWhere" : ($where ?? $outWhere ?? '');
 
-            return trim(($s['in'] ?? '?').'-'.($s['out'] ?? '?').' '.$place.(! empty($s['edited']) ? ' (HR)' : ''));
+            return trim(($s['in'] ?? '?').'-'.($s['out'] ?? '?').' '.$place.(! empty($s['edited']) ? ' (HR)' : '').(! empty($s['inside']) ? ' (within)' : ''));
         }, $sessions));
     }
 

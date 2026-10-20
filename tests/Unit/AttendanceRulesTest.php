@@ -218,6 +218,20 @@ class AttendanceRulesTest extends TestCase
         $this->assertSame('10:00-18:30 office to remote', AttendanceRules::sessionsText($d['sessions']));
     }
 
+    public function test_hrmy_tap_during_the_office_day_neither_splits_it_nor_adds_time(): void
+    {
+        // 19 Oct: machine 09:25 and 17:05, HR.my In/Out 16:26-16:28 in between. One office day, not two open halves.
+        $d = $this->day([self::m('09:25:00'), self::h('16:26:00', 'In'), self::h('16:28:00', 'Out'), self::m('17:05:00')], $this->fixed());
+        $this->assertSame([['09:25', '17:05', 'machine', false], ['16:26', '16:28', 'hrmy', true]],
+            array_map(fn ($s) => [$s['in'], $s['out'], $s['source'], $s['inside']], $d['sessions']));
+        $this->assertSame(['09:25', '17:05', 460, 'office', 'office'], [$d['in'], $d['out'], $d['worked'], $d['where'], $d['out_where']]);
+        $this->assertSame('09:25-17:05 office, 16:26-16:28 remote (within)', AttendanceRules::sessionsText($d['sessions']));
+
+        // Known trade-off: office, home, office again is one machine block; the remote stretch inside adds nothing.
+        $d = $this->day([self::m('09:00:00'), self::m('12:00:00'), self::h('13:00:00', 'In'), self::h('15:00:00', 'Out'), self::m('16:00:00'), self::m('18:00:00')], $this->fixed());
+        $this->assertSame([540, '18:00', 'office'], [$d['worked'], $d['out'], $d['where']]);
+    }
+
     public function test_hr_times_move_the_first_start_and_last_end_of_a_split_day(): void
     {
         $d = $this->day([self::m('10:20:00'), self::m('14:00:00'), self::h('20:00:00', 'In')], $this->fixed(), ['check_in' => '10:00', 'check_out' => '22:00', 'note' => 'Fixed']);
