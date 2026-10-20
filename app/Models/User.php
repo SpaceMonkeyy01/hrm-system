@@ -86,6 +86,7 @@ class User extends Authenticatable
         'employee_files' => ['uploaded_by'], 'employee_work_schedules' => ['created_by'], 'employment_history' => ['created_by'],
         'issued_letters' => ['issued_by'], 'leave_records' => ['created_by'], 'leave_requests' => ['requested_by', 'decided_by'], 'leave_adjustments' => ['created_by'], 'machine_syncs' => ['user_id'], 'offboardings' => ['created_by'],
         'office_networks' => ['created_by'], 'review_cycles' => ['created_by'], 'reviews' => ['reviewed_by'],
+        'wfh_requests' => ['requested_by', 'decided_by'],
     ];
 
     /**

@@ -11,6 +11,7 @@ import {
     FileCheck2,
     Fingerprint,
     House,
+    Inbox,
     Laptop,
     ListChecks,
     ListOrdered,
@@ -58,13 +59,14 @@ import type { SharedProps } from '@/types';
  * edit: only for HR and admin logins (the page itself returns 403 to others).
  * badge: key of a count in the shared "nav" prop (HandleInertiaRequests), shown when above 0.
  */
-type Item = { title: string; href: string; icon: LucideIcon; edit?: boolean; badge?: 'requests' | 'reviews' | 'leave' };
+type Item = { title: string; href: string; icon: LucideIcon; edit?: boolean; badge?: 'requests' | 'reviews' | 'leave' | 'inbox' };
 type Group = { label?: string; items: Item[] };
 
 const groups: Group[] = [
     {
         items: [
             { title: 'Home', href: '/dashboard', icon: House },
+            { title: 'Requests', href: '/requests', icon: Inbox, edit: true, badge: 'inbox' },
             { title: 'Overview', href: '/overview', icon: ChartColumnBig },
             { title: 'Reports', href: '/reports', icon: FileChartColumn },
         ],

@@ -22,6 +22,8 @@ use App\Http\Controllers\EmploymentHistoryController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\LeaveRequestController;
+use App\Http\Controllers\RequestsInboxController;
+use App\Http\Controllers\WfhRequestController;
 use App\Http\Controllers\LetterController;
 use App\Http\Controllers\MeController;
 use App\Http\Controllers\OffboardingController;
@@ -90,6 +92,8 @@ Route::middleware('auth')->group(function () {
         Route::post('me/leave-requests', [MeController::class, 'storeLeaveRequest'])->middleware('throttle:20,1')->name('me.leave-requests.store');
         Route::delete('me/leave-requests/{leaveRequest}', [MeController::class, 'cancelLeaveRequest'])->name('me.leave-requests.cancel');
         Route::get('me/leave-requests/{leaveRequest}/file', [MeController::class, 'leaveRequestFile'])->name('me.leave-requests.file');
+        Route::post('me/wfh-requests', [MeController::class, 'storeWfhRequest'])->middleware('throttle:20,1')->name('me.wfh-requests.store');
+        Route::delete('me/wfh-requests/{wfhRequest}', [MeController::class, 'cancelWfhRequest'])->name('me.wfh-requests.cancel');
         Route::get('me/letters/{letter}', [MeController::class, 'letter'])->name('me.letters.show');
         Route::put('me/reviews/{review}', [MeController::class, 'saveSelfReview'])->name('me.reviews.save');
         Route::post('me/reviews/{review}/acknowledge', [MeController::class, 'acknowledgeReview'])->name('me.reviews.acknowledge');
@@ -219,6 +223,10 @@ Route::middleware('auth')->group(function () {
             Route::get('leave/requests/{leaveRequest}/file', [LeaveRequestController::class, 'file'])->name('leave-requests.file');
             Route::post('leave/requests/{leaveRequest}/approve', [LeaveRequestController::class, 'approve'])->name('leave-requests.approve');
             Route::post('leave/requests/{leaveRequest}/reject', [LeaveRequestController::class, 'reject'])->name('leave-requests.reject');
+            Route::get('requests', [RequestsInboxController::class, 'index'])->name('requests.index');
+            Route::get('attendance/wfh', [WfhRequestController::class, 'index'])->name('wfh-requests.index');
+            Route::post('attendance/wfh/{wfhRequest}/approve', [WfhRequestController::class, 'approve'])->name('wfh-requests.approve');
+            Route::post('attendance/wfh/{wfhRequest}/reject', [WfhRequestController::class, 'reject'])->name('wfh-requests.reject');
             Route::post('leave/holidays', [LeaveController::class, 'storeHoliday'])->name('holidays.store');
             Route::delete('leave/holidays/{holiday}', [LeaveController::class, 'destroyHoliday'])->name('holidays.destroy');
             Route::post('leave/types', [LeaveController::class, 'storeType'])->name('leave-types.store');

@@ -11,6 +11,7 @@ use App\Models\LeaveRecord;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\Review;
+use App\Models\WfhRequest;
 use App\Services\AttendanceClock;
 use App\Services\EmployeeRecords;
 use App\Services\HrRules;
@@ -95,6 +96,8 @@ class MeController extends Controller
             'requests' => AttendanceRequest::query()->with('decider:id,name')->where('employee_id', $employee->id)
                 ->latest('id')->limit(30)->get()->map->props(),
             'leaveRequests' => LeaveRequest::query()->with('type:id,name', 'decider:id,name')->where('employee_id', $employee->id)
+                ->latest('id')->limit(30)->get()->map->props(),
+            'wfhRequests' => WfhRequest::query()->with('decider:id,name')->where('employee_id', $employee->id)
                 ->latest('id')->limit(30)->get()->map->props(),
             'leaveTypes' => LeaveType::query()->where('is_active', true)->orderBy('sort_order')->orderBy('name')->get(['id', 'name', 'yearly_days', 'per_leave_days']),
             'leaveParts' => LeaveRecord::PARTS,
@@ -291,6 +294,42 @@ class MeController extends Controller
             throw ValidationException::withMessages(['status' => 'Only a request HR hasn\'t answered yet can be cancelled.']);
         }
         $leaveRequest->update(['status' => 'cancelled']);
+
+        return back()->with('success', 'Request cancelled.');
+    }
+
+    public function storeWfhRequest(Request $request): RedirectResponse
+    {
+        $employee = $this->employee($request);
+        $data = $request->validate([
+            'start_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:'.CarbonImmutable::today()->subDays((int) config('hrm.self_service.request_days_back'))->toDateString()],
+            'end_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:start_date'],
+            'reason' => ['required', 'string', 'max:1000'],
+        ], [
+            'start_date.after_or_equal' => 'That is too far back to ask for. Talk to HR.',
+            'end_date.after_or_equal' => 'The last day can\'t be before the first day.',
+            'reason.required' => 'Say why you need to work from home.',
+        ]);
+        if (CarbonImmutable::parse($data['start_date'])->diffInDays(CarbonImmutable::parse($data['end_date'])) + 1 > WfhRequest::MAX_DAYS) {
+            throw ValidationException::withMessages(['end_date' => 'Ask for at most '.WfhRequest::MAX_DAYS.' days at a time. For longer, talk to HR about your work mode.']);
+        }
+        $clash = WfhRequest::query()->where('employee_id', $employee->id)->whereIn('status', ['pending', 'approved'])
+            ->where('start_date', '<=', $data['end_date'])->where('end_date', '>=', $data['start_date'])->exists();
+        if ($clash) {
+            throw ValidationException::withMessages(['start_date' => 'You already asked to work from home on some of these days.']);
+        }
+        WfhRequest::create($data + ['employee_id' => $employee->id, 'requested_by' => $request->user()->id]);
+
+        return back()->with('success', 'Sent to HR. You\'ll see the answer here.');
+    }
+
+    public function cancelWfhRequest(Request $request, WfhRequest $wfhRequest): RedirectResponse
+    {
+        abort_unless($wfhRequest->employee_id === $this->employee($request)->id, 404);
+        if ($wfhRequest->status !== 'pending') {
+            throw ValidationException::withMessages(['status' => 'Only a request HR hasn\'t answered yet can be cancelled.']);
+        }
+        $wfhRequest->update(['status' => 'cancelled']);
 
         return back()->with('success', 'Request cancelled.');
     }

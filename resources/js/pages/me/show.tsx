@@ -16,6 +16,8 @@ import { balanceText, balanceTitle, deductionText, leaveDates } from '@/componen
 import { MyLeaveRequests } from '@/components/my-leave-requests';
 import type { LeaveRequestRow, LeaveTypeOption } from '@/components/my-leave-requests';
 import { MyReviews } from '@/components/my-reviews';
+import { MyWfhRequests } from '@/components/my-wfh-requests';
+import type { WfhRequestRow } from '@/components/my-wfh-requests';
 import type { MyReview } from '@/components/my-reviews';
 import type { LeaveBalance, LeaveCounted, LeaveDeductions, LeaveRecordRow } from '@/components/leave';
 import { PageHeader, Section } from '@/components/page-header';
@@ -60,6 +62,7 @@ type Props = {
     scale?: Record<string, string>;
     rules?: { daysBack: number; editable: string[] };
     leaveRequests?: LeaveRequestRow[];
+    wfhRequests?: WfhRequestRow[];
     leaveTypes?: LeaveTypeOption[];
     leaveParts?: Record<string, string>;
     uploads?: { enabled: boolean; max_mb: number };
@@ -169,7 +172,7 @@ export default function MyPage(props: Props) {
     }
     const a = props.attendance;
     const today = props.today;
-    const pending = props.requests.filter((r) => r.status === 'pending').length;
+    const pending = props.requests.filter((r) => r.status === 'pending').length + (props.wfhRequests ?? []).filter((r) => r.status === 'pending').length;
     const yourTurn = (props.reviews ?? []).filter((r) => r.canSelfReview || (r.status === 'completed' && !r.acknowledged_at)).length;
     const owed = props.documents.filter((d) => !d.done);
     const order = ['Present', 'Late', 'Half day', 'Missing punch', 'Absent', 'On leave', 'Holiday', 'Worked day off'];
@@ -312,6 +315,8 @@ export default function MyPage(props: Props) {
 
                 <TabsContent value="requests">
                     <div className="grid max-w-3xl gap-4">
+                        <MyWfhRequests requests={props.wfhRequests ?? []} today={today} />
+                        <h2 className="mt-2 font-bold">Attendance fixes</h2>
                         <p className="text-sm text-muted-foreground">Fixes you asked HR for. Once approved, the new times count in your attendance.</p>
                         {props.requests.length === 0 ? (
                             <EmptyState title="No requests yet.">Use "Ask to fix" next to a day on the Attendance tab.</EmptyState>

@@ -27,7 +27,7 @@ class SearchTest extends TestCase
 
     public function test_sidebar_counts_are_for_hr_only(): void
     {
-        $this->actingAs($this->user('hr'))->get('/dashboard')->assertInertia(fn (AssertableInertia $p) => $p->where('nav', ['requests' => 0, 'reviews' => 0, 'leave' => 0]));
+        $this->actingAs($this->user('hr'))->get('/dashboard')->assertInertia(fn (AssertableInertia $p) => $p->where('nav', ['requests' => 0, 'leave' => 0, 'inbox' => 0, 'reviews' => 0]));
         $this->actingAs($this->user('viewer'))->get('/dashboard')->assertInertia(fn (AssertableInertia $p) => $p->where('nav', null));
     }
 }

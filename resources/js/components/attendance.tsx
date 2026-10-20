@@ -46,6 +46,9 @@ export type AttendanceDay = {
     where: Place | 'both' | null;
     in_where: Place | null;
     out_where: Place | null;
+    /** app/Services/AttendanceBoard.php day(): an approved work from home day; remote time without one (Office / unset work mode) */
+    wfh?: boolean;
+    remote_unapproved?: boolean;
 };
 
 export type Place = 'office' | 'remote';
@@ -167,6 +170,8 @@ export function DayStatus({ day, statuses }: { day: AttendanceDay; statuses: Rec
             {day.overtime > 0 && <StatusPill value={`Overtime ${duration(day.overtime)}`} tone="info" />}
             {day.where === 'remote' && <StatusPill value="Remote" tone="info" />}
             {day.where === 'both' && <StatusPill value="Office + remote" tone="info" />}
+            {day.wfh && <StatusPill value="WFH approved" tone="done" />}
+            {day.remote_unapproved && <span title="Remote time on a day with no approved work from home request"><StatusPill value="Remote, not approved" tone="pending" /></span>}
             {day.leave && <span className="text-xs text-muted-foreground">{day.leave.type}{day.leave.part !== 'full' ? `, ${day.leave.part === 'short' ? 'short leave' : `${day.leave.part === 'first_half' ? 'first' : 'second'} half off`}` : ''}</span>}
             {day.holiday && <span className="text-xs text-muted-foreground">{day.holiday}</span>}
         </span>

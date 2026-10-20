@@ -8,6 +8,7 @@ use App\Models\Employee;
 use App\Models\EmployeeWorkSchedule;
 use App\Models\Holiday;
 use App\Models\LeaveRecord;
+use App\Models\WfhRequest;
 use App\Models\WorkSchedule;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -52,6 +53,12 @@ class AttendanceBoard
 
     /** @var array<int, true> employee ids that have ever clocked in on the app */
     private array $appUsers = [];
+
+    /** @var array<int, list<array{from: string, to: string}>> employee id => approved work from home ranges */
+    private array $wfh = [];
+
+    /** @var array<int, ?string> employee id => work mode (Office, Remote, Hybrid or null) */
+    private array $workModes = [];
 
     /**
      * @param  Collection<int, Employee>  $employees  with id, start_date, exit_date, attendance_machine_id, hr_portal_id
@@ -109,6 +116,12 @@ class AttendanceBoard
             ->get(['employee_id', 'date', 'check_in', 'check_out', 'sessions', 'note']) as $a) {
             $this->adjustments[$a->employee_id][$a->date->toDateString()] = $a->only('check_in', 'check_out', 'sessions', 'note');
         }
+
+        foreach (WfhRequest::query()->where('status', 'approved')->whereIn('employee_id', $ids)
+            ->where('start_date', '<=', $to)->where('end_date', '>=', $from)->get(['employee_id', 'start_date', 'end_date']) as $w) {
+            $this->wfh[$w->employee_id][] = ['from' => $w->start_date->toDateString(), 'to' => $w->end_date->toDateString()];
+        }
+        $this->workModes = Employee::query()->whereIn('id', $ids)->pluck('work_mode', 'id')->all();
 
         foreach (Holiday::query()->whereBetween('date', [$from, $to])->get(['date', 'name', 'company_id']) as $h) {
             $this->holidays[$h->date->toDateString()][$h->company_id ?? 0] = $h->name;
@@ -170,7 +183,24 @@ class AttendanceBoard
             $day['status'] = 'No data';
         }
 
+        // Work from home: approved days say so; remote time on a working day without approval is flagged (never blocked),
+        // except for people whose work mode is Remote or Hybrid.
+        $day['wfh'] = $this->wfhOn($e->id, $date);
+        $day['remote_unapproved'] = ! $day['wfh'] && $day['working_day'] && in_array($day['where'], ['remote', 'both'], true)
+            && ! in_array($this->workModes[$e->id] ?? null, ['Remote', 'Hybrid'], true);
+
         return $day + ['schedule_id' => $schedule?->id];
+    }
+
+    public function wfhOn(int $employeeId, string $date): bool
+    {
+        foreach ($this->wfh[$employeeId] ?? [] as $w) {
+            if ($w['from'] <= $date && $w['to'] >= $date) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
