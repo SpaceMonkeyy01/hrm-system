@@ -1,5 +1,5 @@
 import { Head, router, usePage } from '@inertiajs/react';
-import { Pencil, Plus, Trash2, Users, X } from 'lucide-react';
+import { LayoutGrid, MoreHorizontal, Pencil, Plus, Rows3, Search, Trash2, Users, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { toast } from 'sonner';
@@ -9,10 +9,12 @@ import { NativeSelect } from '@/components/native-select';
 import { PageHeader } from '@/components/page-header';
 import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { plural } from '@/lib/format';
+import { useSessionState } from '@/lib/use-session-state';
 import type { SharedProps } from '@/types';
 
 type Schedule = {
@@ -30,6 +32,15 @@ const blank = {
     name: '', type: 'fixed' as ScheduleType, start_time: '09:00', end_time: '17:00', late_grace_minutes: 10, early_grace_minutes: 0, absent_after: '', late_half_day_hours: '' as number | '',
     full_day_hours: 8, half_day_hours: 4, overtime_after: '' as number | '', working_days: [1, 2, 3, 4, 5], missing_checkout: 'flag' as 'flag' | 'auto', is_default: false, notes: '',
 };
+
+/** "Mon to Fri", "Mon to Sat", or "Mon, Wed, Fri" when the days aren't in a row. */
+function dayRange(days: number[]): string {
+    const d = [...days].sort((a, b) => a - b);
+    if (d.length === 0) return 'None';
+    const name = (n: number) => DAYS.find(([k]) => k === n)?.[1] ?? '';
+    const inRow = d.every((n, i) => i === 0 || n === d[i - 1] + 1);
+    return inRow && d.length > 2 ? `${name(d[0])} to ${name(d[d.length - 1])}` : d.map(name).join(', ');
+}
 
 /** Halfway between start and end, "13:00" for 09:00-17:00 (a night shift ends the next day). Mirrors WorkSchedule::absentAfterMinutes. */
 function midday(start: string, end: string): string | null {
@@ -304,7 +315,34 @@ export default function Schedules({ schedules, unassigned, companies, today }: P
     const can = auth.can.edit;
     const [editing, setEditing] = useState<Schedule | 'new' | null>(null);
     const [assigning, setAssigning] = useState<Schedule | null>(null);
+    const [view, setView] = useSessionState<'table' | 'cards'>('schedules:view', 'table');
+    const [q, setQ] = useSessionState('schedules:q', '');
     const hasDefault = schedules.some((s) => s.is_default);
+    const needle = q.trim().toLowerCase();
+    const shown = needle ? schedules.filter((s) => `${s.name} ${s.summary} ${s.notes ?? ''}`.toLowerCase().includes(needle)) : schedules;
+    // The default also covers everyone without a schedule of their own.
+    const people = (s: Schedule) => s.is_default && unassigned ? s.people + unassigned : s.people;
+    const peopleNote = (s: Schedule) => s.is_default && unassigned ? (s.people ? `${unassigned} by default` : 'all by default') : null;
+    const remove = (s: Schedule) => {
+        if (confirm(`Delete the ${s.name} schedule?`)) router.delete(`/attendance/schedules/${s.id}`, { preserveScroll: true, onError: (e) => toast.error(Object.values(e)[0] ?? 'Not deleted.') });
+    };
+    const actions = (s: Schedule, compact = false) => can && (compact ? (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button variant="ghost" size="sm" aria-label={`Options for ${s.name}`}><MoreHorizontal /></Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => setAssigning(s)}><Users /> Move people</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setEditing(s)}><Pencil /> Edit</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onSelect={() => remove(s)}><Trash2 /> Delete</DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+    ) : (
+        <div className="flex justify-end gap-1">
+            <Button variant="outline" size="sm" onClick={() => setAssigning(s)}><Users /> Move people</Button>
+            <Button variant="ghost" size="sm" aria-label={`Edit ${s.name}`} onClick={() => setEditing(s)}><Pencil /></Button>
+            <Button variant="ghost" size="sm" aria-label={`Delete ${s.name}`} onClick={() => remove(s)}><Trash2 /></Button>
+        </div>
+    ));
 
     return (
         <>
@@ -325,27 +363,76 @@ export default function Schedules({ schedules, unassigned, companies, today }: P
                     <EmptyState title="No work schedules yet.">
                         <p className="mt-1 text-sm text-muted-foreground">Add one for each timing, e.g. "10 to 6", "9 to 5 strict", "12 to 6" and "Flexible".</p>
                     </EmptyState>
-                ) : (
+                ) : (<>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div className="relative w-full sm:w-64">
+                            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input className="pl-8" placeholder="Find a schedule" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Find a schedule" />
+                        </div>
+                        <span className="text-sm text-muted-foreground">{shown.length === schedules.length ? plural(schedules.length, 'schedule') : `${shown.length} of ${schedules.length}`}</span>
+                        <div className="ml-auto inline-flex rounded-md border p-0.5" role="group" aria-label="View">
+                            <Button size="sm" variant={view === 'table' ? 'default' : 'ghost'} onClick={() => setView('table')}><Rows3 /> Table</Button>
+                            <Button size="sm" variant={view === 'cards' ? 'default' : 'ghost'} onClick={() => setView('cards')}><LayoutGrid /> Cards</Button>
+                        </div>
+                    </div>
+                    {shown.length === 0 ? <EmptyState title="No schedule matches." /> : view === 'table' ? (
+                        <div className="overflow-x-auto rounded-lg border">
+                            <table className="w-full min-w-[48rem] text-sm">
+                                <thead className="bg-muted/50 text-left text-xs whitespace-nowrap text-muted-foreground">
+                                    <tr>
+                                        <th className="px-3 py-2 font-semibold">Schedule</th>
+                                        <th className="px-3 py-2 font-semibold">Hours</th>
+                                        <th className="px-3 py-2 font-semibold">Days</th>
+                                        <th className="px-3 py-2 font-semibold" title="Absent if not in by">Absent after</th>
+                                        <th className="px-3 py-2 font-semibold" title="Half day if worked less than">Half day</th>
+                                        <th className="px-3 py-2 font-semibold">Overtime</th>
+                                        <th className="px-3 py-2 font-semibold">No punch out</th>
+                                        <th className="px-3 py-2 text-right font-semibold">People</th>
+                                        {can && <th className="px-3 py-2"><span className="sr-only">Actions</span></th>}
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                    {shown.map((s) => (
+                                        <tr key={s.id} className="align-top hover:bg-accent/30">
+                                            <td className="px-3 py-2.5">
+                                                <span className="flex items-center gap-2 font-semibold">{s.name} {s.is_default && <StatusPill value="Default" tone="info" />}</span>
+                                                {s.notes && <span className="mt-0.5 block max-w-48 truncate text-xs text-muted-foreground" title={s.notes}>{s.notes}</span>}
+                                            </td>
+                                            <td className="px-3 py-2.5 whitespace-nowrap tabular-nums">
+                                                {s.type === 'fixed' ? `${s.start_time?.slice(0, 5)} to ${s.end_time?.slice(0, 5)}` : s.type === 'flexible' ? `Flexible, ${s.full_day_minutes / 60} h` : 'No clock-in'}
+                                                {s.type === 'fixed' && <span className="block text-xs text-muted-foreground">Late after {s.late_grace_minutes} min</span>}
+                                            </td>
+                                            <td className="px-3 py-2.5 whitespace-nowrap">{dayRange(s.working_days)}</td>
+                                            <td className="px-3 py-2.5">
+                                                {s.type === 'fixed' ? <><span className="whitespace-nowrap">{s.absent_after_label}{s.absent_after ? '' : <span className="text-muted-foreground"> (mid-day)</span>}</span>
+                                                    {s.late_half_day_minutes !== null && <span className="block text-xs text-muted-foreground">Half day if worked {s.late_half_day_minutes / 60} h+</span>}</> : '-'}
+                                            </td>
+                                            <td className="px-3 py-2.5 whitespace-nowrap">{s.type !== 'none' ? `${s.half_day_minutes / 60} h` : '-'}</td>
+                                            <td className="px-3 py-2.5 whitespace-nowrap">{s.type === 'none' ? '-' : s.overtime_after_minutes === null ? 'Not counted' : `After ${s.overtime_after_minutes} min`}</td>
+                                            <td className="px-3 py-2.5 whitespace-nowrap">{s.type === 'none' ? '-' : s.type === 'fixed' && s.missing_checkout === 'auto' ? 'Auto at end time' : 'HR enters it'}</td>
+                                            <td className="px-3 py-2.5 text-right tabular-nums">
+                                                {people(s)}
+                                                {peopleNote(s) && <span className="block text-xs whitespace-nowrap text-muted-foreground">{peopleNote(s)}</span>}
+                                            </td>
+                                            {can && <td className="px-2 py-1.5">{actions(s, true)}</td>}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
                     <ul className="grid gap-3 lg:grid-cols-2">
-                        {schedules.map((s) => (
+                        {shown.map((s) => (
                             <li key={s.id} className="grid gap-2 rounded-lg border p-4">
                                 <div className="flex flex-wrap items-start justify-between gap-2">
                                     <div>
                                         <h2 className="flex items-center gap-2 font-bold">{s.name} {s.is_default && <StatusPill value="Default" tone="info" />}</h2>
                                         <p className="text-sm text-muted-foreground">{s.summary}</p>
                                     </div>
-                                    {can && (
-                                        <div className="flex gap-1">
-                                            <Button variant="outline" size="sm" onClick={() => setAssigning(s)}><Users /> Move people</Button>
-                                            <Button variant="ghost" size="sm" aria-label={`Edit ${s.name}`} onClick={() => setEditing(s)}><Pencil /></Button>
-                                            <Button variant="ghost" size="sm" aria-label={`Delete ${s.name}`} onClick={() => {
-                                                if (confirm(`Delete the ${s.name} schedule?`)) router.delete(`/attendance/schedules/${s.id}`, { preserveScroll: true, onError: (e) => toast.error(Object.values(e)[0] ?? 'Not deleted.') });
-                                            }}><Trash2 /></Button>
-                                        </div>
-                                    )}
+                                    {actions(s)}
                                 </div>
                                 <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
-                                    <div><dt className="text-xs text-muted-foreground">People</dt><dd className="tabular-nums">{s.people}{s.is_default && unassigned ? ` + ${unassigned}` : ''}</dd></div>
+                                    <div><dt className="text-xs text-muted-foreground">People</dt><dd className="tabular-nums">{people(s)}{peopleNote(s) && <span className="text-muted-foreground">, {peopleNote(s)}</span>}</dd></div>
                                     {s.type !== 'none' && <div><dt className="text-xs text-muted-foreground">Half day under</dt><dd>{s.half_day_minutes / 60} h</dd></div>}
                                     {s.type === 'fixed' && <div><dt className="text-xs text-muted-foreground">Absent if not in by</dt><dd>{s.absent_after_label}{s.absent_after ? '' : ' (mid-day)'}{s.late_half_day_minutes !== null ? `, Half day if worked ${s.late_half_day_minutes / 60} h+` : ''}</dd></div>}
                                     {s.type === 'fixed' && <div><dt className="text-xs text-muted-foreground">Early leave allowed</dt><dd>{s.early_grace_minutes} min</dd></div>}
@@ -356,7 +443,8 @@ export default function Schedules({ schedules, unassigned, companies, today }: P
                             </li>
                         ))}
                     </ul>
-                )}
+                    )}
+                </>)}
             </div>
             {editing && <ScheduleDialog schedule={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
             {assigning && <AssignDialog schedule={assigning} companies={companies} today={today} onClose={() => setAssigning(null)} />}
