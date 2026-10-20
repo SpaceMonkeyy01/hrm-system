@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { Field } from '@/components/field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/password-input';
 
 export default function Login() {
     const form = useForm({ email: '', password: '', remember: true });
@@ -23,7 +24,7 @@ export default function Login() {
                         onChange={(e) => form.setData('email', e.target.value)} aria-invalid={!!form.errors.email} />
                 </Field>
                 <Field label="Password" htmlFor="password" error={form.errors.password}>
-                    <Input id="password" type="password" autoComplete="current-password" required value={form.data.password}
+                    <PasswordInput id="password" autoComplete="current-password" required value={form.data.password}
                         onChange={(e) => form.setData('password', e.target.value)} />
                 </Field>
                 <label className="flex items-center gap-2 text-sm">

@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { Field } from '@/components/field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/password-input';
 
 export default function ResetPassword({ token, email, invite }: { token: string; email: string; invite: boolean }) {
     const form = useForm({ token, email, invite, password: '', password_confirmation: '' });
@@ -20,10 +21,10 @@ export default function ResetPassword({ token, email, invite }: { token: string;
                     <Input id="email" type="email" autoComplete="username" required value={form.data.email} onChange={(e) => form.setData('email', e.target.value)} />
                 </Field>
                 <Field label="Password" htmlFor="password" error={form.errors.password}>
-                    <Input id="password" type="password" autoComplete="new-password" autoFocus required value={form.data.password} onChange={(e) => form.setData('password', e.target.value)} />
+                    <PasswordInput id="password" autoComplete="new-password" autoFocus required value={form.data.password} onChange={(e) => form.setData('password', e.target.value)} />
                 </Field>
                 <Field label="Same password again" htmlFor="password_confirmation">
-                    <Input id="password_confirmation" type="password" autoComplete="new-password" required value={form.data.password_confirmation}
+                    <PasswordInput id="password_confirmation" autoComplete="new-password" required value={form.data.password_confirmation}
                         onChange={(e) => form.setData('password_confirmation', e.target.value)} />
                 </Field>
                 <Button type="submit" disabled={form.processing}>Save password</Button>

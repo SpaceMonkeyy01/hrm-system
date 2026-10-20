@@ -12,6 +12,7 @@ import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/password-input';
 import { Textarea } from '@/components/ui/textarea';
 import { formatDateTime, timeAgo } from '@/lib/format';
 
@@ -75,7 +76,7 @@ function DeviceDialog({ device, defaults, onClose }: { device: Device | null; de
                         </Field>
                         <Field label="Comm Key" htmlFor="d-key" error={errors.comm_key} className="sm:col-span-2"
                             hint={device?.has_comm_key ? 'A key is saved. Leave blank to keep it, or type a new one.' : 'As set on the machine (Comm. > Comm Key). Blank if the machine has none.'}>
-                            <Input id="d-key" type="password" inputMode="numeric" autoComplete="new-password" value={d.comm_key} maxLength={6} disabled={d.clear_comm_key}
+                            <PasswordInput id="d-key" inputMode="numeric" autoComplete="new-password" value={d.comm_key} maxLength={6} disabled={d.clear_comm_key}
                                 placeholder={device?.has_comm_key ? '••••••' : ''} onChange={(e) => set('comm_key', e.target.value)} />
                         </Field>
                         {device?.has_comm_key && (

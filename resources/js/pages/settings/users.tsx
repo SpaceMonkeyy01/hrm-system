@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/password-input';
 import { toast } from 'sonner';
 import { formatDateTime, plural } from '@/lib/format';
 import type { SharedProps } from '@/types';
@@ -55,7 +56,7 @@ function UserRow({ user, roles, isMe, employees }: { user: User; roles: Record<s
                 </span>
             </td>
             <td className="py-2 pr-3">
-                <Input aria-label="New password" type="password" autoComplete="new-password" placeholder="Leave empty to keep" value={form.data.password}
+                <PasswordInput aria-label="New password" autoComplete="new-password" placeholder="Leave empty to keep" value={form.data.password}
                     onChange={(e) => form.setData('password', e.target.value)} className="h-8" />
                 {form.errors.password && <p className="mt-1 text-xs text-missing">{form.errors.password}</p>}
             </td>
