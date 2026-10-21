@@ -17,6 +17,7 @@ abstract class TestCase extends BaseTestCase
         parent::setUp();
         $this->withoutVite();   // tests don't need built JS/CSS
         AppSetting::flush();    // settings are cached per process; each test starts from its own database
+        set_time_limit(0);      // Sync now / uploads call set_time_limit(), which would otherwise cut the rest of the run short
     }
 
     protected function user(string $role = 'hr', array $attrs = []): User
