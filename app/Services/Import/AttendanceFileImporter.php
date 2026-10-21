@@ -4,6 +4,7 @@ namespace App\Services\Import;
 
 use App\Models\AttendanceImport;
 use App\Models\AttendancePunch;
+use App\Services\AttendanceRules;
 use App\Support\Xls\XlsReader;
 use App\Support\Xlsx\XlsxReader;
 use Carbon\CarbonImmutable;
@@ -192,7 +193,7 @@ class AttendanceFileImporter
         }
 
         return ['device_user_id' => $id, 'device_name' => ($r['Name'] ?? '') ?: null, 'punched_at' => $at->format('Y-m-d H:i:s'),
-            'work_date' => $at->format('Y-m-d'), 'method' => ($r['VerifyCode'] ?? '') ?: null];
+            'work_date' => AttendanceRules::workDate(CarbonImmutable::instance($at)), 'method' => ($r['VerifyCode'] ?? '') ?: null];
     }
 
     /** @return array<string, mixed>|string */
@@ -213,9 +214,11 @@ class AttendanceFileImporter
             return 'time "'.($r['Time'] ?? '').'" not understood';
         }
         $action = ucfirst(strtolower($r['Action'] ?? ''));
+        // HR.my's own shift date wins when it differs ("09:51 AM (2026-10-09)"); otherwise the 03:00 rule applies.
+        $workDate = $on === $day->format('Y-m-d') ? AttendanceRules::workDate(CarbonImmutable::instance($at)) : $day->format('Y-m-d');
 
         return ['device_user_id' => $id, 'device_name' => ($r['Name'] ?? '') ?: null, 'punched_at' => $at->format('Y-m-d H:i:s'),
-            'work_date' => $day->format('Y-m-d'), 'method' => in_array($action, ['In', 'Out'], true) ? $action : null];
+            'work_date' => $workDate, 'method' => in_array($action, ['In', 'Out'], true) ? $action : null];
     }
 
     /** Excel date number (days since 1899-12-30, time as the fraction) to a date and time, to the nearest second. */

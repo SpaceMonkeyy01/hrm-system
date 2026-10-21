@@ -19,7 +19,8 @@ use Symfony\Component\HttpFoundation\IpUtils;
  *              it showed; a press that no longer fits (pressed twice, two tabs) is refused, not flipped
  *   open       the latest app punch is an In from the last max_shift_hours. An older one stays open on its day
  *              (Missing punch, HR or an "ask HR" request fixes it) and the next press starts a new day
- *   work date  an In counts on today; an Out on its In's day, so a night shift ending at 06:00 stays one day
+ *   work date  an In counts on today's work day (before 03:00 that is still yesterday, AttendanceRules::workDate);
+ *              an Out on its In's day, so a night shift ending at 06:00 stays one day
  *   place      office when the request came from an office network (Attendance > App clock-ins, plus any in
  *              config hrm.clock.office_ips), else remote. Fixed when the punch is saved; adding a network later
  *              can re-mark earlier clock-ins from it (ClockInController)
@@ -113,10 +114,10 @@ class AttendanceClock
         if (! $employee->attendance_machine_id) {
             return null;
         }
-        $today = $now->toDateString();
+        $today = AttendanceRules::workDate($now);
         $day = (new AttendanceBoard(collect([$employee]), $today, $today))->day($employee, $today, $now);
         foreach ($day['sessions'] ?? [] as $s) {
-            if ($s['source'] === 'machine' && $s['in'] && ! $s['out'] && $s['in'] <= $now->format('H:i')) {
+            if ($s['source'] === 'machine' && $s['in'] && ! $s['out'] && $s['in'] <= AttendanceRules::workClock($now)) {
                 return $s['in'];
             }
         }
@@ -167,7 +168,7 @@ class AttendanceClock
         if (! self::enabled()) {
             throw ValidationException::withMessages(['clock' => 'Clocking in on the app is switched off. Use the attendance machine or ask HR.']);
         }
-        $today = $now->toDateString();
+        $today = AttendanceRules::workDate($now);
         if ($employee->exit_date && $employee->exit_date->toDateString() < $today) {
             throw ValidationException::withMessages(['clock' => 'Your record shows you have left, so you can\'t clock in. Talk to HR if that\'s wrong.']);
         }
@@ -185,20 +186,23 @@ class AttendanceClock
         }
         $place = self::placeFor($ip);
         $since = ! $open && $place === 'remote' ? self::officeOpenSince($employee, $now) : null;
+        $leftAt = null;   // the time they left, on the work day's clock (01:30 after midnight = "25:30")
         if ($since) {
             if (! $leftOffice) {
                 throw ValidationException::withMessages(['left_office' => "You checked in at the office at $since and didn't check out. Enter the time you left the office."]);
             }
-            if ($leftOffice <= $since || $leftOffice > $now->format('H:i')) {
+            // After midnight the times run on past 24:00 (01:30 = "25:30"), so a late evening still compares.
+            $leftAt = AttendanceRules::afterMidnight($leftOffice);
+            if ($leftAt <= $since || $leftAt > AttendanceRules::workClock($now)) {
                 throw ValidationException::withMessages(['left_office' => "Enter a time after $since and not later than now."]);
             }
         }
 
-        return DB::transaction(function () use ($employee, $open, $place, $since, $leftOffice, $ip, $location, $now, $today, &$closedOffice) {
+        return DB::transaction(function () use ($employee, $open, $place, $since, $leftOffice, $leftAt, $ip, $location, $now, $today, &$closedOffice) {
             if ($since) {
                 AttendancePunch::create([
                     'source' => self::SOURCE, 'device_user_id' => (string) $employee->id, 'device_name' => $employee->full_name,
-                    'punched_at' => CarbonImmutable::parse("$today $leftOffice"), 'work_date' => $today,
+                    'punched_at' => CarbonImmutable::parse($today)->addMinutes(AttendanceRules::minutes($leftAt)), 'work_date' => $today,
                     'method' => 'Out', 'place' => 'office', 'stated' => true,
                 ]);
                 $closedOffice = $leftOffice;

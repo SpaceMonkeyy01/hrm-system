@@ -66,7 +66,7 @@ class AttendanceRules
     public static function day(string $date, array $punches, ?array $adjustment, ?WorkSchedule $schedule, CarbonInterface $now, array $context = []): array
     {
         $sessions = self::sessions($punches, $count);
-        $today = $now->toDateString();
+        $today = self::workDate($now);   // until 03:00 "today" is still yesterday's work day
         $holiday = $context['holiday'] ?? null;
         $leave = $context['leave'] ?? null;
         $fullLeave = $leave && $leave['part'] === 'full';
@@ -427,6 +427,32 @@ class AttendanceRules
         }
 
         return $kept;
+    }
+
+    /**
+     * The day a punch counts for: before config hrm.attendance.day_starts_at (03:00) it is still the day before,
+     * so a check-out at 01:30 ends yesterday's day and a check-in at 03:10 starts today's.
+     */
+    public static function workDate(CarbonInterface $at): string
+    {
+        return $at->format('H:i') < self::dayStartsAt() ? $at->copy()->subDay()->toDateString() : $at->toDateString();
+    }
+
+    /** The time of day on the work date's clock: 01:30 after midnight reads "25:30", like punches on the board. */
+    public static function workClock(CarbonInterface $at): string
+    {
+        return self::clock(self::minutes($at->format('H:i')) + ($at->toDateString() !== self::workDate($at) ? 1440 : 0));
+    }
+
+    /** "01:30" typed for a time after midnight (before the day starts) => "25:30"; "18:00" stays. */
+    public static function afterMidnight(string $time): string
+    {
+        return $time < self::dayStartsAt() ? self::clock(self::minutes($time) + 1440) : $time;
+    }
+
+    private static function dayStartsAt(): string
+    {
+        return substr((string) config('hrm.attendance.day_starts_at', '03:00'), 0, 5);
     }
 
     /** "09:30" or "09:30:15" => 570 */

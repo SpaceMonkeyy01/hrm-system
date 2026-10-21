@@ -10,6 +10,7 @@ use App\Models\Employee;
 use App\Models\EmployeeWorkSchedule;
 use App\Models\EmploymentHistory;
 use App\Models\WorkSchedule;
+use App\Services\AttendanceRules;
 use App\Support\Xls\XlsReader;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -415,5 +416,57 @@ class AttendanceTest extends TestCase
         $this->actingAs($hr)->post("/attendance/schedules/{$m->id}/assign", ['employee_ids' => [$boss->id], 'starts_on' => '2026-05-01'])->assertSessionHasNoErrors();
         $board = new \App\Services\AttendanceBoard(collect([$boss->fresh()]), '2026-05-13', '2026-05-13');
         $this->assertSame('Not tracked', $board->day($boss->fresh(), '2026-05-13', now())['status']);
+    }
+
+    public function test_punches_before_three_in_the_morning_count_for_the_day_before(): void
+    {
+        $this->schedule(['is_default' => true]);
+        $e = $this->employee($this->company, ['full_name' => 'Fake Late Leaver', 'attendance_machine_id' => '7']);
+        $this->upload([['Fake Late Leaver', '7', '2026-05-13 09:55:00'], ['Fake Late Leaver', '7', '2026-05-14 01:30:00'], ['Fake Late Leaver', '7', '2026-05-14 03:10:00']])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame([['2026-05-13 09:55', '2026-05-13'], ['2026-05-14 01:30', '2026-05-13'], ['2026-05-14 03:10', '2026-05-14']],
+            AttendancePunch::query()->orderBy('punched_at')->get()->map(fn ($p) => [$p->punched_at->format('Y-m-d H:i'), $p->work_date->toDateString()])->all());
+        $this->actingAs($this->user('hr'))->get('/attendance?date=2026-05-13')->assertInertia(fn (AssertableInertia $p) => $p
+            ->where('rows', fn ($rows) => ($r = collect($rows)->firstWhere('employee.id', $e->id)) && $r['in'] === '09:55' && $r['out'] === '25:30'));
+    }
+
+    public function test_hrmy_punch_after_midnight_counts_for_the_day_before_unless_hrmy_dates_it(): void
+    {
+        $path = $this->hrmyFile([
+            ['2026-05-13', 'X-1', 'Fake Remote', 'In', '07:00 PM'],
+            ['2026-05-14', 'X-1', 'Fake Remote', 'Out', '01:30 AM'],
+            ['2026-05-14', 'X-1', 'Fake Remote', 'In', '03:05 AM'],
+        ]);
+        $this->actingAs($this->user('hr'))->post('/attendance/imports', ['file' => new UploadedFile($path, 'hrmy.xls', null, null, true)])->assertSessionHasNoErrors();
+
+        $this->assertSame(['2026-05-13', '2026-05-13', '2026-05-14'],
+            AttendancePunch::query()->orderBy('punched_at')->get()->map(fn ($p) => $p->work_date->toDateString())->all());
+    }
+
+    public function test_the_day_start_is_a_setting(): void
+    {
+        $at = CarbonImmutable::parse('2026-05-14 02:30');
+        $this->assertSame('2026-05-13', AttendanceRules::workDate($at));
+        $this->assertSame('26:30', AttendanceRules::workClock($at));
+        config(['hrm.attendance.day_starts_at' => '02:00']);
+        $this->assertSame('2026-05-14', AttendanceRules::workDate($at));
+        $this->assertSame('02:30', AttendanceRules::workClock($at));
+        $this->assertSame('2026-05-13', AttendanceRules::workDate(CarbonImmutable::parse('2026-05-14 01:59')));
+    }
+
+    public function test_redate_command_moves_old_early_morning_punches_only_with_apply(): void
+    {
+        $late = AttendancePunch::create(['source' => 'machine', 'device_user_id' => '7', 'punched_at' => '2026-05-14 01:30:00', 'work_date' => '2026-05-14']);
+        $morning = AttendancePunch::create(['source' => 'machine', 'device_user_id' => '7', 'punched_at' => '2026-05-14 03:10:00', 'work_date' => '2026-05-14']);
+        $hrmy = AttendancePunch::create(['source' => 'hrmy', 'device_user_id' => 'X-1', 'punched_at' => '2026-05-14 06:20:00', 'work_date' => '2026-05-13']);
+
+        $this->artisan('hr:redate-punches')->expectsOutputToContain('Would move 1 punches')->assertSuccessful();
+        $this->assertSame('2026-05-14', $late->fresh()->work_date->toDateString());
+
+        $this->artisan('hr:redate-punches --apply')->assertSuccessful();
+        $this->assertSame(['2026-05-13', '2026-05-14', '2026-05-13'], [$late->fresh()->work_date->toDateString(), $morning->fresh()->work_date->toDateString(), $hrmy->fresh()->work_date->toDateString()]);
+        $this->assertDatabaseHas('activity_log', ['subject_type' => 'AttendancePunch', 'event' => 'updated']);
+        $this->artisan('hr:redate-punches')->expectsOutputToContain('Nothing to move')->assertSuccessful();
     }
 }

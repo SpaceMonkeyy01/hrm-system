@@ -10,6 +10,7 @@ use App\Models\Company;
 use App\Models\Employee;
 use App\Services\AttendanceBoard;
 use App\Services\AttendanceLinks;
+use App\Services\AttendanceRules;
 use App\Services\Import\AttendanceFileImporter;
 use App\Services\Import\MachineSyncer;
 use Carbon\CarbonImmutable;
@@ -42,7 +43,7 @@ class AttendanceController extends Controller
             'q' => ['nullable', 'string', 'max:100'],
         ]);
         $now = CarbonImmutable::now();
-        $date = $f['date'] ?? $now->toDateString();
+        $date = $f['date'] ?? AttendanceRules::workDate($now);   // until 03:00 the page opens on yesterday's work day
 
         // Everyone employed on that day: current staff, plus people who left after it.
         $employees = Employee::query()->with('department:id,name')->search($f['q'] ?? null)
@@ -84,7 +85,7 @@ class AttendanceController extends Controller
 
         return Inertia::render('attendance/index', [
             'date' => $date,
-            'today' => $now->toDateString(),
+            'today' => AttendanceRules::workDate($now),
             'rows' => $rows,
             'counts' => $counts + ['Late' => $late],
             'links' => $links,

@@ -167,6 +167,9 @@ return [
     'attendance' => [
         // Punches this close together are one punch (people often tap twice).
         'duplicate_punch_minutes' => 5,
+        // A punch before this time belongs to the day before (a check-out at 01:30 ends yesterday's day; from 03:00
+        // it is the new day). AttendanceRules::workDate().
+        'day_starts_at' => env('HRM_DAY_STARTS_AT', '03:00'),
         // Day statuses and their colour (status-pill tones).
         'statuses' => [
             'Present' => 'done',

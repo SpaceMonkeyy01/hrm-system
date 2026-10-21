@@ -318,4 +318,32 @@ class ClockInTest extends TestCase
         $this->press('in', '203.0.113.7')->assertSessionHasNoErrors();
         $this->assertSame(['In'], $this->punches()->pluck('method')->all());
     }
+
+    public function test_clocking_in_after_midnight_counts_for_the_day_before_until_three(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-05-21 01:00'));
+        $this->press('in')->assertSessionHasNoErrors();
+        $this->assertSame('2026-05-20', $this->punches()->sole()->work_date->toDateString());
+        $day = $this->day('2026-05-20');
+        $this->assertSame(['At work', '25:00'], [$day['status'], $day['in']]);
+
+        $this->travelTo(CarbonImmutable::parse('2026-05-21 03:30'));
+        $this->press('out')->assertSessionHasNoErrors();
+        $this->travelTo(CarbonImmutable::parse('2026-05-21 09:00'));
+        $this->press('in')->assertSessionHasNoErrors();
+        $this->assertSame(['2026-05-20', '2026-05-20', '2026-05-21'], $this->punches()->map(fn ($p) => $p->work_date->toDateString())->all());
+    }
+
+    public function test_a_forgotten_office_check_in_can_be_closed_after_midnight(): void
+    {
+        $this->me->update(['attendance_machine_id' => '55']);
+        AttendancePunch::create(['source' => 'machine', 'device_user_id' => '55', 'punched_at' => '2026-05-20 18:00:00', 'work_date' => '2026-05-20', 'method' => 'FACE']);
+        $this->travelTo(CarbonImmutable::parse('2026-05-21 01:00'));
+
+        $this->press('in', '10.0.0.5', ['left_office' => '01:30'])->assertSessionHasErrors('left_office');   // later than now
+        $this->press('in', '10.0.0.5', ['left_office' => '00:30'])->assertSessionHasNoErrors()
+            ->assertSessionHas('success', 'Closed your office time at 00:30. Clocked in at 01:00 (remote).');
+        $this->assertSame([['2026-05-21 00:30', 'Out', '2026-05-20'], ['2026-05-21 01:00', 'In', '2026-05-20']],
+            $this->punches()->map(fn ($p) => [$p->punched_at->format('Y-m-d H:i'), $p->method, $p->work_date->toDateString()])->all());
+    }
 }
