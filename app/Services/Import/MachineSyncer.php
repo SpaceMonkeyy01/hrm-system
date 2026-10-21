@@ -6,7 +6,6 @@ use App\Models\AttendanceDevice;
 use App\Models\AttendanceImport;
 use App\Models\AttendancePunch;
 use App\Models\MachineSync;
-use App\Services\AttendanceRules;
 use App\Support\Zk\AttendanceMachine;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -141,7 +140,7 @@ class MachineSyncer
         foreach ($punches as $p) {
             if ($from === null || $p['time'] >= $from) {
                 $rows[$p['user_id'].'|'.$p['time']] = ['source' => 'machine', 'device_user_id' => $p['user_id'], 'device_name' => ($names[$p['user_id']] ?? '') ?: null,
-                    'punched_at' => $p['time'], 'work_date' => AttendanceRules::workDate(CarbonImmutable::parse($p['time'])), 'method' => $p['method'], 'attendance_device_id' => $device->id];
+                    'punched_at' => $p['time'], 'work_date' => substr($p['time'], 0, 10), 'method' => $p['method'], 'attendance_device_id' => $device->id];
             }
         }
         $checked = count($rows);

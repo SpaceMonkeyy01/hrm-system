@@ -193,7 +193,7 @@ class AttendanceFileImporter
         }
 
         return ['device_user_id' => $id, 'device_name' => ($r['Name'] ?? '') ?: null, 'punched_at' => $at->format('Y-m-d H:i:s'),
-            'work_date' => AttendanceRules::workDate(CarbonImmutable::instance($at)), 'method' => ($r['VerifyCode'] ?? '') ?: null];
+            'work_date' => $at->format('Y-m-d'), 'method' => ($r['VerifyCode'] ?? '') ?: null];   // machine: always the calendar day
     }
 
     /** @return array<string, mixed>|string */
@@ -214,7 +214,7 @@ class AttendanceFileImporter
             return 'time "'.($r['Time'] ?? '').'" not understood';
         }
         $action = ucfirst(strtolower($r['Action'] ?? ''));
-        // HR.my's own shift date wins when it differs ("09:51 AM (2026-10-09)"); otherwise the 03:00 rule applies.
+        // Remote staff: HR.my's own shift date wins when it differs ("09:51 AM (2026-10-09)"); otherwise the 03:00 rule.
         $workDate = $on === $day->format('Y-m-d') ? AttendanceRules::workDate(CarbonImmutable::instance($at)) : $day->format('Y-m-d');
 
         return ['device_user_id' => $id, 'device_name' => ($r['Name'] ?? '') ?: null, 'punched_at' => $at->format('Y-m-d H:i:s'),

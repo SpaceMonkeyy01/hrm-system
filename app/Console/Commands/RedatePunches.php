@@ -10,8 +10,8 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Punches saved before the 03:00 rule (AttendanceRules::workDate) carry their calendar date: a check-out at 01:30
- * sits on the new day. This moves them to the day before. Shows what would change; --apply saves it, in one
+ * Remote punches (app, HR.my) saved before the 03:00 rule (AttendanceRules::workDate) carry their calendar date: a
+ * check-out at 01:30 sits on the new day. Machine punches are never moved. This moves them to the day before. Shows what would change; --apply saves it, in one
  * transaction, with one line in the activity log. Punches already dated to another day (HR.my's own shift date,
  * an app Out on its In's day) are left alone. Safe to run again: a second run finds nothing.
  */
@@ -19,12 +19,12 @@ class RedatePunches extends Command
 {
     protected $signature = 'hr:redate-punches {--apply : save the changes (without it, only shows them)}';
 
-    protected $description = 'Move punches before the day start (03:00) to the day before';
+    protected $description = 'Move remote (app, HR.my) punches before the day start (03:00) to the day before';
 
     public function handle(): int
     {
         $moves = [];
-        AttendancePunch::query()->select(['id', 'source', 'device_user_id', 'punched_at', 'work_date'])->chunkById(2000, function ($punches) use (&$moves) {
+        AttendancePunch::query()->whereIn('source', ['app', 'hrmy'])->select(['id', 'source', 'device_user_id', 'punched_at', 'work_date'])->chunkById(2000, function ($punches) use (&$moves) {
             foreach ($punches as $p) {
                 $calendar = $p->punched_at->toDateString();
                 $day = AttendanceRules::workDate(CarbonImmutable::instance($p->punched_at));
@@ -35,7 +35,7 @@ class RedatePunches extends Command
         });
 
         if (! $moves) {
-            $this->info('Nothing to move: every punch before the day start already counts for the day before.');
+            $this->info('Nothing to move: every remote punch before the day start already counts for the day before.');
 
             return self::SUCCESS;
         }

@@ -430,8 +430,9 @@ class AttendanceRules
     }
 
     /**
-     * The day a punch counts for: before config hrm.attendance.day_starts_at (03:00) it is still the day before,
-     * so a check-out at 01:30 ends yesterday's day and a check-in at 03:10 starts today's.
+     * The day a remote punch (app clock-in, HR.my) counts for: before config hrm.attendance.day_starts_at (03:00) it
+     * is still the day before, so a check-out at 01:30 ends yesterday's day and a check-in at 03:10 starts today's.
+     * Machine punches keep their calendar day (office staff, who never clock in remotely).
      */
     public static function workDate(CarbonInterface $at): string
     {
