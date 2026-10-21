@@ -1,10 +1,14 @@
 import { Link, router } from '@inertiajs/react';
+import { ChevronDown, Ellipsis } from 'lucide-react';
 import { Fragment, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { toast } from 'sonner';
 import { NativeSelect } from '@/components/native-select';
 import { StatusPicker } from '@/components/status-picker';
+import { StatusPill, toneClass, toneOf } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 import type { ChecklistColumn, OptionSets } from '@/types';
 
 export type GridRow = {
@@ -29,9 +33,56 @@ export type ExtraColumn<R> = {
  *
  * Compact (remembered per browser) shows short codes in narrow columns, so far more fit on screen.
  * Each name shows how many of its items are done; each column how many people have it done.
- * Phones get one card per person instead of the grid, linking to the profile tab where it can be edited.
+ * Phones get one card per person instead of the grid; tapping it opens the checklist with big buttons.
  */
 const COMPACT_KEY = 'hrm.grid.compact';
+
+/**
+ * A checklist answer on a phone: the set's first done and first not-done values (Yes / No, Done / Not Started) as
+ * 44px buttons, and a ... for the others (Pending, Not Required ...) and for clearing it.
+ */
+function PhoneChoice({ value, set, optionSets, label, onChange }: {
+    value: string | null; set: string; optionSets: OptionSets; label: string; onChange: (v: string | null) => void;
+}) {
+    const [open, setOpen] = useState(false);
+    const options = optionSets[set] ?? [];
+    const main = [options.find((o) => o.done), options.find((o) => !o.done)].filter((o): o is NonNullable<typeof o> => !!o);
+    const others = options.filter((o) => !main.includes(o));
+    const other = value && !main.some((o) => o.value === value);
+    const choose = (v: string | null) => { setOpen(false); if (v !== value) onChange(v); };
+    return (
+        <span className="flex shrink-0 items-center gap-1.5">
+            {other && <StatusPill value={value} tone={toneOf(value, set, optionSets)} />}
+            <span role="group" aria-label={label} className="inline-flex overflow-hidden rounded-full border bg-background">
+                {main.map((o, i) => (
+                    <button key={o.value} type="button" aria-pressed={value === o.value} onClick={() => choose(o.value)}
+                        className={cn('h-11 min-w-14 px-3.5 text-sm font-semibold', i > 0 && 'border-l',
+                            value === o.value ? toneClass[o.tone] : 'text-muted-foreground')}>
+                        {o.value}
+                    </button>
+                ))}
+            </span>
+            <Popover open={open} onOpenChange={setOpen}>
+                <PopoverTrigger asChild>
+                    <button type="button" aria-label={`More answers for ${label}`} className="inline-flex size-11 items-center justify-center rounded-full border bg-background text-muted-foreground">
+                        <Ellipsis className="size-4" />
+                    </button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-52">
+                    <p className="px-2 pt-1 pb-1.5 text-xs text-muted-foreground">{label}</p>
+                    {others.map((o) => (
+                        <button key={o.value} type="button" onClick={() => choose(o.value)} className="flex min-h-11 w-full items-center rounded px-2 hover:bg-accent">
+                            <StatusPill value={o.value} tone={o.tone} />
+                        </button>
+                    ))}
+                    <button type="button" onClick={() => choose(null)} className="mt-1 min-h-11 w-full rounded border-t px-2 text-left text-sm text-muted-foreground hover:bg-accent">
+                        Clear value
+                    </button>
+                </PopoverContent>
+            </Popover>
+        </span>
+    );
+}
 
 function readCompact(): boolean {
     try {
@@ -81,6 +132,7 @@ export function ChecklistGrid<R extends GridRow>({
     const [bulkItem, setBulkItem] = useState<string>('');
     const [bulkStatus, setBulkStatus] = useState<string>('');
     const [bulkBusy, setBulkBusy] = useState(false);
+    const [openRow, setOpenRow] = useState<number | null>(null);
 
     const groups = useMemo(() => {
         const out: { name: string; span: number }[] = [];
@@ -196,28 +248,63 @@ export function ChecklistGrid<R extends GridRow>({
                 </label>
             </div>
 
-            {/* Phones: one card per person; changes are made on the profile. */}
-            <ul className="divide-y md:hidden">
-                {rows.map((row) => {
-                    const done = doneIn(row);
-                    return (
-                        <li key={row.id}>
-                            <Link href={`/employees/${row.id}${profileTab ? `#${profileTab}` : ''}`} className="grid gap-1.5 px-4 py-3 hover:bg-accent/50">
-                                <span className="flex items-center justify-between gap-3">
-                                    <span className="min-w-0">
-                                        <span className="block truncate font-semibold">{row.name}</span>
-                                        <span className="text-xs text-muted-foreground">{row.code}{row.needs_review && <span className="ml-1.5 font-semibold text-pending">Check record</span>}</span>
+            {/* Phones: one card per person; tap to open the checklist and answer with big buttons. */}
+            <div className="md:hidden">
+                <p className="border-b px-4 py-2 text-xs text-muted-foreground">
+                    {rows.length} {rows.length === 1 ? 'person' : 'people'}.{canEdit ? ' Tap a person to update their checklist.' : ' Tap a person to see their checklist.'}
+                </p>
+                <ul className="divide-y border-b">
+                    {rows.map((row) => {
+                        const done = doneIn(row);
+                        const isOpen = openRow === row.id;
+                        const share = done / Math.max(columns.length, 1);
+                        return (
+                            <li key={row.id}>
+                                <button type="button" aria-expanded={isOpen} onClick={() => setOpenRow(isOpen ? null : row.id)}
+                                    className="grid w-full gap-1.5 px-4 py-3 text-left hover:bg-accent/50">
+                                    <span className="flex items-center justify-between gap-3">
+                                        <span className="min-w-0">
+                                            <span className="font-bold">{row.name}</span> <span className="text-xs text-muted-foreground">{row.code}</span>
+                                            {row.needs_review && <span className="ml-1.5 text-xs font-semibold text-pending">Check record</span>}
+                                        </span>
+                                        <span className="flex shrink-0 items-center gap-2 text-sm font-semibold text-muted-foreground tabular-nums">
+                                            {done} of {columns.length}
+                                            <ChevronDown className={cn('size-4 transition-transform', isOpen && 'rotate-180')} />
+                                        </span>
                                     </span>
-                                    <span className="shrink-0 text-xs font-semibold tabular-nums">{done} of {columns.length}</span>
-                                </span>
-                                <span className="flex h-1.5 overflow-hidden rounded-full bg-muted">
-                                    <span className="bg-done" style={{ width: `${(done / Math.max(columns.length, 1)) * 100}%` }} />
-                                </span>
-                            </Link>
-                        </li>
-                    );
-                })}
-            </ul>
+                                    <span className="flex h-1.5 overflow-hidden rounded-full bg-muted">
+                                        <span className={share >= 1 ? 'bg-done' : share < 0.5 ? 'bg-pending' : 'bg-cascade'} style={{ width: `${share * 100}%` }} />
+                                    </span>
+                                </button>
+                                {isOpen && (
+                                    <div className="border-t bg-muted/30">
+                                        <ul className="divide-y">
+                                            {columns.map((c, i) => {
+                                                const firstOfGroup = c.group && (i === 0 || (columns[i - 1].group ?? '') !== c.group);
+                                                const value = valueOf(row, c);
+                                                return (
+                                                    <Fragment key={c.id}>
+                                                        {firstOfGroup && <li className="px-4 pt-3 pb-1 text-xs font-semibold text-muted-foreground uppercase">{c.group}</li>}
+                                                        <li className="flex items-center justify-between gap-3 px-4 py-2">
+                                                            <span className="min-w-0 text-sm">{c.label}</span>
+                                                            {canEdit
+                                                                ? <PhoneChoice value={value} set={c.option_set} optionSets={optionSets} label={`${c.label} for ${row.name}`} onChange={(v) => save(row, c, v)} />
+                                                                : <StatusPill value={value} tone={toneOf(value, c.option_set, optionSets)} />}
+                                                        </li>
+                                                    </Fragment>
+                                                );
+                                            })}
+                                        </ul>
+                                        <Link href={`/employees/${row.id}${profileTab ? `#${profileTab}` : ''}`} className="block border-t px-4 py-3 text-sm font-semibold text-cascade">
+                                            Open the profile
+                                        </Link>
+                                    </div>
+                                )}
+                            </li>
+                        );
+                    })}
+                </ul>
+            </div>
 
             <div className="hidden min-h-0 flex-1 overflow-auto md:block" style={{ maxHeight: 'calc(100svh - 15rem)' }}>
                 <table className="hr-grid w-max min-w-full text-sm">
