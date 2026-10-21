@@ -184,7 +184,6 @@ export default function Devices({ devices, defaults, cronReady }: Props) {
             <PageHeader
                 title="Attendance devices"
                 tabs={<AttendanceTabs />}
-                description="The fingerprint and face machines the app reads punches from. Enrol each person under the same number on every machine, so one link covers all of them."
                 actions={<Button onClick={() => setEditing('new')}><Plus /> Add device</Button>}
             />
             <div className="grid max-w-5xl grid-cols-1 gap-4 px-4 py-6 md:px-6">

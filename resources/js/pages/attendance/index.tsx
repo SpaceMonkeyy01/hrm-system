@@ -52,7 +52,7 @@ export default function AttendanceIndex(props: Props) {
             <PageHeader
                 title="Attendance"
                 tabs={<AttendanceTabs />}
-                description={`Worked out from machine and HR.my punches, leave, holidays and each person's work schedule.${props.lastImport ? ` Punches loaded up to ${formatDate(props.lastImport)}.` : ''}`}
+                description={props.lastImport ? `Punches loaded up to ${formatDate(props.lastImport)}.` : undefined}
                 actions={can && (
                     <>
                         <Button variant="outline" asChild><Link href="/attendance/requests"><Inbox /> Requests{props.pendingRequests ? ` (${props.pendingRequests})` : ''}</Link></Button>

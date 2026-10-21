@@ -351,7 +351,6 @@ export default function Schedules({ schedules, unassigned, companies, today }: P
             <PageHeader
                 title="Work schedules"
                 tabs={<AttendanceTabs />}
-                description="Office timings people are held to. Each employee has one; the default covers anyone without."
                 actions={can && <Button onClick={() => setEditing('new')}><Plus /> Add schedule</Button>}
             />
             <div className="grid gap-4 px-4 py-6 md:px-6">

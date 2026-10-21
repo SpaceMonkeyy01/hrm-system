@@ -286,8 +286,7 @@ export default function Structure({ companies, categories, people }: Props) {
     return (
         <>
             <Head title="Departments and teams" />
-            <PageHeader title="Departments and teams" tabs={<SettingsTabs />}
-                description="Each company's departments, their heads (shown on the org chart and suggested as manager for new joiners) and teams, plus categories." />
+            <PageHeader title="Departments and teams" tabs={<SettingsTabs />} />
             <Tabs value={current} onValueChange={setTab} className="gap-4 px-4 py-6 md:px-6">
                 <TabsList className="w-auto">
                     {companies.map((c) => (

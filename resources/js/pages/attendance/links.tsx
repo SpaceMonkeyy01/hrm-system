@@ -256,7 +256,6 @@ export default function AttendanceLinks({ rows, unlinked, people, devices, compa
         <>
             <Head title="Attendance links" />
             <PageHeader title="Attendance links" tabs={<AttendanceTabs />}
-                description="Who is behind each machine number and HR.my ID. A link connects all of that number's punches, past and future. App clock-ins need no link."
                 actions={<>
                     <Button variant="outline" asChild><a href="/imports/links/template"><Download /> Download Excel</a></Button>
                     <Button variant="outline" asChild><Link href="/imports/links"><Upload /> Upload Excel</Link></Button>

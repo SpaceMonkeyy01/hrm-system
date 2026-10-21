@@ -90,7 +90,6 @@ export default function ClockIns(props: Props) {
             <PageHeader
                 title="App clock-ins"
                 tabs={<AttendanceTabs />}
-                description="Clock-ins from My page. A clock-in from an office network counts as office time; from anywhere else, remote."
             />
             <div className="grid max-w-6xl grid-cols-1 gap-8 px-4 py-6 md:px-6">
                 {!props.enabled && <p className="rounded-lg border border-pending/40 bg-pending/10 p-3 text-sm">Clocking in on the app is switched off on the server (HRM_CLOCK_ENABLED).</p>}

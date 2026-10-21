@@ -95,7 +95,7 @@ export default function Users({ users, roles, employees, staffLogins }: { users:
     return (
         <>
             <Head title="Users" />
-            <PageHeader title="Users" tabs={<SettingsTabs />} description="Who can log in and what they can do. There is no public sign-up: add each person here."
+            <PageHeader title="Users" tabs={<SettingsTabs />}
                 actions={<>
                     <Button variant="outline" onClick={() => router.post('/settings/test-email', {}, { preserveScroll: true })}><Mail /> Send a test email</Button>
                     <Button onClick={() => setOpen(true)}><Plus /> Add login</Button>

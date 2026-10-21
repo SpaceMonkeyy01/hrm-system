@@ -109,7 +109,7 @@ export default function Checklists({ lists, setsPerList, probation }: { lists: R
     return (
         <>
             <Head title="Checklists" />
-            <PageHeader title="Checklists" tabs={<SettingsTabs />} description="The columns of the onboarding, document and clearance grids. Add a new document type here and it appears for everyone. Items switched off are hidden but their history is kept." />
+            <PageHeader title="Checklists" tabs={<SettingsTabs />} />
             <Tabs defaultValue="document" className="px-4 py-4 md:px-6">
                 <TabsList>
                     {(Object.keys(listLabel) as ListName[]).map((l) => <TabsTrigger key={l} value={l}>{listLabel[l]} ({lists[l].length})</TabsTrigger>)}

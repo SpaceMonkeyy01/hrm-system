@@ -42,7 +42,6 @@ export default function PunchLog({ filters: f, punches, counts, sources, today }
             <PageHeader
                 title="Punch log"
                 tabs={<AttendanceTabs />}
-                description="Every punch exactly as it came in: from the attendance machine, HR.my files and clock-ins on the app. Days, late and absent are worked out from these."
                 actions={<Button variant="outline" asChild><a href={csv}><Download /> Download CSV</a></Button>}
             />
             <div className="grid grid-cols-1 gap-4 px-4 py-6 md:px-6">
