@@ -13,7 +13,7 @@ Things to know about the free plan:
 
 - **It sleeps after 15 minutes without visitors.** The first visit after that takes about a minute to load. That is normal.
 - **The app's own disk is wiped on every restart**, which is why the database lives in Neon/Supabase.
-- **Uploading scanned documents is switched off** (`HRM_FILES_ENABLED=false`), because uploads would be lost on restart. Keep scans in the Drive folders for now. To switch uploads on, see "Uploads" at the end, or move to a paid instance with a disk.
+- **Uploads (scans, photos, signed leave forms) go to a private Cloudflare R2 bucket**, because the app's own disk would lose them on restart. See "Uploads" at the end.
 - **Real HR data:** the Postgres provider stores it. Pick the region closest to you (Singapore for Pakistan) and keep the connection string private.
 
 About 30 minutes the first time.
@@ -156,9 +156,10 @@ After changing environment values, Render restarts the app by itself.
 
 Push to GitHub (`git push`). Render builds and deploys the new version, then runs any new migrations at start. Takes about 5 minutes; the old version keeps serving until the new one is ready.
 
-## Uploads (when you want them)
+## Uploads
 
-Free option: a **Cloudflare R2** bucket (10 GB free).
+Set up on a **Cloudflare R2** bucket (10 GB free), `hrm-files`. `render.yaml` switches uploads on and names the bucket and
+endpoint; only the two keys live in Render > Environment. To set it up again (new account or bucket):
 
 1. Cloudflare > R2 > create a bucket, e.g. `hrm-files` (private; never turn on public access).
 2. R2 > Manage API tokens > create a token with Object Read & Write on that bucket. Note the access key, the secret and the S3 endpoint `https://ACCOUNT-ID.r2.cloudflarestorage.com`.

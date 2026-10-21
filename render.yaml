@@ -46,11 +46,24 @@ services:
       - key: QUEUE_CONNECTION
         value: sync
 
-      # Uploaded scans: off until a bucket is set up (the free instance has no lasting disk).
+      # Uploaded scans, photos and signed leave forms: a private Cloudflare R2 bucket (the free instance has no
+      # lasting disk). AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are set in Render > Environment only, never here.
       - key: HRM_FILES_ENABLED
-        value: "false"
+        value: "true"
       - key: HRM_FILES_DISK
-        value: local
+        value: s3
+      - key: AWS_BUCKET
+        value: hrm-files
+      - key: AWS_ENDPOINT
+        value: https://24fd007d621bafdf7172e869c380803a.r2.cloudflarestorage.com
+      - key: AWS_DEFAULT_REGION
+        value: auto
+      - key: AWS_USE_PATH_STYLE_ENDPOINT
+        value: "true"
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
 
       # Email (reminders, staff login invites, forgotten passwords) through Resend's web API: Render free blocks the
       # SMTP ports. RESEND_API_KEY from resend.com > API Keys; MAIL_FROM_ADDRESS on the domain verified there.
