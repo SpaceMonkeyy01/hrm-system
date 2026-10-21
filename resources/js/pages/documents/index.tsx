@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { ChecklistGrid } from '@/components/checklist-grid';
 import type { ExtraColumn, GridRow } from '@/components/checklist-grid';
 import { EmptyState } from '@/components/empty-state';
-import { FilterBar } from '@/components/filter-bar';
+import { ActiveFilters, FilterBar, type FilterChip } from '@/components/filter-bar';
 import { NativeSelect } from '@/components/native-select';
 import { PageHeader } from '@/components/page-header';
 import { computedTone, StatusPill } from '@/components/status-pill';
@@ -86,6 +86,11 @@ export default function DocumentsIndex({ rows, columns, owed, optionSets, filter
     const company = companies.find((c) => String(c.id) === String(filters.company));
     const departments = company ? company.departments : companies.flatMap((c) => c.departments.map((d) => ({ ...d, name: `${d.name} (${c.name})` })));
     const missing = columns.find((c) => c.key === filters.missing);
+    const chips: FilterChip[] = [
+        missing && { key: 'missing', label: `Owes ${missing.label}`, clear: () => apply({ missing: undefined }) },
+        filters.scope && { key: 'scope', label: filters.scope === 'onboarding' ? 'Only people in onboarding' : 'Joined in the last 6 months', clear: () => apply({ scope: undefined }) },
+    ].filter(Boolean) as FilterChip[];
+    const clearAll = () => { setQ(''); router.get('/documents', {}, { preserveScroll: true, replace: true }); };
 
     const before: ExtraColumn<Row>[] = [
         { key: 'department', header: 'Department', className: 'min-w-44 max-w-52', cell: (r) => <span className="line-clamp-2 text-xs">{r.department ?? <span className="text-muted-foreground">-</span>}</span> },
@@ -112,11 +117,19 @@ export default function DocumentsIndex({ rows, columns, owed, optionSets, filter
                     <Button variant="outline" asChild><a href="/export/documents"><Download /> Export CSV</a></Button>
                 </>}
             >
-                <FilterBar active={[filters.company, filters.department, filters.status, filters.missing, filters.scope].filter(Boolean).length} search={
-                        <div className="relative w-full md:w-60">
+                <FilterBar grow moreActive={chips.length} active={[filters.company, filters.department, filters.status].filter(Boolean).length + chips.length} search={
+                        <div className="relative w-full">
                             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
                             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or code" className="pl-8" aria-label="Search" />
                         </div>
+                } more={
+                    <>
+                        <NativeSelect aria-label="Still owes" value={filters.missing ?? ''} placeholder="Owes any document"
+                            onChange={(e) => apply({ missing: e.target.value || undefined })} options={columns.map((c) => ({ value: c.key, label: `Owes ${c.label}` }))} />
+                        <NativeSelect aria-label="Who" value={filters.scope ?? 'all'}
+                            onChange={(e) => apply({ scope: e.target.value === 'all' ? undefined : e.target.value })}
+                            options={[{ value: 'all', label: 'All current employees' }, { value: 'onboarding', label: 'Only people in onboarding' }, { value: 'recent', label: 'Joined in the last 6 months' }]} />
+                    </>
                 }>
                     <NativeSelect aria-label="Company" className="w-40" value={filters.company ?? ''} placeholder="All companies"
                         onChange={(e) => apply({ company: e.target.value || undefined, department: undefined })} options={companies.map((c) => ({ value: c.id, label: c.name }))} />
@@ -124,12 +137,8 @@ export default function DocumentsIndex({ rows, columns, owed, optionSets, filter
                         onChange={(e) => apply({ department: e.target.value || undefined })} options={departments.map((d) => ({ value: d.id, label: d.name }))} />
                     <NativeSelect aria-label="Status" className="w-36" value={filters.status ?? ''} placeholder="Any status"
                         onChange={(e) => apply({ status: e.target.value || undefined })} options={[{ value: 'Pending', label: 'Pending' }, { value: 'Complete', label: 'Complete' }]} />
-                    <NativeSelect aria-label="Still owes" className="w-52" value={filters.missing ?? ''} placeholder="Owes any document"
-                        onChange={(e) => apply({ missing: e.target.value || undefined })} options={columns.map((c) => ({ value: c.key, label: `Owes ${c.label}` }))} />
-                    <NativeSelect aria-label="Who" className="w-56" value={filters.scope ?? 'all'}
-                        onChange={(e) => apply({ scope: e.target.value === 'all' ? undefined : e.target.value })}
-                        options={[{ value: 'all', label: 'All current employees' }, { value: 'onboarding', label: 'Only people in onboarding' }, { value: 'recent', label: 'Joined in the last 6 months' }]} />
                 </FilterBar>
+                <ActiveFilters chips={chips} onClearAll={clearAll} />
             </PageHeader>
             <ChecklistGrid
                 rows={rows}

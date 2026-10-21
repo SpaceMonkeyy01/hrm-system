@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { ChecklistGrid } from '@/components/checklist-grid';
 import type { ExtraColumn, GridRow } from '@/components/checklist-grid';
 import { EmptyState } from '@/components/empty-state';
-import { FilterBar } from '@/components/filter-bar';
+import { ActiveFilters, FilterBar, type FilterChip } from '@/components/filter-bar';
 import { NativeSelect, toOptions } from '@/components/native-select';
 import { PageHeader } from '@/components/page-header';
 import { computedTone, StatusPill } from '@/components/status-pill';
@@ -121,7 +121,15 @@ export default function OnboardingIndex({ rows, columns, optionSets, filters, co
 
     const company = companies.find((c) => String(c.id) === String(filters.company));
     const departments = company ? company.departments : companies.flatMap((c) => c.departments.map((d) => ({ ...d, name: `${d.name} (${c.name})` })));
-    const active = Object.entries(filters).filter(([k, v]) => v && k !== 'q').length > 0;
+    const chips: FilterChip[] = [
+        filters.show && { key: 'show', label: filters.show === 'closed' ? 'Closed records' : 'Open and closed', clear: () => apply({ show: undefined }) },
+        filters.cohort && { key: 'cohort', label: filters.cohort === 'none' ? 'No group' : `Group ${filters.cohort}`, clear: () => apply({ cohort: undefined }) },
+        filters.status && { key: 'status', label: `Onboarding: ${filters.status === 'complete' ? 'Complete' : 'In progress'}`, clear: () => apply({ status: undefined }) },
+        filters.orientation && { key: 'orientation', label: `Orientation: ${filters.orientation}`, clear: () => apply({ orientation: undefined }) },
+        filters.docs && { key: 'docs', label: `Documents: ${filters.docs}`, clear: () => apply({ docs: undefined }) },
+        filters.legal && { key: 'legal', label: 'Legal documents missing', clear: () => apply({ legal: undefined }) },
+    ].filter(Boolean) as FilterChip[];
+    const clearAll = () => { setQ(''); router.get('/onboarding', {}, { preserveScroll: true, replace: true }); };
 
     const before: ExtraColumn<Row>[] = [
         { key: 'department', header: 'Department', className: 'min-w-44 max-w-52', cell: (r) => <span className="line-clamp-2 text-xs">{r.department ?? <span className="text-muted-foreground">-</span>}</span> },
@@ -190,33 +198,36 @@ export default function OnboardingIndex({ rows, columns, optionSets, filters, co
                     <Button variant="outline" asChild><a href="/export/onboarding"><Download /> Export CSV</a></Button>
                 </>}
             >
-                <FilterBar active={[filters.company, filters.department, filters.cohort, filters.status, filters.orientation, filters.probation, filters.legal, filters.docs, filters.show].filter(Boolean).length} search={
-                        <div className="relative w-full md:w-60">
+                <FilterBar grow moreActive={chips.length} active={[filters.company, filters.department, filters.probation].filter(Boolean).length + chips.length} search={
+                        <div className="relative w-full">
                             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
                             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or code" className="pl-8" aria-label="Search" />
                         </div>
+                } more={
+                    <>
+                        <NativeSelect aria-label="Open or closed" value={show} onChange={(e) => apply({ show: e.target.value === 'open' ? undefined : e.target.value })}
+                            options={[{ value: 'open', label: 'Being tracked' }, { value: 'closed', label: `Closed (${closedCount})` }, { value: 'all', label: 'Open and closed' }]} />
+                        <NativeSelect aria-label="Group" value={filters.cohort ?? ''} placeholder="All groups"
+                            onChange={(e) => apply({ cohort: e.target.value || undefined })} options={[...cohorts.map((c) => ({ value: c, label: `Group ${c}` })), { value: 'none', label: 'No group' }]} />
+                        <NativeSelect aria-label="Onboarding status" value={filters.status ?? ''} placeholder="Any onboarding status"
+                            onChange={(e) => apply({ status: e.target.value || undefined })} options={[{ value: 'in_progress', label: 'In progress' }, { value: 'complete', label: 'Complete' }]} />
+                        <NativeSelect aria-label="Orientation" value={filters.orientation ?? ''} placeholder="Any orientation"
+                            onChange={(e) => apply({ orientation: e.target.value || undefined })} options={toOptions(['Not Started', 'In Progress', 'Complete'])} />
+                        <label className="flex items-center gap-2 px-1 text-sm">
+                            <input type="checkbox" className="size-4 accent-cascade" checked={!!filters.legal} onChange={(e) => apply({ legal: e.target.checked ? 'pending' : undefined })} />
+                            Legal documents missing
+                        </label>
+                    </>
                 }>
-                    <NativeSelect aria-label="Open or closed" className="w-40" value={show} onChange={(e) => apply({ show: e.target.value === 'open' ? undefined : e.target.value })}
-                        options={[{ value: 'open', label: 'Being tracked' }, { value: 'closed', label: `Closed (${closedCount})` }, { value: 'all', label: 'Open and closed' }]} />
                     <NativeSelect aria-label="Company" className="w-40" value={filters.company ?? ''} placeholder="All companies"
                         onChange={(e) => apply({ company: e.target.value || undefined, department: undefined })} options={companies.map((c) => ({ value: c.id, label: c.name }))} />
                     <NativeSelect aria-label="Department" className="w-52" value={filters.department ?? ''} placeholder="All departments"
                         onChange={(e) => apply({ department: e.target.value || undefined })} options={departments.map((d) => ({ value: d.id, label: d.name }))} />
-                    <NativeSelect aria-label="Group" className="w-32" value={filters.cohort ?? ''} placeholder="All groups"
-                        onChange={(e) => apply({ cohort: e.target.value || undefined })} options={[...cohorts.map((c) => ({ value: c, label: `Group ${c}` })), { value: 'none', label: 'No group' }]} />
-                    <NativeSelect aria-label="Onboarding status" className="w-36" value={filters.status ?? ''} placeholder="Any status"
-                        onChange={(e) => apply({ status: e.target.value || undefined })} options={[{ value: 'in_progress', label: 'In progress' }, { value: 'complete', label: 'Complete' }]} />
-                    <NativeSelect aria-label="Orientation" className="w-40" value={filters.orientation ?? ''} placeholder="Any orientation"
-                        onChange={(e) => apply({ orientation: e.target.value || undefined })} options={toOptions(['Not Started', 'In Progress', 'Complete'])} />
                     <NativeSelect aria-label="Probation" className="w-44" value={filters.probation ?? ''} placeholder="Any probation"
                         onChange={(e) => apply({ probation: e.target.value || undefined })}
                         options={[{ value: 'overdue', label: 'Past end date' }, { value: 'ending', label: 'Ends within 7 days' }, ...toOptions(probationResults), { value: 'none', label: 'Not tracked' }]} />
-                    <label className="flex items-center gap-2 px-1 text-sm">
-                        <input type="checkbox" className="size-4 accent-cascade" checked={!!filters.legal} onChange={(e) => apply({ legal: e.target.checked ? 'pending' : undefined })} />
-                        Legal documents missing
-                    </label>
-                    {active && <Button variant="ghost" size="sm" onClick={() => router.get('/onboarding', query({ q: filters.q }))}>Clear filters</Button>}
                 </FilterBar>
+                <ActiveFilters chips={chips} onClearAll={clearAll} />
                 {notInOnboarding > 0 && (
                     <p className="mt-3 text-xs text-muted-foreground">
                         {notInOnboarding} current employees aren't in onboarding (they weren't on either onboarding sheet). Start it from their profile.
