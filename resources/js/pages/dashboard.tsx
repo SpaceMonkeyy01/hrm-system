@@ -102,16 +102,16 @@ function RemindersCard({ reminders }: { reminders: Reminder[] }) {
                 <ul className="divide-y rounded-lg border">
                     {shown.map((r) => (
                         <li key={`${r.type}-${r.employee_id}-${r.due_date}-${r.link}`}>
-                            <Link href={r.link} className="group flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm hover:bg-accent">
+                            <Link href={r.link} className="group grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-3 py-2 text-sm hover:bg-accent sm:grid-cols-[5.5rem_5rem_minmax(0,1fr)_auto_1rem]">
                                 <StatusPill value={r.severity === 'overdue' ? 'Overdue' : 'Due soon'} tone={r.severity === 'overdue' ? 'missing' : 'pending'} className="w-20" />
-                                <span className="w-24 shrink-0 text-xs font-semibold text-muted-foreground">{reminderLabel[r.type]}</span>
-                                <span className="min-w-0 flex-1">
+                                <span className="truncate text-xs font-semibold text-muted-foreground">{reminderLabel[r.type]}</span>
+                                <span className="col-span-full min-w-0 sm:col-span-1">
                                     <span className="font-semibold group-hover:text-cascade group-hover:underline">{r.employee_name}</span>
                                     <span className="text-muted-foreground"> {r.employee_code}</span>
                                     <span className="block sm:inline"><span className="hidden sm:inline">: </span>{r.message}</span>
                                 </span>
-                                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{formatDate(r.due_date)}</span>
-                                <ArrowUpRight className="size-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100" />
+                                <span className="col-start-3 row-start-1 text-xs text-muted-foreground tabular-nums sm:col-start-4">{formatDate(r.due_date)}</span>
+                                <ArrowUpRight className="hidden size-4 text-muted-foreground opacity-0 group-hover:opacity-100 sm:block" />
                             </Link>
                         </li>
                     ))}
