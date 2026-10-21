@@ -11,17 +11,18 @@ import PrintLayout from '@/layouts/print-layout';
 const appName = import.meta.env.VITE_APP_NAME || 'HRM System';
 
 // Every file in ./pages is a page. The controller's Inertia::render('employees/show')
-// loads ./pages/employees/show.tsx. Bundled up front (eager) - it's a small internal app.
-const pages = import.meta.glob<{ default: ComponentType }>('./pages/**/*.tsx', { eager: true });
+// loads ./pages/employees/show.tsx. Each page is its own file, loaded when first opened;
+// app.blade.php also names the current page so the first load fetches both at once.
+const pages = import.meta.glob<{ default: ComponentType }>('./pages/**/*.tsx');
 
 void createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
-    resolve: (name) => {
-        const page = pages[`./pages/${name}.tsx`];
-        if (!page) {
+    resolve: async (name) => {
+        const load = pages[`./pages/${name}.tsx`];
+        if (!load) {
             throw new Error(`Page component not found: resources/js/pages/${name}.tsx`);
         }
-        return page;
+        return (await load()).default;
     },
     layout: (name) => (name.startsWith('auth/') ? AuthLayout : name.startsWith('print/') ? PrintLayout : AppLayout),
     strictMode: true,

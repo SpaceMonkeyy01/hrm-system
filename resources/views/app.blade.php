@@ -10,7 +10,7 @@
         <meta name="theme-color" content="#00435C">
 
         @viteReactRefresh
-        @vite(['resources/css/app.css', 'resources/js/app.tsx'])
+        @vite(['resources/css/app.css', 'resources/js/app.tsx', "resources/js/pages/{$page['component']}.tsx"])
         <x-inertia::head>
             <title>{{ config('app.name') }}</title>
         </x-inertia::head>
