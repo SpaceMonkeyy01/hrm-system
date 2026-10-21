@@ -4,6 +4,7 @@ import type { FormEvent } from 'react';
 import { Field } from '@/components/field';
 import { NativeSelect } from '@/components/native-select';
 import { PageHeader } from '@/components/page-header';
+import { SettingsTabs } from '@/components/section-tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -108,7 +109,7 @@ export default function Checklists({ lists, setsPerList, probation }: { lists: R
     return (
         <>
             <Head title="Checklists" />
-            <PageHeader title="Checklists" description="The columns of the onboarding, document and clearance grids. Add a new document type here and it appears for everyone. Items switched off are hidden but their history is kept." />
+            <PageHeader title="Checklists" tabs={<SettingsTabs />} description="The columns of the onboarding, document and clearance grids. Add a new document type here and it appears for everyone. Items switched off are hidden but their history is kept." />
             <Tabs defaultValue="document" className="px-4 py-4 md:px-6">
                 <TabsList>
                     {(Object.keys(listLabel) as ListName[]).map((l) => <TabsTrigger key={l} value={l}>{listLabel[l]} ({lists[l].length})</TabsTrigger>)}

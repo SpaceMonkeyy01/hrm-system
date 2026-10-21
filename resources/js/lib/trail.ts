@@ -14,10 +14,11 @@ export type Step = { url: string; path: string; title: string; scrollY: number }
 const KEY = 'hrm.trail';
 const RESTORE = 'hrm.trail.restore';
 
-/** Inertia components the sidebar opens: they start a fresh trail. */
+/** Inertia components the sidebar or a section's tabs (components/section-tabs.tsx) open: they start a fresh trail. */
 const ROOTS = new Set([
     'dashboard', 'overview', 'reports/index', 'employees/index', 'org-chart', 'onboarding/index', 'documents/index',
-    'reviews/index', 'offboarding/index', 'attendance/index', 'attendance/schedules', 'leave/index', 'assets/index',
+    'reviews/index', 'offboarding/index', 'attendance/index', 'attendance/schedules', 'attendance/punches',
+    'attendance/clock-ins', 'attendance/devices', 'attendance/links', 'leave/index', 'assets/index',
     'controlled-documents/index', 'settings/users', 'settings/structure', 'settings/checklists', 'letters/templates', 'me/show', 'account',
 ]);
 

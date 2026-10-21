@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { EmptyState } from '@/components/empty-state';
 import { Field } from '@/components/field';
 import { PageHeader, Section } from '@/components/page-header';
+import { AttendanceTabs } from '@/components/section-tabs';
 import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -87,8 +88,8 @@ export default function ClockIns(props: Props) {
         <>
             <Head title="App clock-ins" />
             <PageHeader
-                back={{ href: '/attendance', label: 'Attendance' }}
                 title="App clock-ins"
+                tabs={<AttendanceTabs />}
                 description="Clock-ins from My page. A clock-in from an office network counts as office time; from anywhere else, remote."
             />
             <div className="grid max-w-6xl grid-cols-1 gap-8 px-4 py-6 md:px-6">

@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/empty-state';
 import { FilterBar } from '@/components/filter-bar';
 import { NativeSelect } from '@/components/native-select';
 import { PageHeader } from '@/components/page-header';
+import { AttendanceTabs } from '@/components/section-tabs';
 import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -254,7 +255,7 @@ export default function AttendanceLinks({ rows, unlinked, people, devices, compa
     return (
         <>
             <Head title="Attendance links" />
-            <PageHeader back={{ href: '/attendance', label: 'Attendance' }} title="Attendance links"
+            <PageHeader title="Attendance links" tabs={<AttendanceTabs />}
                 description="Who is behind each machine number and HR.my ID. A link connects all of that number's punches, past and future. App clock-ins need no link."
                 actions={<>
                     <Button variant="outline" asChild><a href="/imports/links/template"><Download /> Download Excel</a></Button>

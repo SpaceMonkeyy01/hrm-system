@@ -1,6 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
-    CalendarClock,
     CircleUserRound,
     ChartColumnBig,
     ChevronsUpDown,
@@ -10,25 +9,19 @@ import {
     FileChartColumn,
     FileCheck2,
     HandCoins,
-    Fingerprint,
     House,
     Inbox,
     Laptop,
-    ListChecks,
-    ListOrdered,
     LogOut,
-    MapPin,
-    Network,
     Palmtree,
     ScrollText,
     Search,
+    Settings,
     Star,
-    UserCog,
     UserRound,
     Users,
     Workflow,
     Mail,
-    Link2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Avatar } from '@/components/avatar';
@@ -54,17 +47,21 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { APP_CREDIT } from '@/lib/app-info';
+import { cn } from '@/lib/utils';
 import type { SharedProps } from '@/types';
 
 /**
  * edit: only for HR and admin logins (the page itself returns 403 to others).
  * badge: key of a count in the shared "nav" prop (HandleInertiaRequests), shown when above 0.
+ * match: the path prefix that lights the item up, when it differs from href (Settings opens Users but covers /settings/*).
+ * Attendance and Settings have more pages; those are tabs on the pages (components/section-tabs.tsx).
  */
-type Item = { title: string; href: string; icon: LucideIcon; edit?: boolean; badge?: 'requests' | 'reviews' | 'leave' | 'inbox' };
+type Item = { title: string; href: string; icon: LucideIcon; edit?: boolean; badge?: 'requests' | 'reviews' | 'leave' | 'inbox'; match?: string };
 type Group = { label?: string; items: Item[] };
 
 const groups: Group[] = [
     {
+        label: 'Today',
         items: [
             { title: 'Home', href: '/dashboard', icon: House },
             { title: 'Requests', href: '/requests', icon: Inbox, edit: true, badge: 'inbox' },
@@ -87,11 +84,6 @@ const groups: Group[] = [
         label: 'Time',
         items: [
             { title: 'Attendance', href: '/attendance', icon: Clock, badge: 'requests' },
-            { title: 'Work schedules', href: '/attendance/schedules', icon: CalendarClock },
-            { title: 'App clock-ins', href: '/attendance/clock-ins', icon: MapPin, edit: true },
-            { title: 'Punch log', href: '/attendance/punches', icon: ListOrdered, edit: true },
-            { title: 'Devices', href: '/attendance/devices', icon: Fingerprint, edit: true },
-            { title: 'Attendance links', href: '/attendance/links', icon: Link2, edit: true },
             { title: 'Leave & holidays', href: '/leave', icon: Palmtree, badge: 'leave' },
         ],
     },
@@ -106,11 +98,7 @@ const groups: Group[] = [
     },
 ];
 
-const settings: Item[] = [
-    { title: 'Users', href: '/settings/users', icon: UserCog },
-    { title: 'Departments & teams', href: '/settings/structure', icon: Network },
-    { title: 'Checklists', href: '/settings/checklists', icon: ListChecks },
-];
+const settings: Item[] = [{ title: 'Settings', href: '/settings/users', icon: Settings, match: '/settings' }];
 
 const mine: Item[] = [{ title: 'My page', href: '/me', icon: CircleUserRound }];
 
@@ -142,15 +130,16 @@ export function AppLogo({ variant = 'mark' }: { variant?: 'mark' | 'full' }) {
 function useActive(all: Item[]): string | undefined {
     const { url } = usePage();
     const path = new URL(url, 'http://x').pathname;
-    const matches = (href: string) => path === href || path.startsWith(href + '/');
-    return all.filter((i) => matches(i.href)).sort((a, b) => b.href.length - a.href.length)[0]?.href;
+    const prefix = (i: Item) => i.match ?? i.href;
+    const matches = (i: Item) => path === prefix(i) || path.startsWith(prefix(i) + '/');
+    return all.filter(matches).sort((a, b) => prefix(b).length - prefix(a).length)[0]?.href;
 }
 
-function NavGroup({ label, items, active }: { label?: string; items: Item[]; active?: string }) {
+function NavGroup({ label, items, active, className }: { label?: string; items: Item[]; active?: string; className?: string }) {
     const { nav } = usePage<SharedProps>().props;
     if (!items.length) return null;
     return (
-        <SidebarGroup className="py-1">
+        <SidebarGroup className={cn('py-1', className)}>
             {label && <SidebarGroupLabel>{label}</SidebarGroupLabel>}
             <SidebarMenu>
                 {items.map((item) => {
@@ -209,7 +198,7 @@ export function AppSidebar() {
             <SidebarContent className="gap-0">
                 {visible.map((g, i) => <NavGroup key={g.label ?? i} label={g.label} items={g.items} active={active} />)}
                 {showMine && <NavGroup label="Me" items={mine} active={active} />}
-                {auth.can.admin && <NavGroup label="Settings" items={settings} active={active} />}
+                {auth.can.admin && <NavGroup label="Admin" items={settings} active={active} className="mt-auto" />}
             </SidebarContent>
 
             <SidebarFooter>

@@ -7,6 +7,7 @@ import { Avatar } from '@/components/avatar';
 import { EmptyState } from '@/components/empty-state';
 import { NativeSelect } from '@/components/native-select';
 import { PageHeader } from '@/components/page-header';
+import { AttendanceTabs } from '@/components/section-tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { formatDate, plural } from '@/lib/format';
@@ -50,6 +51,7 @@ export default function AttendanceIndex(props: Props) {
             <Head title="Attendance" />
             <PageHeader
                 title="Attendance"
+                tabs={<AttendanceTabs />}
                 description={`Worked out from machine and HR.my punches, leave, holidays and each person's work schedule.${props.lastImport ? ` Punches loaded up to ${formatDate(props.lastImport)}.` : ''}`}
                 actions={can && (
                     <>

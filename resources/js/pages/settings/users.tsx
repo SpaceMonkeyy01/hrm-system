@@ -5,6 +5,7 @@ import type { FormEvent } from 'react';
 import { Field } from '@/components/field';
 import { NativeSelect } from '@/components/native-select';
 import { PageHeader } from '@/components/page-header';
+import { SettingsTabs } from '@/components/section-tabs';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -94,7 +95,7 @@ export default function Users({ users, roles, employees, staffLogins }: { users:
     return (
         <>
             <Head title="Users" />
-            <PageHeader title="Users" description="Who can log in and what they can do. There is no public sign-up: add each person here."
+            <PageHeader title="Users" tabs={<SettingsTabs />} description="Who can log in and what they can do. There is no public sign-up: add each person here."
                 actions={<>
                     <Button variant="outline" onClick={() => router.post('/settings/test-email', {}, { preserveScroll: true })}><Mail /> Send a test email</Button>
                     <Button onClick={() => setOpen(true)}><Plus /> Add login</Button>

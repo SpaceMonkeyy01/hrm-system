@@ -8,6 +8,7 @@ import type { DeviceStatus } from '@/components/attendance';
 import { EmptyState } from '@/components/empty-state';
 import { Field } from '@/components/field';
 import { PageHeader } from '@/components/page-header';
+import { AttendanceTabs } from '@/components/section-tabs';
 import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -181,8 +182,8 @@ export default function Devices({ devices, defaults, cronReady }: Props) {
         <>
             <Head title="Attendance devices" />
             <PageHeader
-                back={{ href: '/attendance', label: 'Attendance' }}
                 title="Attendance devices"
+                tabs={<AttendanceTabs />}
                 description="The fingerprint and face machines the app reads punches from. Enrol each person under the same number on every machine, so one link covers all of them."
                 actions={<Button onClick={() => setEditing('new')}><Plus /> Add device</Button>}
             />

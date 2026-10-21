@@ -5,6 +5,7 @@ import type { FormEvent } from 'react';
 import { toast } from 'sonner';
 import { NativeSelect } from '@/components/native-select';
 import { PageHeader } from '@/components/page-header';
+import { SettingsTabs } from '@/components/section-tabs';
 import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -285,7 +286,7 @@ export default function Structure({ companies, categories, people }: Props) {
     return (
         <>
             <Head title="Departments and teams" />
-            <PageHeader title="Departments and teams"
+            <PageHeader title="Departments and teams" tabs={<SettingsTabs />}
                 description="Each company's departments, their heads (shown on the org chart and suggested as manager for new joiners) and teams, plus categories." />
             <Tabs value={current} onValueChange={setTab} className="gap-4 px-4 py-6 md:px-6">
                 <TabsList className="w-auto">

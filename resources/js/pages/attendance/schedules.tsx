@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/empty-state';
 import { Field } from '@/components/field';
 import { NativeSelect } from '@/components/native-select';
 import { PageHeader } from '@/components/page-header';
+import { AttendanceTabs } from '@/components/section-tabs';
 import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -349,6 +350,7 @@ export default function Schedules({ schedules, unassigned, companies, today }: P
             <Head title="Work schedules" />
             <PageHeader
                 title="Work schedules"
+                tabs={<AttendanceTabs />}
                 description="Office timings people are held to. Each employee has one; the default covers anyone without."
                 actions={can && <Button onClick={() => setEditing('new')}><Plus /> Add schedule</Button>}
             />

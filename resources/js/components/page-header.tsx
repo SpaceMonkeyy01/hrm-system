@@ -9,12 +9,15 @@ export function PageHeader({
     actions,
     back,
     children,
+    tabs,
 }: {
     title: ReactNode;
     description?: ReactNode;
     actions?: ReactNode;
     back?: { href: string; label: string };
     children?: ReactNode;
+    /** Links to the other pages of this section (AttendanceTabs, SettingsTabs), on the bottom border. */
+    tabs?: ReactNode;
 }) {
     return (
         <header className="relative isolate border-b px-4 pt-4 pb-4 md:px-6 md:pt-5">
@@ -32,6 +35,7 @@ export function PageHeader({
                 {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
             </div>
             {children && <div className="mt-4">{children}</div>}
+            {tabs && <div className="mt-3">{tabs}</div>}
         </header>
     );
 }

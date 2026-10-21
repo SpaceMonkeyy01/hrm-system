@@ -5,6 +5,7 @@ import type { FormEvent } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { NativeSelect } from '@/components/native-select';
 import { PageHeader } from '@/components/page-header';
+import { AttendanceTabs } from '@/components/section-tabs';
 import { Pagination } from '@/components/pagination';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,8 +40,8 @@ export default function PunchLog({ filters: f, punches, counts, sources, today }
         <>
             <Head title="Punch log" />
             <PageHeader
-                back={{ href: '/attendance', label: 'Attendance' }}
                 title="Punch log"
+                tabs={<AttendanceTabs />}
                 description="Every punch exactly as it came in: from the attendance machine, HR.my files and clock-ins on the app. Days, late and absent are worked out from these."
                 actions={<Button variant="outline" asChild><a href={csv}><Download /> Download CSV</a></Button>}
             />
