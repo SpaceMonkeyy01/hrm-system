@@ -137,8 +137,12 @@ Route::middleware('auth')->group(function () {
             Route::get('employees/{employee}/letters/new', [LetterController::class, 'draft'])->name('letters.draft');
             Route::post('employees/{employee}/letters', [LetterController::class, 'issue'])->name('letters.issue');
             Route::get('letters/templates', [LetterController::class, 'templates'])->name('letters.templates');
+            Route::get('letters/templates/new', [LetterController::class, 'newTemplate'])->name('letters.templates.new');
+            Route::get('letters/templates/{template}/edit', [LetterController::class, 'editTemplate'])->name('letters.templates.edit');
             Route::post('letters/templates', [LetterController::class, 'storeTemplate'])->name('letters.templates.store');
+            Route::post('letters/templates/preview', [LetterController::class, 'previewTemplate'])->name('letters.templates.preview');
             Route::put('letters/templates/{template}', [LetterController::class, 'updateTemplate'])->name('letters.templates.update');
+            Route::patch('letters/templates/{template}/active', [LetterController::class, 'toggleTemplate'])->name('letters.templates.active');
             Route::get('letters/{letter}', [LetterController::class, 'show'])->whereNumber('letter')->name('letters.show');
             Route::delete('employees/{employee}/photo', [PhotoController::class, 'destroy'])->name('photo.destroy');
             // Scanned documents: reading them is HR-only too (CNIC copies, contracts).

@@ -1,98 +1,115 @@
-import { Head, useForm } from '@inertiajs/react';
-import { Plus } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
-import { Field } from '@/components/field';
-import { NativeSelect } from '@/components/native-select';
-import { PageHeader, Section } from '@/components/page-header';
-import { StatusPill } from '@/components/status-pill';
+import { Head, Link, router } from '@inertiajs/react';
+import { Plus, Search } from 'lucide-react';
+import { useState } from 'react';
+import { EmptyState } from '@/components/empty-state';
+import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { formatDate, plural } from '@/lib/format';
+import { cn } from '@/lib/utils';
 
-type Template = { id: number; name: string; subject: string | null; body: string; details_label: string | null; checklist_key: string | null; conduct_type: string | null; is_active: boolean };
-type Option = { value: string; label: string };
-type Props = { templates: Template[]; fields: Record<string, string>; checklistItems: Option[]; conductTypes: Record<string, string> };
+type Template = {
+    id: number; name: string; subject: string | null; details_label: string | null; is_active: boolean;
+    checklist: string | null; conduct: string | null; issued: number; last_issued: string | null;
+};
 
-function TemplateForm({ t, checklistItems, conductTypes, onDone }: { t: Template | null; checklistItems: Option[]; conductTypes: Record<string, string>; onDone?: () => void }) {
-    const form = useForm({
-        name: t?.name ?? '', subject: t?.subject ?? '', body: t?.body ?? '', details_label: t?.details_label ?? '',
-        checklist_key: t?.checklist_key ?? '', conduct_type: t?.conduct_type ?? '', is_active: t?.is_active ?? true,
-    });
-    const submit = (e: FormEvent) => {
-        e.preventDefault();
-        form.transform((d) => ({ ...d, subject: d.subject || null, details_label: d.details_label || null, checklist_key: d.checklist_key || null, conduct_type: d.conduct_type || null }));
-        const opts = { preserveScroll: true, onSuccess: () => { form.setDefaults(); onDone?.(); } };
-        if (t) form.put(`/letters/templates/${t.id}`, opts);
-        else form.post('/letters/templates', opts);
-    };
+/** Offered when issuing: flips straight away (logged like any change). */
+function OfferedSwitch({ t }: { t: Template }) {
+    const [busy, setBusy] = useState(false);
     return (
-        <form onSubmit={submit} className="grid gap-4 rounded-lg border p-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Name" htmlFor={`n-${t?.id ?? 'new'}`} error={form.errors.name}>
-                    <Input id={`n-${t?.id ?? 'new'}`} required value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} />
-                </Field>
-                <Field label="Subject line on the letter" htmlFor={`s-${t?.id ?? 'new'}`} error={form.errors.subject}>
-                    <Input id={`s-${t?.id ?? 'new'}`} value={form.data.subject} onChange={(e) => form.setData('subject', e.target.value)} />
-                </Field>
-            </div>
-            <Field label="Text" htmlFor={`b-${t?.id ?? 'new'}`} error={form.errors.body} hint="Fields in double curly brackets are filled from the profile, e.g. {{name}}. Leave an empty line between paragraphs.">
-                <Textarea id={`b-${t?.id ?? 'new'}`} rows={10} required className="font-mono text-[13px]" value={form.data.body} onChange={(e) => form.setData('body', e.target.value)} />
-            </Field>
-            <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Ask for details when issuing" htmlFor={`d-${t?.id ?? 'new'}`} error={form.errors.details_label} hint="A question for {{details}}, e.g. What happened. Empty = not asked.">
-                    <Input id={`d-${t?.id ?? 'new'}`} value={form.data.details_label} onChange={(e) => form.setData('details_label', e.target.value)} />
-                </Field>
-                <Field label="Issuing it ticks this offboarding item" htmlFor={`c-${t?.id ?? 'new'}`} error={form.errors.checklist_key}>
-                    <NativeSelect id={`c-${t?.id ?? 'new'}`} value={form.data.checklist_key} placeholder="Nothing" options={checklistItems}
-                        onChange={(e) => form.setData('checklist_key', e.target.value)} />
-                </Field>
-                <Field label="Issuing it adds to the conduct record" htmlFor={`k-${t?.id ?? 'new'}`} error={form.errors.conduct_type}
-                    hint="For warning and appreciation letters: the person sees it on My page and acknowledges it.">
-                    <NativeSelect id={`k-${t?.id ?? 'new'}`} value={form.data.conduct_type} placeholder="Nothing"
-                        options={Object.entries(conductTypes).map(([value, label]) => ({ value, label }))} onChange={(e) => form.setData('conduct_type', e.target.value)} />
-                </Field>
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" className="size-4 accent-cascade" checked={form.data.is_active} onChange={(e) => form.setData('is_active', e.target.checked)} />
-                    Offer this letter when issuing
-                </label>
-                <Button type="submit" disabled={form.processing || (!!t && !form.isDirty)}>{t ? 'Save template' : 'Add template'}</Button>
-            </div>
-        </form>
+        <button type="button" role="switch" aria-checked={t.is_active} aria-label={`Offer ${t.name} when issuing`} disabled={busy}
+            onClick={(e) => {
+                e.stopPropagation();
+                router.patch(`/letters/templates/${t.id}/active`, { is_active: !t.is_active }, { preserveScroll: true, onStart: () => setBusy(true), onFinish: () => setBusy(false) });
+            }}
+            className={cn('relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-2 disabled:opacity-60',
+                t.is_active ? 'bg-cascade' : 'bg-muted-foreground/30')}>
+            <span className={cn('inline-block size-5 rounded-full bg-white shadow transition-transform', t.is_active ? 'translate-x-5.5' : 'translate-x-0.5')} />
+        </button>
     );
 }
 
-export default function LetterTemplates({ templates, fields, checklistItems, conductTypes }: Props) {
-    const [adding, setAdding] = useState(false);
+/** What issuing the letter does besides filing it: the question it asks, the offboarding item it ticks, the conduct record. */
+function WhenIssued({ t }: { t: Template }) {
+    const chips = [
+        t.details_label && `Asks: ${t.details_label}`,
+        t.checklist && `Ticks: ${t.checklist}`,
+        t.conduct && `Adds: ${t.conduct}`,
+    ].filter(Boolean) as string[];
+    if (!chips.length) return <span className="text-muted-foreground">-</span>;
+    return (
+        <span className="flex flex-wrap gap-1">
+            {chips.map((c) => <span key={c} className="rounded-full border bg-muted/50 px-2 py-0.5 text-xs">{c}</span>)}
+        </span>
+    );
+}
+
+const issuedText = (t: Template) => (t.issued ? `${plural(t.issued, 'time')}, last ${formatDate(t.last_issued)}` : 'Not yet');
+
+export default function LetterTemplates({ templates }: { templates: Template[] }) {
+    const [q, setQ] = useState('');
+    const term = q.trim().toLowerCase();
+    const shown = term ? templates.filter((t) => `${t.name} ${t.subject ?? ''}`.toLowerCase().includes(term)) : templates;
+    const open = (t: Template) => router.visit(`/letters/templates/${t.id}/edit`);
+
     return (
         <>
             <Head title="Letter templates" />
-            <PageHeader title="Letter templates" help="The letters HR can issue from a profile: experience, verification, appointment, warning and any you add."
-                actions={!adding && <Button onClick={() => setAdding(true)}><Plus /> Add template</Button>} />
-            <div className="grid gap-8 px-4 py-6 md:px-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
-                <div className="grid content-start gap-6">
-                    {adding && (
-                        <Section title="New template"><TemplateForm t={null} checklistItems={checklistItems} conductTypes={conductTypes} onDone={() => setAdding(false)} /></Section>
-                    )}
-                    {templates.map((t) => (
-                        <Section key={t.id} title={<span className="flex items-center gap-2">{t.name} {!t.is_active && <StatusPill value="Switched off" tone="neutral" />}</span>}>
-                            <TemplateForm t={t} checklistItems={checklistItems} conductTypes={conductTypes} />
-                        </Section>
-                    ))}
+            <PageHeader title="Letter templates"
+                help="The letters HR can issue from a profile. Click a template to change its text; switch it off to stop offering it when issuing. Letters already issued keep their own text."
+                actions={<Button asChild><Link href="/letters/templates/new"><Plus /> Add template</Link></Button>} />
+            <div className="grid gap-4 px-4 py-6 md:px-6">
+                <div className="relative max-w-sm">
+                    <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input className="pl-9" placeholder="Find a template" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Find a template" />
                 </div>
-                <aside className="self-start rounded-lg border p-4 xl:sticky xl:top-4">
-                    <h2 className="mb-2 font-bold">Fields you can use</h2>
-                    <ul className="grid gap-1.5 text-sm">
-                        {Object.entries(fields).map(([key, label]) => (
-                            <li key={key} className="flex flex-wrap items-baseline justify-between gap-x-2">
-                                <code className="rounded bg-muted px-1 text-[12px]">{`{{${key}}}`}</code>
-                                <span className="text-xs text-muted-foreground">{label}</span>
-                            </li>
-                        ))}
-                    </ul>
-                    <p className="mt-3 text-xs text-muted-foreground">A field with nothing on file shows in [brackets] in the draft, so HR can fill it in before issuing.</p>
-                </aside>
+
+                {shown.length === 0 ? (
+                    <EmptyState title={term ? 'No template matches.' : 'No templates yet.'} />
+                ) : (
+                    <>
+                        {/* Phones: one card per template. */}
+                        <ul className="grid gap-2 md:hidden">
+                            {shown.map((t) => (
+                                <li key={t.id} className="grid gap-2 rounded-lg border p-3" onClick={() => open(t)}>
+                                    <div className="flex items-start justify-between gap-3">
+                                        <Link href={`/letters/templates/${t.id}/edit`} className="font-semibold text-cascade hover:underline" onClick={(e) => e.stopPropagation()}>{t.name}</Link>
+                                        <OfferedSwitch t={t} />
+                                    </div>
+                                    <WhenIssued t={t} />
+                                    <p className="text-xs text-muted-foreground">{t.issued ? `Issued ${issuedText(t)}` : 'Not issued yet'}</p>
+                                </li>
+                            ))}
+                        </ul>
+
+                        <div className="hidden overflow-x-auto rounded-lg border md:block">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
+                                        <th className="px-3 py-2.5 font-semibold">Template</th>
+                                        <th className="px-3 py-2.5 font-semibold">Subject line</th>
+                                        <th className="px-3 py-2.5 font-semibold">When issued</th>
+                                        <th className="px-3 py-2.5 font-semibold">Issued</th>
+                                        <th className="px-3 py-2.5 font-semibold">Offered</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                    {shown.map((t) => (
+                                        <tr key={t.id} className={cn('cursor-pointer hover:bg-accent', !t.is_active && 'text-muted-foreground')} onClick={() => open(t)}>
+                                            <td className="px-3 py-3">
+                                                <Link href={`/letters/templates/${t.id}/edit`} className="font-semibold text-cascade hover:underline" onClick={(e) => e.stopPropagation()}>{t.name}</Link>
+                                            </td>
+                                            <td className="px-3 py-3">{t.subject || <span className="text-muted-foreground">-</span>}</td>
+                                            <td className="px-3 py-3"><WhenIssued t={t} /></td>
+                                            <td className="px-3 py-3 whitespace-nowrap tabular-nums">{issuedText(t)}</td>
+                                            <td className="px-3 py-3"><OfferedSwitch t={t} /></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </>
+                )}
             </div>
         </>
     );

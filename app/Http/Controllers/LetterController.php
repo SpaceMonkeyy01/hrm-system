@@ -11,6 +11,7 @@ use App\Models\LetterTemplate;
 use App\Services\LetterRenderer;
 use App\Services\StaffMail;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -24,30 +25,87 @@ use Inertia\Response;
  */
 class LetterController extends Controller
 {
+    /** The list: what each template does when issued and how often it has been, without the letter text. */
     public function templates(): Response
     {
+        $checklist = $this->offboardingItems()->pluck('label', 'value');
+
         return Inertia::render('letters/templates', [
-            'templates' => LetterTemplate::query()->orderBy('sort_order')->orderBy('name')->get()
-                ->map->only('id', 'name', 'subject', 'body', 'details_label', 'checklist_key', 'conduct_type', 'is_active'),
-            'conductTypes' => ConductEntry::TYPES,
-            'fields' => LetterRenderer::FIELDS,
-            'checklistItems' => ChecklistItem::where('list', 'offboarding')->where('is_active', true)->orderBy('sort_order')->get(['key', 'label'])
-                ->map(fn ($i) => ['value' => $i->key, 'label' => $i->label]),
+            'templates' => LetterTemplate::query()->withCount('issued')->withMax('issued', 'issued_on')
+                ->orderBy('sort_order')->orderBy('name')->get()
+                ->map(fn (LetterTemplate $t) => $t->only('id', 'name', 'subject', 'details_label', 'is_active') + [
+                    'checklist' => $t->checklist_key ? ($checklist[$t->checklist_key] ?? $t->checklist_key) : null,
+                    'conduct' => $t->conduct_type ? (ConductEntry::TYPES[$t->conduct_type] ?? $t->conduct_type) : null,
+                    'issued' => $t->issued_count,
+                    'last_issued' => $t->issued_max_issued_on ? CarbonImmutable::parse($t->issued_max_issued_on)->toDateString() : null,
+                ]),
         ]);
+    }
+
+    public function newTemplate(): Response
+    {
+        return $this->editor(null);
+    }
+
+    public function editTemplate(LetterTemplate $template): Response
+    {
+        return $this->editor($template);
     }
 
     public function storeTemplate(Request $request): RedirectResponse
     {
         $t = LetterTemplate::create($this->templateData($request, null) + ['sort_order' => (int) LetterTemplate::max('sort_order') + 10]);
 
-        return back()->with('success', "Added the template {$t->name}.");
+        return to_route('letters.templates')->with('success', "Added the template {$t->name}.");
     }
 
     public function updateTemplate(Request $request, LetterTemplate $template): RedirectResponse
     {
         $template->update($this->templateData($request, $template));
 
-        return back()->with('success', "Saved {$template->name}.");
+        return to_route('letters.templates')->with('success', "Saved {$template->name}.");
+    }
+
+    /** The Offered switch on the list: whether HR can pick this letter when issuing. */
+    public function toggleTemplate(Request $request, LetterTemplate $template): RedirectResponse
+    {
+        $template->update($request->validate(['is_active' => ['required', 'boolean']]));
+
+        return back()->with('success', $template->is_active ? "{$template->name} is offered when issuing." : "{$template->name} is no longer offered when issuing.");
+    }
+
+    /**
+     * The editor's preview: the unsaved text filled in for one person, exactly as the draft would be. Nothing is saved;
+     * it posts because the text can be longer than a URL allows.
+     */
+    public function previewTemplate(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'employee_id' => ['required', 'integer', Rule::exists('employees', 'id')],
+            'body' => ['required', 'string', 'max:20000'],
+            'details' => ['nullable', 'string', 'max:5000'],
+        ]);
+        $employee = Employee::with(['company:id,name,code', 'department:id,name', 'team:id,name'])->findOrFail($data['employee_id']);
+
+        return response()->json(LetterRenderer::render($data['body'], $employee, $data['details'] ?? null) + ['reference' => LetterRenderer::nextReference($employee)]);
+    }
+
+    private function editor(?LetterTemplate $template): Response
+    {
+        return Inertia::render('letters/template', [
+            'template' => $template?->only('id', 'name', 'subject', 'body', 'details_label', 'checklist_key', 'conduct_type', 'is_active'),
+            'issued' => $template ? IssuedLetter::where('letter_template_id', $template->id)->count() : 0,
+            'conductTypes' => ConductEntry::TYPES,
+            'fields' => LetterRenderer::FIELDS,
+            'checklistItems' => $this->offboardingItems(),
+        ]);
+    }
+
+    /** @return \Illuminate\Support\Collection<int, array{value: string, label: string}> */
+    private function offboardingItems()
+    {
+        return ChecklistItem::where('list', 'offboarding')->where('is_active', true)->orderBy('sort_order')->get(['key', 'label'])
+            ->map(fn ($i) => ['value' => $i->key, 'label' => $i->label]);
     }
 
     /** The draft: the chosen template filled in for this person, with anything not on file listed. */
