@@ -37,7 +37,7 @@ class EmployeeController extends Controller
         ]);
         $status = $f['status'] ?? 'current';
 
-        $q = EmployeeFilters::apply(Employee::query()->with(['company:id,name', 'department:id,name', 'team:id,name']), $f);
+        $q = EmployeeFilters::apply(Employee::query()->with(['company:id,name', 'department:id,name', 'team:id,name', 'manager:id,full_name']), $f);
 
         match ($f['sort'] ?? 'name') {
             'code' => $q->orderBy('employee_code'),
@@ -51,11 +51,15 @@ class EmployeeController extends Controller
             'company' => $e->company?->name, 'department' => $e->department?->name, 'team' => $e->team?->name,
             'role_title' => $e->role_title, 'employment_type' => $e->employment_type,
             'start_date' => $e->start_date?->toDateString(), 'status' => $e->status, 'needs_review' => $e->needs_review,
+            'manager' => $e->manager ? ['id' => $e->manager->id, 'name' => $e->manager->full_name] : null,
         ]);
 
         return Inertia::render('employees/index', [
             'employees' => $page,
             'filters' => ['status' => $status] + $f,
+            // "61 current, 3 left" under the title, and "Showing 6 of 61": everyone with this status, before the other filters.
+            'counts' => ['current' => Employee::whereIn('status', ['active', 'offboarding'])->count(), 'left' => Employee::where('status', 'exited')->count()],
+            'statusTotal' => EmployeeFilters::apply(Employee::query(), ['status' => $status])->count(),
             'companies' => $this->companyOptions(),
             'employmentTypes' => config('hrm.employment_types'),
             'workModes' => config('hrm.work_modes'),

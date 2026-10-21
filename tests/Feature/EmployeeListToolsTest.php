@@ -57,6 +57,32 @@ class EmployeeListToolsTest extends TestCase
         $this->assertSame(['Boss', 'Nobody'], $this->names('/employees?linked=no'));
     }
 
+    public function test_export_selected_contains_only_the_ticked_people(): void
+    {
+        $a = $this->employee($this->company, ['full_name' => 'Ticked One']);
+        $b = $this->employee($this->company, ['full_name' => 'Ticked Two', 'status' => 'exited']);
+        $this->employee($this->company, ['full_name' => 'Left Alone']);
+
+        $csv = $this->actingAs($this->user('viewer'))->get("/export/employees?ids[]={$a->id}&ids[]={$b->id}")->assertOk()->streamedContent();
+        $this->assertStringContainsString('Ticked One', $csv);
+        $this->assertStringContainsString('Ticked Two', $csv);
+        $this->assertStringNotContainsString('Left Alone', $csv);
+        $this->actingAs($this->user('viewer'))->get('/export/employees?ids[]=abc')->assertSessionHasErrors('ids.0');
+    }
+
+    public function test_list_shows_managers_and_counts(): void
+    {
+        $boss = $this->employee($this->company, ['full_name' => 'Fake Boss']);
+        $this->employee($this->company, ['full_name' => 'Fake Report', 'manager_id' => $boss->id, 'work_mode' => 'Remote']);
+        $this->employee($this->company, ['full_name' => 'Fake Leaver', 'status' => 'exited']);
+
+        $this->actingAs($this->user('viewer'))->get('/employees?mode=Remote')->assertInertia(fn (AssertableInertia $p) => $p
+            ->where('counts', ['current' => 2, 'left' => 1])
+            ->where('statusTotal', 2)
+            ->where('employees.total', 1)
+            ->where('employees.data.0.manager', ['id' => $boss->id, 'name' => 'Fake Boss']));
+    }
+
     public function test_export_follows_the_filters(): void
     {
         $emerge = Company::create(['name' => 'Emerge', 'code' => 'EMG', 'employee_code_prefix' => 'EMG-', 'employee_code_digits' => 3]);

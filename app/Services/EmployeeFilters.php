@@ -26,6 +26,9 @@ class EmployeeFilters
             'started_to' => ['nullable', 'date_format:Y-m-d'],
             'login' => ['nullable', 'in:yes,no'],
             'linked' => ['nullable', 'in:yes,no'],
+            // Export selected: exactly the people ticked on the list.
+            'ids' => ['nullable', 'array', 'max:1000'],
+            'ids.*' => ['integer'],
         ];
     }
 
@@ -52,6 +55,7 @@ class EmployeeFilters
             ->when(($f['login'] ?? null) === 'yes', fn ($q) => $q->whereHas('user'))
             ->when(($f['login'] ?? null) === 'no', fn ($q) => $q->whereDoesntHave('user'))
             ->when(($f['linked'] ?? null) === 'yes', fn ($q) => $q->where($linked))
-            ->when(($f['linked'] ?? null) === 'no', fn ($q) => $q->whereNot($linked));
+            ->when(($f['linked'] ?? null) === 'no', fn ($q) => $q->whereNot($linked))
+            ->when($f['ids'] ?? null, fn ($q, $v) => $q->whereIn('id', $v));
     }
 }
