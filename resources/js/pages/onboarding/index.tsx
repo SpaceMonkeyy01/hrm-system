@@ -184,7 +184,7 @@ export default function OnboardingIndex({ rows, columns, optionSets, filters, co
             <Head title="Onboarding" />
             <PageHeader
                 title="Onboarding tracker"
-                description="One row per person in onboarding. Click a status to change it, or focus it and type the first letter (Y, N, D). Tick rows to update many at once."
+                help="One row per person in onboarding. Click a status to change it, or focus it and type the first letter (Y, N, D). Tick rows to update many at once."
                 actions={<>
                     {can && closeCandidates.dated + closeCandidates.undated > 0 && <Button variant="outline" onClick={() => setClosingOut(true)}><Archive /> Close out old records</Button>}
                     <Button variant="outline" asChild><a href="/export/onboarding"><Download /> Export CSV</a></Button>

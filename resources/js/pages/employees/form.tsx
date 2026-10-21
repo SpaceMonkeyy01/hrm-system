@@ -111,9 +111,10 @@ export default function EmployeeForm({ employee, companies, managers, employment
             <PageHeader
                 back={editing ? { href: `/employees/${employee.id}`, label: employee.full_name } : fromLinks ? { href: '/attendance/links?tab=numbers', label: 'Attendance links' } : { href: '/employees', label: 'Employees' }}
                 title={editing ? `Edit ${employee.full_name}` : 'Add employee'}
-                description={editing ? undefined : fromLinks
+                description={!editing && fromLinks
                     ? `Someone who punches ${prefill?.machine ? `as machine no. ${prefill.machine}` : `as HR.my ID ${prefill?.hrmy}`} but has no employee record. Saving adds them and links the number.`
-                    : 'New employees start onboarding straight away, on probation for 90 days from the start date.'}
+                    : undefined}
+                help={editing || fromLinks ? undefined : 'New employees start onboarding straight away, on probation for 90 days from the start date.'}
             />
             <form onSubmit={submit} className="grid max-w-4xl gap-8 px-4 py-6 md:px-6">
                 <fieldset className="grid gap-4 sm:grid-cols-2">

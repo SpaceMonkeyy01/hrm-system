@@ -286,7 +286,7 @@ export default function LeaveIndex(props: Props) {
     return (
         <>
             <Head title="Leave" />
-            <PageHeader title="Leave" description="Approved leave and public holidays. Staff apply on My page and HR approves under Requests; leave approved elsewhere is recorded here."
+            <PageHeader title="Leave" help="Approved leave and public holidays. Staff apply on My page and HR approves under Requests; leave approved elsewhere is recorded here."
                 actions={can && <>
                     <Button variant="outline" asChild><Link href="/leave/requests">Requests{nav?.leave ? ` (${nav.leave})` : ''}</Link></Button>
                     <Button onClick={() => setAdding(true)}><Plus /> Record leave</Button>

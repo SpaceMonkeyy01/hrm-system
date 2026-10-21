@@ -42,7 +42,8 @@ export default function Overview(props: Props) {
             <Head title="Overview" />
             <PageHeader
                 title="Overview"
-                description={`How the company looks on ${formatDate(props.today)}: people, movement, documents, onboarding and this month's attendance.`}
+                description={formatDate(props.today)}
+                help="How the company looks: people, movement, documents, onboarding and this month's attendance."
                 actions={props.companies.length > 1 && (
                     <NativeSelect className="w-44" aria-label="Company" value={props.filters.company ?? ''} placeholder="All companies"
                         options={props.companies.map((c) => ({ value: c.id, label: c.name }))}

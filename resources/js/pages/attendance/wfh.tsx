@@ -30,7 +30,7 @@ export default function WfhRequests(props: Props) {
             <PageHeader
                 back={{ href: '/requests', label: 'Requests' }}
                 title="Work from home requests"
-                description="Days staff asked to work from home. Approved days show WFH approved on attendance; remote time on other days is flagged."
+                help="Days staff asked to work from home. Approved days show WFH approved on attendance; remote time on other days is flagged."
             >
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
                     {Object.entries(props.statuses).map(([key, label]) => (

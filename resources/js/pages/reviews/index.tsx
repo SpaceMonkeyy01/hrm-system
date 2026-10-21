@@ -17,7 +17,7 @@ export default function ReviewsIndex({ cycles, cycleStatuses }: Props) {
     return (
         <>
             <Head title="Performance reviews" />
-            <PageHeader title="Performance reviews" description="Review cycles: people rate themselves on My page, HR adds the manager review, people read and acknowledge it."
+            <PageHeader title="Performance reviews" help="Review cycles: people rate themselves on My page, HR adds the manager review, people read and acknowledge it."
                 actions={<Button onClick={() => setCreating(true)}><Plus /> New review cycle</Button>} />
             <div className="px-4 py-6 md:px-6">
                 {cycles.length === 0 ? (

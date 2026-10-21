@@ -15,7 +15,7 @@ export default function Account({ user }: { user: { name: string; email: string;
     return (
         <>
             <Head title="Your account" />
-            <PageHeader title="Your account" description={`Logged in as ${user.email}. Ask an admin to change your email or role.`} />
+            <PageHeader title="Your account" description={`Logged in as ${user.email}.`} help="Ask an admin to change your email or role." />
             <form onSubmit={submit} className="grid max-w-md gap-4 px-4 py-6 md:px-6">
                 <Field label="Name" htmlFor="name" error={form.errors.name}>
                     <Input id="name" value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} required />

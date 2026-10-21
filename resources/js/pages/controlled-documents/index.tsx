@@ -52,7 +52,7 @@ export default function ControlledDocuments({ documents, filters, types, statuse
             <Head title="Controlled documents" />
             <PageHeader
                 title="Controlled documents"
-                description="The register of HR policies, templates, forms and letters, each with a document number."
+                help="The register of HR policies, templates, forms and letters, each with a document number."
                 actions={auth.can.edit && <Button onClick={() => openFor('new')}><Plus /> Add document</Button>}
             >
                 <div className="flex flex-wrap gap-2">

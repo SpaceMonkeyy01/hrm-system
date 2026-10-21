@@ -40,7 +40,7 @@ export default function OffboardingIndex({ cases, filters, types, employees }: {
             <Head title="Offboarding" />
             <PageHeader
                 title="Offboarding"
-                description="Leavers, their last working day and clearance. Completing an offboarding marks the employee as exited."
+                help="Leavers, their last working day and clearance. Completing an offboarding marks the employee as exited."
                 actions={auth.can.edit && <Button onClick={() => setOpen(true)}><Plus /> Start offboarding</Button>}
             >
                 <div className="flex gap-2">

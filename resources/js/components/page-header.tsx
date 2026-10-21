@@ -1,11 +1,16 @@
 import type { ReactNode } from 'react';
 import { Breadcrumbs } from '@/components/breadcrumbs';
+import { HelpTip } from '@/components/help-tip';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 
-/** Title, one line saying what the page is for, and the page's main actions on the right. */
+/**
+ * Title, the page's main actions on the right, and a line of live facts about what's shown (description).
+ * What the page is for and how to use it goes in help: a ? next to the title, so it doesn't crowd the page.
+ */
 export function PageHeader({
     title,
     description,
+    help,
     actions,
     back,
     children,
@@ -13,6 +18,7 @@ export function PageHeader({
 }: {
     title: ReactNode;
     description?: ReactNode;
+    help?: ReactNode;
     actions?: ReactNode;
     back?: { href: string; label: string };
     children?: ReactNode;
@@ -28,7 +34,10 @@ export function PageHeader({
                 <div className="flex min-w-0 items-start gap-2">
                     <SidebarTrigger className="mt-0.5 -ml-1 hidden md:inline-flex" />
                     <div className="min-w-0">
-                        <h1 className="font-display text-xl font-semibold tracking-tight text-balance md:text-2xl">{title}</h1>
+                        <div className="flex items-center gap-1.5">
+                            <h1 className="font-display text-xl font-semibold tracking-tight text-balance md:text-2xl">{title}</h1>
+                            {help && <HelpTip label="About this page">{help}</HelpTip>}
+                        </div>
                         {description && <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{description}</p>}
                     </div>
                 </div>

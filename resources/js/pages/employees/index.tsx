@@ -113,7 +113,7 @@ export default function EmployeesIndex(props: Props) {
             <Head title="Employees" />
             <PageHeader
                 title="Employees"
-                description="Everyone in BCC and Emerge, with one unique code each and a permanent system ID that never changes."
+                help="Everyone in BCC and Emerge, with one unique code each and a permanent system ID that never changes."
                 actions={
                     <>
                         <Button variant="outline" asChild>

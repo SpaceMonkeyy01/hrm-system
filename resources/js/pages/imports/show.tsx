@@ -26,7 +26,7 @@ export default function SpreadsheetImportPage({ kind, meta, upload, plan, maxKb 
     return (
         <>
             <Head title={meta.title} />
-            <PageHeader back={meta.back} title={meta.title} description={meta.description} />
+            <PageHeader back={meta.back} title={meta.title} help={meta.description} />
 
             <div className="grid max-w-5xl gap-10 px-4 py-6 md:px-6">
                 {!plan && (

@@ -234,7 +234,7 @@ export default function Assets(props: Props) {
             <Head title="Assets" />
             <PageHeader
                 title="Assets"
-                description="Company property and who has it. Offboarding can't be completed while someone still has something on this list."
+                help="Company property and who has it. Offboarding can't be completed while someone still has something on this list."
                 actions={can && (
                     <>
                         <Button variant="outline" onClick={() => setDialog({ kind: 'types', asset: null })}><Tags /> Types</Button>

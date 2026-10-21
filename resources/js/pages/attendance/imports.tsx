@@ -139,7 +139,7 @@ export default function AttendanceImports({ imports, unlinkedCount, sources, pen
     return (
         <>
             <Head title="Attendance files" />
-            <PageHeader back={{ href: '/attendance', label: 'Attendance' }} title="Attendance files" description="Upload the machine and HR.my files. Link their IDs to employees on Attendance links." />
+            <PageHeader back={{ href: '/attendance', label: 'Attendance' }} title="Attendance files" help="Upload the machine and HR.my files. Link their IDs to employees on Attendance links." />
             <div className="grid gap-10 px-4 py-6 md:px-6">
                 <MachineSyncBar machine={machine} canSync showRecent />
                 <UploadForm maxKb={maxKb} />

@@ -178,7 +178,8 @@ export default function Dashboard(props: Props) {
             <Head title="Home" />
             <PageHeader
                 title={firstName ? `Hello, ${firstName}` : 'Home'}
-                description={`What needs doing on ${formatDate(props.today)}${companyName ? ` at ${companyName}` : ''}. Company-wide numbers are on Overview, and the full lists are on Reports.`}
+                description={`${formatDate(props.today)}${companyName ? `, ${companyName}` : ''}`}
+                help="What needs doing today. Company-wide numbers are on Overview, and the full lists are on Reports."
                 actions={auth.can.edit && (
                     <>
                         <Button variant="outline" asChild><Link href="/employees/create"><UserPlus /> Add employee</Link></Button>

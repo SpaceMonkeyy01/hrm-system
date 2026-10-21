@@ -105,7 +105,8 @@ export default function DocumentsIndex({ rows, columns, owed, optionSets, filter
             <Head title="Documents" />
             <PageHeader
                 title="Document checklist"
-                description={missing ? `People who still owe: ${missing.label}.` : 'The documents HR holds for every current employee. A person is Complete when every document is Yes, Not Required, Old employee or not available.'}
+                description={missing ? `People who still owe: ${missing.label}.` : undefined}
+                help="The documents HR holds for every current employee. A person is Complete when every document is Yes, Not Required, Old employee or not available."
                 actions={<>
                     {baseline && baseline.cells + baseline.undated_cells > 0 && <Button variant="outline" onClick={() => setMarking(true)}><History /> Mark old staff</Button>}
                     <Button variant="outline" asChild><a href="/export/documents"><Download /> Export CSV</a></Button>

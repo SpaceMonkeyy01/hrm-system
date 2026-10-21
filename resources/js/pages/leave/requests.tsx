@@ -74,7 +74,7 @@ export default function LeaveRequests(props: Props) {
             <PageHeader
                 back={{ href: '/leave', label: 'Leave' }}
                 title="Leave requests"
-                description="Leave staff applied for on My page. Check the attached form (the manager's approval is on it), then approve or say why not."
+                help="Leave staff applied for on My page. Check the attached form (the manager's approval is on it), then approve or say why not."
             >
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
                     {Object.entries(props.statuses).map(([key, label]) => (

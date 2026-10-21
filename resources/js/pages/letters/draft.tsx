@@ -47,7 +47,8 @@ export default function LetterDraft({ employee, templates, template, details, dr
             <Head title={`Letter for ${employee.name}`} />
             <PageHeader back={{ href: `/employees/${employee.id}`, label: employee.name }}
                 title={<span className="flex items-center gap-3"><Avatar name={employee.name} photo={employee.photo} className="size-10 text-sm" />Issue a letter</span>}
-                description={`For ${employee.name} (${employee.code}). Check the draft, change anything you need, then issue it. It gets reference ${reference}.`} />
+                description={`For ${employee.name} (${employee.code}), reference ${reference}.`}
+                help="Check the draft, change anything you need, then issue it." />
 
             {!template || !draft ? (
                 <div className="p-4 md:p-6"><EmptyState icon={FileText} title="No letter templates are switched on.">Add one under Letter templates.</EmptyState></div>

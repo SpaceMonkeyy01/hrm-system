@@ -73,7 +73,7 @@ export default function Loans(props: Props) {
         <>
             <Head title="Loans" />
             <PageHeader back={{ href: '/requests', label: 'Requests' }} title="Loans"
-                description="Loan requests from My page and the loans being repaid. Until payroll is in the app, record each month's deduction here.">
+                help="Loan requests from My page and the loans being repaid. Until payroll is in the app, record each month's deduction here.">
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
                     {Object.entries(props.statuses).map(([key, label]) => (
                         <Button key={key} size="sm" variant={props.status === key ? 'default' : 'outline'}

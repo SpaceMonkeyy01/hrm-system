@@ -201,7 +201,8 @@ export default function OrgChart(props: Props) {
             <Head title="Org chart" />
             <PageHeader
                 title="Org chart"
-                description={`${plural(props.total, 'current employee')}: a chart and a board by department and team, a plain list, and who reports to whom.`}
+                description={`${plural(props.total, 'current employee')}.`}
+                help="A chart and a board by department and team, a plain list, and who reports to whom."
                 actions={view !== 'checkup' && <Button variant="outline" className="print:hidden" onClick={print} title="Tip: choose Landscape in the print window for wide charts"><Printer /> Print</Button>}
             >
                 <p className="hidden text-sm print:block">{companyName ?? 'BCC and Emerge'}, printed {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>

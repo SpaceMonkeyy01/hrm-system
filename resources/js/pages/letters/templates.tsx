@@ -68,7 +68,7 @@ export default function LetterTemplates({ templates, fields, checklistItems, con
     return (
         <>
             <Head title="Letter templates" />
-            <PageHeader title="Letter templates" description="The letters HR can issue from a profile: experience, verification, appointment, warning and any you add."
+            <PageHeader title="Letter templates" help="The letters HR can issue from a profile: experience, verification, appointment, warning and any you add."
                 actions={!adding && <Button onClick={() => setAdding(true)}><Plus /> Add template</Button>} />
             <div className="grid gap-8 px-4 py-6 md:px-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
                 <div className="grid content-start gap-6">

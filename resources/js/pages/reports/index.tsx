@@ -9,7 +9,7 @@ export default function ReportsIndex({ groups }: Props) {
     return (
         <>
             <Head title="Reports" />
-            <PageHeader title="Reports" description="Ready-made reports. Each one opens on screen with filters and downloads for Excel with the same numbers." />
+            <PageHeader title="Reports" help="Ready-made reports. Each one opens on screen with filters and downloads for Excel with the same numbers." />
             <div className="grid gap-8 p-4 md:p-6">
                 {groups.filter((g) => g.reports.length).map((g) => (
                     <Section key={g.key} title={g.label}>

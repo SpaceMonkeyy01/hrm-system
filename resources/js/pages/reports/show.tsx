@@ -124,7 +124,7 @@ export default function ReportShow({ report, filters, today, companies, result }
             <PageHeader
                 back={{ href: '/reports', label: 'Reports' }}
                 title={report.title}
-                description={report.description}
+                help={report.description}
                 actions={<Button variant="outline" asChild><a href={exportUrl}><Download /> Download for Excel</a></Button>}
             >
                 <div className="flex flex-wrap items-end gap-2">

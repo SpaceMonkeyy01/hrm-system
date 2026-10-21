@@ -170,7 +170,7 @@ export default function MyPage(props: Props) {
         return (
             <>
                 <Head title="My page" />
-                <PageHeader title="My page" description="Your own record, attendance and leave." />
+                <PageHeader title="My page" help="Your own record, attendance and leave." />
                 <div className="p-4 md:p-6">
                     <EmptyState title="Your login isn't linked to an employee record yet.">Ask HR or an admin to link it under Settings, Users.</EmptyState>
                 </div>

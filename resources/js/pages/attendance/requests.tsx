@@ -61,7 +61,7 @@ export default function AttendanceRequests(props: Props) {
             <PageHeader
                 back={{ href: '/attendance', label: 'Attendance' }}
                 title="Attendance requests"
-                description="Fixes staff asked for on My page: a forgotten punch, the machine down, working from another site."
+                help="Fixes staff asked for on My page: a forgotten punch, the machine down, working from another site."
             >
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
                     {Object.entries(props.statuses).map(([key, label]) => (

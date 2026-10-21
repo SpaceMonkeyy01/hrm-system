@@ -12,7 +12,7 @@ export default function RequestsInbox({ queues }: { queues: Queue[] }) {
     return (
         <>
             <Head title="Requests" />
-            <PageHeader title="Requests" description={total ? `${total} waiting for HR. Everything staff asked for on their My page.` : 'Nothing waiting. Everything staff asked for on their My page shows here.'} />
+            <PageHeader title="Requests" description={total ? `${total} waiting for HR.` : 'Nothing waiting.'} help="Everything staff asked for on their My page shows here." />
             <div className="grid max-w-3xl gap-3 px-4 py-6 md:px-6">
                 {queues.map((q) => (
                     <Link key={q.key} href={q.href} className="flex items-center gap-4 rounded-lg border p-4 hover:bg-accent/40">
