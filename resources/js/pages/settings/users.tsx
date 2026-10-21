@@ -3,6 +3,7 @@ import { KeyRound, Mail, MailPlus, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Field } from '@/components/field';
+import { HelpTip } from '@/components/help-tip';
 import { NativeSelect } from '@/components/native-select';
 import { PageHeader } from '@/components/page-header';
 import { SettingsTabs } from '@/components/section-tabs';
@@ -99,11 +100,7 @@ export default function Users({ users, roles, employees, staffLogins }: { users:
                 actions={<>
                     <Button variant="outline" onClick={() => router.post('/settings/test-email', {}, { preserveScroll: true })}><Mail /> Send a test email</Button>
                     <Button onClick={() => setOpen(true)}><Plus /> Add login</Button>
-                </>}>
-                <ul className="grid gap-1 text-sm text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
-                    {Object.entries(roles).map(([k, v]) => <li key={k}>{v}</li>)}
-                </ul>
-            </PageHeader>
+                </>} />
             <div className="mx-4 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 md:mx-6">
                 <p className="max-w-3xl text-sm">
                     <span className="font-semibold">Staff logins for My page. </span>
@@ -125,7 +122,14 @@ export default function Users({ users, roles, employees, staffLogins }: { users:
                     <thead>
                         <tr className="border-b text-left text-xs text-muted-foreground">
                             <th className="min-w-56 py-2.5 pr-3 font-semibold">Name and email</th>
-                            <th className="w-36 py-2.5 pr-3 font-semibold">Role</th>
+                            <th className="w-36 py-2.5 pr-3 font-semibold">
+                                Role{' '}
+                                <HelpTip label="What each role can do">
+                                    <ul className="grid gap-1.5">
+                                        {Object.entries(roles).map(([k, v]) => <li key={k}>{v}</li>)}
+                                    </ul>
+                                </HelpTip>
+                            </th>
                             <th className="w-52 py-2.5 pr-3 font-semibold">Their employee record</th>
                             <th className="w-36 py-2.5 pr-3 font-semibold">Access</th>
                             <th className="w-44 py-2.5 pr-3 font-semibold">Set a password</th>
