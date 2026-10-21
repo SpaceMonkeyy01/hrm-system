@@ -1,5 +1,5 @@
 import { Head, router, useForm, usePage } from '@inertiajs/react';
-import { KeyRound, Mail, MailPlus, Plus, Trash2 } from 'lucide-react';
+import { Ellipsis, KeyRound, Mail, MailPlus, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Field } from '@/components/field';
@@ -8,6 +8,7 @@ import { NativeSelect } from '@/components/native-select';
 import { PageHeader } from '@/components/page-header';
 import { SettingsTabs } from '@/components/section-tabs';
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/password-input';
@@ -65,19 +66,26 @@ function UserRow({ user, roles, isMe, employees }: { user: User; roles: Record<s
             <td className="py-2 text-right">
                 <form onSubmit={submit} className="flex justify-end gap-1">
                     <Button size="sm" type="submit" disabled={!form.isDirty || form.processing}>Save</Button>
-                    <Button size="sm" type="button" variant="ghost" disabled={!user.is_active} aria-label={`Email ${user.email} a link to choose a password`}
-                        title={user.is_active ? 'Email a link to choose a password' : 'Switched off'}
-                        onClick={() => confirm(`Email ${user.email} a link to choose a password?`)
-                            && router.post(`/settings/users/${user.id}/send-link`, {}, { preserveScroll: true, onError: firstError })}>
-                        <KeyRound /> Send link
-                    </Button>
-                    {!isMe && !user.has_history && (
-                        <Button size="sm" type="button" variant="ghost" aria-label={`Delete ${user.email}`} title="Delete: this login hasn't done anything yet"
-                            onClick={() => confirm(`Delete the login for ${user.email}? This can't be undone.`)
-                                && router.delete(`/settings/users/${user.id}`, { preserveScroll: true, onError: firstError })}>
-                            <Trash2 />
-                        </Button>
-                    )}
+                    {/* Less used actions in a menu, so the table fits next to the sidebar. */}
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button size="sm" type="button" variant="ghost" aria-label={`More for ${user.email}`}><Ellipsis /></Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-64">
+                            <DropdownMenuItem disabled={!user.is_active}
+                                onSelect={() => confirm(`Email ${user.email} a link to choose a password?`)
+                                    && router.post(`/settings/users/${user.id}/send-link`, {}, { preserveScroll: true, onError: firstError })}>
+                                <KeyRound /> {user.is_active ? 'Email a password link' : 'Switched off: no link'}
+                            </DropdownMenuItem>
+                            {!isMe && !user.has_history && (
+                                <DropdownMenuItem className="text-missing focus:text-missing"
+                                    onSelect={() => confirm(`Delete the login for ${user.email}? This can't be undone.`)
+                                        && router.delete(`/settings/users/${user.id}`, { preserveScroll: true, onError: firstError })}>
+                                    <Trash2 /> Delete this login
+                                </DropdownMenuItem>
+                            )}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </form>
             </td>
         </tr>
@@ -118,7 +126,7 @@ export default function Users({ users, roles, employees, staffLogins }: { users:
                 </Button>
             </div>
             <div className="overflow-x-auto px-4 py-4 md:px-6">
-                <table className="w-full min-w-[1120px] text-sm">
+                <table className="w-full min-w-[960px] text-sm">
                     <thead>
                         <tr className="border-b text-left text-xs text-muted-foreground">
                             <th className="min-w-56 py-2.5 pr-3 font-semibold">Name and email</th>
@@ -130,10 +138,10 @@ export default function Users({ users, roles, employees, staffLogins }: { users:
                                     </ul>
                                 </HelpTip>
                             </th>
-                            <th className="w-52 py-2.5 pr-3 font-semibold">Their employee record</th>
+                            <th className="w-48 py-2.5 pr-3 font-semibold">Their employee record</th>
                             <th className="w-36 py-2.5 pr-3 font-semibold">Access</th>
                             <th className="w-44 py-2.5 pr-3 font-semibold">Set a password</th>
-                            <th className="w-56 py-2.5" />
+                            <th className="w-24 py-2.5"><span className="sr-only">Actions</span></th>
                         </tr>
                     </thead>
                     <tbody className="divide-y">
