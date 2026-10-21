@@ -1,4 +1,5 @@
 import { Head, Link, useForm } from '@inertiajs/react';
+import { useEffect } from 'react';
 import type { FormEvent } from 'react';
 import { Field } from '@/components/field';
 import { NativeSelect, toOptions } from '@/components/native-select';
@@ -88,6 +89,15 @@ export default function EmployeeForm({ employee, companies, managers, employment
         if (editing) form.put(`/employees/${employee.id}`);
         else form.post('/employees');
     };
+
+    // Opened from a profile's "+ CNIC"-style button (/edit#cnic): start at that field.
+    useEffect(() => {
+        const el = window.location.hash ? document.getElementById(window.location.hash.slice(1)) : null;
+        if (el) {
+            el.scrollIntoView({ block: 'center' });
+            el.focus({ preventScroll: true });
+        }
+    }, []);
 
     const text = (name: keyof typeof d, label: string, props: Record<string, unknown> = {}, hint?: string) => (
         <Field label={label} htmlFor={name} error={form.errors[name]} hint={hint}>

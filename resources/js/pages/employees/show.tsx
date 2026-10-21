@@ -1,22 +1,24 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Download, ExternalLink, FileText, FolderOpen, Mail, Pencil, Trash2, Upload } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
+import { ChevronRight, Download, Ellipsis, ExternalLink, FileText, FolderOpen, Mail, Pencil, Trash2, Upload } from 'lucide-react';
+import { type FormEvent, type ReactNode, useState } from 'react';
 import { toast } from 'sonner';
 import { AttendanceHeatmap } from '@/components/attendance-heatmap';
 import type { AttendanceYear } from '@/components/attendance-heatmap';
 import { Avatar } from '@/components/avatar';
 import { PhotoEditor } from '@/components/photo-editor';
 import { EmptyState } from '@/components/empty-state';
-import { Detail, Field } from '@/components/field';
+import { Field } from '@/components/field';
 import { NativeSelect, toOptions } from '@/components/native-select';
 import { PageHeader } from '@/components/page-header';
 import { StatusPicker } from '@/components/status-picker';
 import { computedTone, StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { formatDate, formatDateTime } from '@/lib/format';
+import { daysBetween, formatDate, formatDateTime } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import type { ActivityItem, ChecklistColumn, OptionSets, SharedProps, Tone } from '@/types';
 import { FeedbackPanel } from '@/components/feedback';
 import type { Feedback } from '@/components/feedback';
@@ -390,6 +392,175 @@ function describe(a: ActivityItem): string {
 }
 
 /** Tab for the page's #hash. Older links (#attendance, #leave, #assets, #job, #offboarding) open the tab that holds them now. */
+/** Completeness labels (Employee::completeness) -> the edit form field that fills them, so "+ CNIC" opens Edit there. */
+const missingField: Record<string, string> = {
+    'Work email': 'email', Phone: 'phone', CNIC: 'cnic', 'CNIC expiry': 'cnic_expiry', 'Date of birth': 'date_of_birth', 'Start date': 'start_date',
+    Role: 'role_title', Manager: 'manager_id', 'Employment type': 'employment_type', 'Emergency contact': 'emergency_contact_name',
+    'Bank account': 'bank_account_number', 'Attendance ID': 'attendance_machine_id',
+};
+
+/** How many of a list's items count as done (the option's done flag comes from config, as on the grids). */
+const listDone = (l: List, optionSets: OptionSets) =>
+    l.columns.filter((c) => { const v = l.values[c.key]; return !!v && !!optionSets[c.option_set]?.find((x) => x.value === v)?.done; }).length;
+
+function TabCount({ done, total }: { done: number; total: number }) {
+    return <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', done >= total ? 'bg-done-soft text-done' : 'bg-pending-soft text-pending')}>{done} of {total}</span>;
+}
+
+const localToday = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const days = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
+const years = (n: number) => `${n} ${n === 1 ? 'year' : 'years'}`;
+
+/** "1 year next week", "3 years with us", "starts in 4 days" */
+function startedNote(start: string, today: string): string {
+    const d = daysBetween(start, today);
+    if (d < 0) return `starts in ${days(-d)}`;
+    const [sy, sm, sd] = start.split('-').map(Number);
+    const [ty] = today.split('-').map(Number);
+    const md = `${String(sm).padStart(2, '0')}-${String(sd).padStart(2, '0')}`;
+    let next = `${ty}-${md}`;
+    if (next < today) next = `${ty + 1}-${md}`;
+    const until = daysBetween(today, next);
+    const at = Number(next.slice(0, 4)) - sy;
+    if (at > 0 && until <= 7) return `${years(at)} ${until === 0 ? 'today' : until === 1 ? 'tomorrow' : 'next week'}`;
+    const done = at - 1;
+    return done > 0 ? `${years(done)} with us` : `${days(d)} ago`;
+}
+
+/** The strip under the name: manager, start, probation, today, leave left. */
+function KeyFacts({ e, o, attendance, leave }: { e: Employee; o: Onboarding | null; attendance: AttendanceMonth; leave: Props['leave'] }) {
+    const today = localToday();
+    const day = attendance.days.find((d) => d.date === today);
+    const probation = !o || o.probation_result === 'Not tracked' ? { value: 'Not tracked', tone: 'text-muted-foreground', note: null }
+        : o.probation_result === 'Pass' ? { value: 'Passed', tone: 'text-done', note: null }
+            : o.probation_result === 'Fail' ? { value: 'Not passed', tone: 'text-missing', note: null }
+                : o.overdue ? { value: 'Decision overdue', tone: 'text-missing', note: o.probation_end_date && `ended ${formatDate(o.probation_end_date)}` }
+                    : { value: o.probation_result === 'Extend' ? 'Extended' : 'In probation', tone: 'text-pending', note: o.probation_end_date && `ends ${formatDate(o.probation_end_date)}` };
+    const todayText = e.status === 'exited' ? 'Left' : !day ? 'No data'
+        : day.status === 'At work' && day.in ? `At work since ${day.in}`
+            : day.in ? `${day.status}, ${day.in}${day.out ? ` to ${day.out}` : ''}` : day.status;
+    const source = e.attendance_machine_id ? `Machine No. ${e.attendance_machine_id}` : e.hr_portal_id ? `HR.my ${e.hr_portal_id}` : attendance.linked ? 'Clocks in on the app' : 'Not linked';
+    const annual = leave.balances.find((b) => /annual/i.test(b.type)) ?? leave.balances[0];
+    const cell = (label: string, value: ReactNode, note?: ReactNode, tone?: string) => (
+        <div className="grid content-start gap-0.5 bg-card px-4 py-3 max-lg:last:col-span-2">
+            <dt className="text-xs text-muted-foreground">{label}</dt>
+            <dd className={cn('font-bold', tone)}>{value}</dd>
+            {note && <dd className="text-xs text-muted-foreground">{note}</dd>}
+        </div>
+    );
+    return (
+        <dl className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border lg:grid-cols-5">
+            {cell('Manager', e.manager ? <Link href={`/employees/${e.manager.id}`} className="text-cascade hover:underline">{e.manager.name}</Link> : <span className="font-normal text-muted-foreground">Not set</span>)}
+            {cell('Started', e.start_date ? formatDate(e.start_date) : <span className="font-normal text-muted-foreground">Not recorded</span>, e.start_date && startedNote(e.start_date, today))}
+            {cell('Probation', probation.value, probation.note, probation.tone)}
+            {cell('Today', todayText, todayText === source ? null : source)}
+            {cell(`Leave left ${leave.year}`, annual ? `${annual.left} of ${annual.allowance} days` : <span className="font-normal text-muted-foreground">-</span>, annual && annual.type)}
+        </dl>
+    );
+}
+
+/** "Sales, Inbound"; just "Executives" when the team has the department's name. */
+const deptAndTeam = (e: Employee) => [...new Set([e.department, e.team].filter(Boolean))].join(', ');
+
+type DetailRow = [string, ReactNode];
+const filled = (v: ReactNode) => v !== null && v !== undefined && v !== '' && v !== false;
+
+function DetailCard({ title, rows, showEmpty, children }: { title: string; rows: DetailRow[]; showEmpty: boolean; children?: ReactNode }) {
+    const shown = rows.filter(([, v]) => showEmpty || filled(v));
+    if (!shown.length && !children) return null;
+    return (
+        <section className="rounded-lg border p-4">
+            <h2 className="mb-3 font-bold">{title}</h2>
+            <dl className="grid gap-2.5">
+                {shown.map(([label, v]) => (
+                    <div key={label} className="grid grid-cols-[minmax(6.5rem,40%)_minmax(0,1fr)] gap-3 text-sm">
+                        <dt className="text-muted-foreground">{label}</dt>
+                        <dd className="break-words">{filled(v) ? v : <span className="text-muted-foreground/70">-</span>}</dd>
+                    </div>
+                ))}
+            </dl>
+            {children}
+        </section>
+    );
+}
+
+/** Details tab: cards with what is on file; empty fields fold away behind "Show N empty fields". */
+function DetailsTab({ e }: { e: Employee }) {
+    const [showEmpty, setShowEmpty] = useState(false);
+    const link = (p: { id: number; name: string } | null) => p && <Link className="text-cascade hover:underline" href={`/employees/${p.id}`}>{p.name}</Link>;
+    const cards: { title: string; rows: DetailRow[] }[] = [
+        { title: 'Work', rows: [
+            ['Company', e.company], ['Department', deptAndTeam(e)], ['Second department', e.secondary_department],
+            ['Role', e.role_title], ['Manager', link(e.manager)], ['Second manager', link(e.secondary_manager)],
+            ['Categories', e.categories.length > 0 && <span className="flex flex-wrap gap-1">{e.categories.map((c) => <span key={c} className="rounded-full border bg-muted px-2 py-0.5 text-xs">{c}</span>)}</span>],
+            ['Employment', [e.employment_type, e.work_mode, e.work_location].filter(Boolean).join(', ')], ['Start date', formatDate(e.start_date)],
+            ['Confirmation date', formatDate(e.confirmation_date)], ['Exit date', formatDate(e.exit_date)],
+        ] },
+        { title: 'Contact', rows: [
+            ['Work email', e.email], ['Phone', e.phone], ['Gender', e.gender], ['City', e.city],
+            ...(e.private_hidden ? [] : [
+                ['Personal email', e.personal_email], ['Other phone', e.alternate_phone],
+                ['Current address', e.current_address && <span className="whitespace-pre-line">{e.current_address}</span>],
+                ['Permanent address', e.permanent_address && <span className="whitespace-pre-line">{e.permanent_address}</span>],
+            ] as DetailRow[]),
+        ] },
+        { title: 'Systems', rows: [
+            ['Employee code', e.employee_code], ['System ID', e.system_id], ['HR.my ID', e.hr_portal_id],
+            ['Attendance', [e.attendance_machine_id && `Machine No. ${e.attendance_machine_id}`, e.attendance_device && `${e.attendance_device.code} ${e.attendance_device.name}`, e.attendance_machine].filter(Boolean).join(', ')],
+            ['Drive folder', e.drive_folder_url && <a className="inline-flex items-center gap-1 text-cascade hover:underline" href={e.drive_folder_url} target="_blank" rel="noreferrer">Open folder <ExternalLink className="size-3.5" /></a>],
+            ['Imported from', e.source_ref], ['Notes', e.notes && <span className="whitespace-pre-line">{e.notes}</span>],
+        ] },
+        ...(e.private_hidden ? [] : [
+            { title: 'Personal', rows: [
+                ['Full name', e.full_name], ['First and last name', [e.first_name, e.last_name].filter(Boolean).join(' ')], ['Father or husband name', e.father_name],
+                ['CNIC', e.cnic], ['CNIC expiry', formatDate(e.cnic_expiry)], ['Date of birth', formatDate(e.date_of_birth)],
+                ['Marital status', e.marital_status], ['Blood group', e.blood_group],
+            ] as DetailRow[] },
+            { title: 'Emergency contact and bank', rows: [
+                ['Emergency contact', [e.emergency_contact_name, e.emergency_contact_relation && `(${e.emergency_contact_relation})`].filter(Boolean).join(' ')],
+                ['Emergency phone', e.emergency_contact_phone], ['Bank', e.bank_name], ['Account title', e.bank_account_title], ['Account number or IBAN', e.bank_account_number],
+            ] as DetailRow[] },
+        ]),
+    ];
+    const empty = cards.flatMap((c) => c.rows.filter(([, v]) => !filled(v)).map(([label]) => label));
+
+    return (
+        <div className="grid gap-4">
+            <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {cards.map((c) => (
+                    <DetailCard key={c.title} title={c.title} rows={c.rows} showEmpty={showEmpty}>
+                        {c.title === 'Systems' && e.legacy && (
+                            <details className="mt-3 text-sm">
+                                <summary className="cursor-pointer font-semibold text-muted-foreground">Earlier records ({Object.keys(e.legacy).length})</summary>
+                                <dl className="mt-2 grid gap-1.5">
+                                    {Object.entries(e.legacy).map(([k, v]) => (
+                                        <div key={k} className="grid grid-cols-[9rem_1fr] gap-2"><dt className="text-muted-foreground">{legacyLabel(k)}</dt><dd>{v}</dd></div>
+                                    ))}
+                                </dl>
+                            </details>
+                        )}
+                    </DetailCard>
+                ))}
+            </div>
+            {empty.length > 0 && (
+                <div className="text-sm">
+                    <button type="button" onClick={() => setShowEmpty((s) => !s)} className="inline-flex items-center gap-1.5 font-semibold text-cascade hover:underline" aria-expanded={showEmpty}>
+                        <ChevronRight className={cn('size-4 transition-transform', showEmpty && 'rotate-90')} />
+                        {showEmpty ? 'Hide empty fields' : `Show ${empty.length} empty ${empty.length === 1 ? 'field' : 'fields'}`}
+                    </button>
+                    {!showEmpty && <p className="mt-1 pl-5.5 text-xs text-muted-foreground">{empty.join(', ')}.</p>}
+                </div>
+            )}
+            {e.private_hidden && (
+                <p className="rounded-lg border px-3 py-3 text-sm text-muted-foreground">Personal, emergency contact and bank details are only shown to HR and admin logins.</p>
+            )}
+        </div>
+    );
+}
+
 const TAB_ALIASES: Record<string, string> = { attendance: 'time', leave: 'time', assets: 'documents', job: 'history', offboarding: 'history' };
 function tabFromHash(): string {
     const hash = typeof window !== 'undefined' ? window.location.hash.slice(1) : '';
@@ -407,56 +578,69 @@ export default function EmployeeShow(props: Props) {
             onSuccess: () => toast.success('Saved.'), onError: (err) => toast.error(Object.values(err)[0] ?? 'Not saved.') });
 
     const legal = lists.document.columns.filter((c) => ['policy_acknowledgment', 'nda_signed', 'nca_signed'].includes(c.key));
+    const owed = lists.document.columns.length - listDone(lists.document, optionSets);
 
     return (
         <>
             <Head title={e.full_name} />
             <PageHeader
                 back={{ href: '/employees', label: 'Employees' }}
-                title={<span className="flex items-center gap-3">
-                    {can ? <PhotoEditor name={e.full_name} photo={e.photo} uploadUrl={`/employees/${e.id}/photo`} removeUrl={`/employees/${e.id}/photo`} className="size-10 text-sm" />
-                        : <Avatar name={e.full_name} photo={e.photo} className="size-10 text-sm" />}
-                    {e.full_name}
+                title={<span className="flex items-center gap-4">
+                    {can ? <PhotoEditor name={e.full_name} photo={e.photo} uploadUrl={`/employees/${e.id}/photo`} removeUrl={`/employees/${e.id}/photo`} className="size-14 text-base" />
+                        : <Avatar name={e.full_name} photo={e.photo} className="size-14 text-base" />}
+                    <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        {e.full_name}
+                        <StatusPill value={statusLabel[e.status] ?? e.status} tone={statusTone[e.status as keyof typeof statusTone] ?? 'neutral'} />
+                    </span>
                 </span>}
                 description={
-                    <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="sm:pl-[4.5rem]">
                         <span className="font-semibold text-ink tabular-nums">{e.employee_code}</span>
-                        <StatusPill value={statusLabel[e.status] ?? e.status} tone={statusTone[e.status as keyof typeof statusTone] ?? 'neutral'} />
-                        <span>{[...new Set([e.role_title, e.team, e.department, e.company].filter(Boolean))].join(', ') || 'No department yet'}</span>
+                        {[...new Set([e.role_title, deptAndTeam(e), e.company].filter(Boolean))].map((x) => <span key={x}> · {x}</span>)}
                     </span>
                 }
                 actions={
                     <>
-                        {e.drive_folder_url && (
-                            <Button variant="outline" asChild>
-                                <a href={e.drive_folder_url} target="_blank" rel="noreferrer"><FolderOpen /> Drive folder</a>
-                            </Button>
-                        )}
-                        {props.planEnabled && (props.plan ? (
-                            <Button variant="outline" asChild><Link href={`/employees/${e.id}/plan`}>90-day plan</Link></Button>
-                        ) : can && (
-                            <Button variant="outline" onClick={() => router.post(`/employees/${e.id}/plan`)}>Start 90-day plan</Button>
-                        ))}
                         {can && <Button variant="outline" asChild><Link href={`/employees/${e.id}/letters/new`}><Mail /> Issue a letter</Link></Button>}
-                        {can && <Button asChild><Link href={`/employees/${e.id}/edit`}><Pencil /> Edit</Link></Button>}
-                        {auth.can.admin && (
-                            <Button variant="ghost" aria-label="Delete employee" onClick={() => {
-                                if (confirm(`Delete ${e.full_name}? The record moves to the archive and can be restored by a developer.`)) router.delete(`/employees/${e.id}`);
-                            }}><Trash2 /></Button>
+                        {(e.drive_folder_url || props.planEnabled || auth.can.admin) && (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" size="icon" aria-label="More actions"><Ellipsis /></Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-52">
+                                    {e.drive_folder_url && (
+                                        <DropdownMenuItem asChild><a href={e.drive_folder_url} target="_blank" rel="noreferrer"><FolderOpen /> Drive folder</a></DropdownMenuItem>
+                                    )}
+                                    {props.planEnabled && (props.plan ? (
+                                        <DropdownMenuItem asChild><Link href={`/employees/${e.id}/plan`}><FileText /> 90-day plan</Link></DropdownMenuItem>
+                                    ) : can && (
+                                        <DropdownMenuItem onSelect={() => router.post(`/employees/${e.id}/plan`)}><FileText /> Start 90-day plan</DropdownMenuItem>
+                                    ))}
+                                    {auth.can.admin && (
+                                        <DropdownMenuItem className="text-missing focus:text-missing" onSelect={() => {
+                                            if (confirm(`Delete ${e.full_name}? The record moves to the archive and can be restored by a developer.`)) router.delete(`/employees/${e.id}`);
+                                        }}><Trash2 /> Delete employee</DropdownMenuItem>
+                                    )}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         )}
+                        {can && <Button asChild><Link href={`/employees/${e.id}/edit`}><Pencil /> Edit</Link></Button>}
                     </>
                 }
             >
+                <KeyFacts e={e} o={o} attendance={props.attendance} leave={props.leave} />
                 {props.completeness && props.completeness.done < props.completeness.total && (
-                    <div className="flex max-w-3xl flex-wrap items-center gap-x-4 gap-y-1.5">
-                        <div className="h-1.5 w-40 overflow-hidden rounded-full bg-muted" role="img"
-                            aria-label={`${props.completeness.done} of ${props.completeness.total} key details on file`}>
-                            <div className="h-full rounded-full bg-cascade" style={{ width: `${(props.completeness.done / props.completeness.total) * 100}%` }} />
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                            <span className="font-semibold text-foreground">{props.completeness.done} of {props.completeness.total}</span> key details on file. Missing: {props.completeness.missing.join(', ')}.
-                            {can && <> <Link href={`/employees/${e.id}/edit`} className="font-semibold text-cascade hover:underline">Fill in</Link></>}
+                    <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-lg border border-[#ecd29c] bg-pending-soft px-4 py-3">
+                        <p className="text-sm">
+                            <span className="block font-bold text-pending">{props.completeness.total - props.completeness.done} key {props.completeness.total - props.completeness.done === 1 ? 'detail' : 'details'} missing</span>
+                            <span className="text-xs text-muted-foreground">{props.completeness.done} of {props.completeness.total} on file</span>
                         </p>
+                        <span className="flex flex-wrap gap-2">
+                            {props.completeness.missing.map((m) => can ? (
+                                <Link key={m} href={`/employees/${e.id}/edit#${missingField[m] ?? ''}`}
+                                    className="rounded-md border border-dashed border-cascade/40 bg-background px-2.5 py-1 text-sm font-semibold text-cascade hover:bg-accent">+ {m}</Link>
+                            ) : <span key={m} className="rounded-md border border-dashed bg-background px-2.5 py-1 text-sm">{m}</span>)}
+                        </span>
                     </div>
                 )}
             </PageHeader>
@@ -490,94 +674,17 @@ export default function EmployeeShow(props: Props) {
                 onValueChange={(v) => history.replaceState(history.state, '', `#${v}`)}>
                 <TabsList>
                     <TabsTrigger value="overview">Details</TabsTrigger>
-                    <TabsTrigger value="onboarding">Onboarding {o && <StatusPill value={o.status === 'Onboarding Complete' ? 'Complete' : 'In progress'} tone={computedTone(o.status)} />}</TabsTrigger>
-                    <TabsTrigger value="documents">Documents and assets <StatusPill value={props.documentStatus} tone={computedTone(props.documentStatus)} /></TabsTrigger>
+                    <TabsTrigger value="onboarding">Onboarding {o && <TabCount done={listDone(lists.onboarding, optionSets)} total={lists.onboarding.columns.length} />}</TabsTrigger>
+                    <TabsTrigger value="documents">Documents and assets {owed > 0
+                        ? <span className="rounded-full bg-pending-soft px-2 py-0.5 text-xs font-semibold text-pending">{owed} owed</span>
+                        : <StatusPill value={props.documentStatus} tone={computedTone(props.documentStatus)} />}</TabsTrigger>
                     <TabsTrigger value="time">Attendance and leave</TabsTrigger>
                     {props.feedback && <TabsTrigger value="feedback">Feedback</TabsTrigger>}
                     <TabsTrigger value="history">History</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="overview">
-                    <div className="grid gap-8 lg:grid-cols-3">
-                        <dl className="grid content-start gap-4">
-                            <h2 className="font-bold">Identity</h2>
-                            <Detail label="Employee code">{e.employee_code}</Detail>
-                            <Detail label="System ID">{e.system_id}</Detail>
-                            <Detail label="Full name">{e.full_name}</Detail>
-                            <Detail label="First and last name">{[e.first_name, e.last_name].filter(Boolean).join(' ')}</Detail>
-                            <Detail label="Gender">{e.gender}</Detail>
-                            <Detail label="Work email">{e.email}</Detail>
-                            <Detail label="Phone">{e.phone}</Detail>
-                            <Detail label="City">{e.city}</Detail>
-                        </dl>
-                        <dl className="grid content-start gap-4">
-                            <h2 className="font-bold">Work</h2>
-                            <Detail label="Company">{e.company}</Detail>
-                            <Detail label="Department and team">{[e.department, e.team].filter(Boolean).join(', ')}</Detail>
-                            {e.secondary_department && <Detail label="Second department">{e.secondary_department}</Detail>}
-                            <Detail label="Role">{e.role_title}</Detail>
-                            <Detail label="Manager">{e.manager && <Link className="text-cascade hover:underline" href={`/employees/${e.manager.id}`}>{e.manager.name}</Link>}</Detail>
-                            {e.secondary_manager && (
-                                <Detail label="Second manager"><Link className="text-cascade hover:underline" href={`/employees/${e.secondary_manager.id}`}>{e.secondary_manager.name}</Link></Detail>
-                            )}
-                            <Detail label="Categories">{e.categories.length > 0 && (
-                                <span className="flex flex-wrap gap-1">{e.categories.map((c) => <span key={c} className="rounded-full border bg-muted px-2 py-0.5 text-xs">{c}</span>)}</span>
-                            )}</Detail>
-                            <Detail label="Employment type">{e.employment_type}</Detail>
-                            <Detail label="Work mode">{[e.work_mode, e.work_location].filter(Boolean).join(', ')}</Detail>
-                            <Detail label="Start date">{formatDate(e.start_date)}</Detail>
-                            <Detail label="Confirmation date">{formatDate(e.confirmation_date)}</Detail>
-                            {e.exit_date && <Detail label="Exit date">{formatDate(e.exit_date)}</Detail>}
-                        </dl>
-                        <dl className="grid content-start gap-4">
-                            <h2 className="font-bold">Systems</h2>
-                            <Detail label="HR.my ID">{e.hr_portal_id}</Detail>
-                            <Detail label="Attendance machine">{[e.attendance_device && `${e.attendance_device.code} ${e.attendance_device.name}`, e.attendance_machine_id && `No. ${e.attendance_machine_id}`, e.attendance_machine].filter(Boolean).join(', ')}</Detail>
-                            <Detail label="Drive folder">{e.drive_folder_url && <a className="inline-flex items-center gap-1 text-cascade hover:underline" href={e.drive_folder_url} target="_blank" rel="noreferrer">Open folder <ExternalLink className="size-3.5" /></a>}</Detail>
-                            <Detail label="Notes">{e.notes && <span className="whitespace-pre-line">{e.notes}</span>}</Detail>
-                            <Detail label="Imported from">{e.source_ref}</Detail>
-                            {e.legacy && (
-                                <details className="text-sm">
-                                    <summary className="cursor-pointer font-semibold text-muted-foreground">Earlier records ({Object.keys(e.legacy).length})</summary>
-                                    <dl className="mt-2 grid gap-1.5">
-                                        {Object.entries(e.legacy).map(([k, v]) => (
-                                            <div key={k} className="grid grid-cols-[9rem_1fr] gap-2"><dt className="text-muted-foreground">{legacyLabel(k)}</dt><dd>{v}</dd></div>
-                                        ))}
-                                    </dl>
-                                </details>
-                            )}
-                        </dl>
-                    </div>
-                    {e.private_hidden ? (
-                        <p className="mt-8 rounded-lg border px-3 py-3 text-sm text-muted-foreground">Personal, emergency contact and bank details are only shown to HR and admin logins.</p>
-                    ) : (
-                        <div className="mt-8 grid gap-8 border-t pt-6 lg:grid-cols-3">
-                            <dl className="grid content-start gap-4">
-                                <h2 className="font-bold">Personal</h2>
-                                <Detail label="Father or husband name">{e.father_name}</Detail>
-                                <Detail label="CNIC">{e.cnic && `${e.cnic}${e.cnic_expiry ? `, expires ${formatDate(e.cnic_expiry)}` : ''}`}</Detail>
-                                <Detail label="Date of birth">{formatDate(e.date_of_birth)}</Detail>
-                                <Detail label="Marital status">{e.marital_status}</Detail>
-                                <Detail label="Blood group">{e.blood_group}</Detail>
-                            </dl>
-                            <dl className="grid content-start gap-4">
-                                <h2 className="font-bold">Contact</h2>
-                                <Detail label="Personal email">{e.personal_email}</Detail>
-                                <Detail label="Other phone">{e.alternate_phone}</Detail>
-                                <Detail label="Current address">{e.current_address && <span className="whitespace-pre-line">{e.current_address}</span>}</Detail>
-                                <Detail label="Permanent address">{e.permanent_address && <span className="whitespace-pre-line">{e.permanent_address}</span>}</Detail>
-                            </dl>
-                            <dl className="grid content-start gap-4">
-                                <h2 className="font-bold">Emergency contact</h2>
-                                <Detail label="Name">{[e.emergency_contact_name, e.emergency_contact_relation && `(${e.emergency_contact_relation})`].filter(Boolean).join(' ')}</Detail>
-                                <Detail label="Phone">{e.emergency_contact_phone}</Detail>
-                                <h2 className="mt-2 font-bold">Salary account</h2>
-                                <Detail label="Bank">{e.bank_name}</Detail>
-                                <Detail label="Account title">{e.bank_account_title}</Detail>
-                                <Detail label="Account number or IBAN">{e.bank_account_number}</Detail>
-                            </dl>
-                        </div>
-                    )}
+                    <DetailsTab e={e} />
                 </TabsContent>
 
 
