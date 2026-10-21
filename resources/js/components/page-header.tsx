@@ -9,6 +9,7 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
  */
 export function PageHeader({
     title,
+    eyebrow,
     description,
     help,
     actions,
@@ -17,6 +18,8 @@ export function PageHeader({
     tabs,
 }: {
     title: ReactNode;
+    /** A small line above the title, e.g. the date on Home. */
+    eyebrow?: ReactNode;
     description?: ReactNode;
     help?: ReactNode;
     actions?: ReactNode;
@@ -34,6 +37,7 @@ export function PageHeader({
                 <div className="flex min-w-0 items-start gap-2">
                     <SidebarTrigger className="mt-0.5 -ml-1 hidden md:inline-flex" />
                     <div className="min-w-0">
+                        {eyebrow && <p className="mb-0.5 text-sm text-muted-foreground">{eyebrow}</p>}
                         <div className="flex items-center gap-1.5">
                             <h1 className="font-display text-xl font-semibold tracking-tight text-balance md:text-2xl">{title}</h1>
                             {help && <HelpTip label="About this page">{help}</HelpTip>}

@@ -19,8 +19,9 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * Home: what needs doing today. Reminders, the lists to check, probation endings, the latest attendance day,
- * who is away, who is new, and recent changes. Company-wide charts are on Overview (OverviewController).
+ * Home: what needs doing today. Number cards (needs attention, requests waiting, came in, probation decisions,
+ * documents owed), reminders, the lists to check, this week (starters, anniversaries, birthdays, holidays, leave)
+ * and recent changes by people. Company-wide charts are on Overview (OverviewController).
  * ?company= narrows everything about people to one company; recent changes stay company-wide.
  */
 class DashboardController extends Controller
@@ -42,7 +43,9 @@ class DashboardController extends Controller
         $snapshot = HrSnapshot::build($current->pluck('id')->all(), $today);
         $ids = $current->pluck('id')->flip()->all();
 
-        $activity = ActivityLog::query()->with('user:id,name', 'employee:id,employee_code,full_name')
+        // Changes people made; system jobs and imports stay on the activity log only.
+        $byPeople = fn () => ActivityLog::query()->whereNotNull('user_id')->where('event', '!=', 'imported');
+        $activity = $byPeople()->with('user:id,name', 'employee:id,employee_code,full_name')
             ->latest('id')->limit(12)->get()->map(fn ($a) => [
                 'id' => $a->id, 'when' => $a->created_at?->toIso8601String(), 'user' => $a->user?->name ?? 'System',
                 'event' => $a->event, 'description' => $a->description, 'changes' => $a->changes,
@@ -77,6 +80,9 @@ class DashboardController extends Controller
                 ->orderBy('date')->limit(4)->get()
                 ->map(fn ($h) => ['date' => $h->date->toDateString(), 'name' => $h->name, 'company' => $h->company?->name]),
             'activity' => $activity,
+            'activityToday' => $byPeople()->where('created_at', '>=', $today->startOfDay())->count(),
+            // Requests waiting for HR by kind (RequestsInboxController); HR and admin only, like the inbox.
+            'requestsWaiting' => $private ? RequestsInboxController::pendingCounts() : null,
         ]);
     }
 
@@ -89,8 +95,9 @@ class DashboardController extends Controller
         }
         $date = substr((string) $last, 0, 10);
         $totals = (new AttendanceBoard($current, $date, $date))->totals($now);
+        $cameIn = array_sum(array_intersect_key($totals['statuses'], array_flip(config('hrm.attendance.came_in'))));
 
-        return ['date' => $date] + $totals;
+        return ['date' => $date, 'came_in' => $cameIn] + $totals;
     }
 
     /** On leave from today through the next week. */

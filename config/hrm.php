@@ -184,6 +184,8 @@ return [
             'No data' => 'neutral',      // no attendance file covers that day yet (AttendanceBoard)
             'Not tracked' => 'muted',    // on a No clock-in schedule and didn't punch: nothing expected
         ],
+        // Statuses that mean the person came in (punched) that day: Home's "At work today" card.
+        'came_in' => ['Present', 'Half day', 'Missing punch', 'Worked day off', 'At work'],
     ],
 
     // Master profile dropdowns

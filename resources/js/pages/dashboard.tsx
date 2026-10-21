@@ -1,8 +1,6 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { ArrowUpRight, Cake, CalendarDays, FileChartColumn, Palmtree, PartyPopper, Upload, UserPlus } from 'lucide-react';
+import { ArrowUpRight, ChevronRight, Palmtree, Plus, Upload } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
-import { Avatar } from '@/components/avatar';
-import { NativeSelect } from '@/components/native-select';
 import { PageHeader, Section } from '@/components/page-header';
 import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
@@ -30,48 +28,18 @@ type Props = {
         overdue: Person[];
     };
     documents: { population: number; compliant: number; items: DocItem[] };
-    attendance: { date: string; statuses: Record<string, number>; late: number; working_days: number; people: number; linked: number } | null;
+    attendance: { date: string; came_in: number; statuses: Record<string, number>; late: number; working_days: number; people: number; linked: number } | null;
     away: { id: number; name: string; photo: string | null; type: string; from: string; to: string; part: 'full' | 'first_half' | 'second_half' | 'short' }[];
     newPeople: { id: number; name: string; photo: string | null; role: string | null; start: string }[];
     celebrations: { id: number; name: string; date: string; kind: 'anniversary' | 'birthday'; years: number | null }[];
     holidays: { date: string; name: string; company: string | null }[];
     activity: ActivityItem[];
+    activityToday: number;
+    requestsWaiting: { attendance: number; leave: number; wfh: number; loans: number } | null;
 };
 
-function Attention({ n, href, children, tone = 'pending' }: { n: number; href: string; children: ReactNode; tone?: 'pending' | 'missing' | 'neutral' }) {
-    const color = n === 0 ? 'text-muted-foreground' : tone === 'missing' ? 'text-missing' : tone === 'neutral' ? 'text-ink' : 'text-pending';
-    return (
-        <li>
-            <Link href={href} className="group flex items-baseline gap-3 rounded-md px-2 py-2 hover:bg-accent">
-                <span className={cn('w-12 shrink-0 text-right text-2xl font-bold tabular-nums', color)}>{n}</span>
-                <span className="flex-1 text-sm">{children}</span>
-                <ArrowUpRight className="size-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100" />
-            </Link>
-        </li>
-    );
-}
-
-function PeopleList({ people, empty, today }: { people: Person[]; empty: string; today: string }) {
-    if (!people.length) return <p className="px-2 text-sm text-muted-foreground">{empty}</p>;
-    return (
-        <ul className="divide-y rounded-md border">
-            {people.slice(0, 8).map((p) => {
-                const d = daysBetween(today, p.end);   // server date, so the label matches the list
-                return (
-                    <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                        <Link href={`/employees/${p.id}`} className="min-w-0 truncate font-semibold hover:text-cascade hover:underline">
-                            {p.name}
-                        </Link>
-                        <span className={cn('shrink-0 tabular-nums', d < 0 ? 'text-missing' : 'text-pending')}>
-                            {d < 0 ? `ended ${plural(-d, 'day')} ago` : d === 0 ? 'ends today' : `ends in ${plural(d, 'day')}`}
-                        </span>
-                    </li>
-                );
-            })}
-            {people.length > 8 && <li className="px-3 py-2 text-sm text-muted-foreground">and {people.length - 8} more</li>}
-        </ul>
-    );
-}
+/** Days either side of today that "This week" covers. */
+const WEEK = 7;
 
 const reminderLabel: Record<ReminderType, string> = {
     probation_overdue: 'Probation',
@@ -84,18 +52,66 @@ const reminderLabel: Record<ReminderType, string> = {
     cnic_expiring: 'CNIC',
 };
 
-const REMINDERS_SHOWN = 10;
+/** Plural chip labels for the Needs attention filter. */
+const chipLabel: Record<string, string> = { Probation: 'Probation', 'Check-in': 'Check-ins', Documents: 'Documents', Offboarding: 'Offboarding', CNIC: 'CNIC' };
+
+const REMINDERS_SHOWN = 7;
+
+const greeting = () => {
+    const h = new Date().getHours();
+    return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+};
+
+const longDate = (iso: string) => {
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(y, m - 1, d));
+};
+
+const relative = (today: string, date: string) => {
+    const d = daysBetween(today, date);
+    return d === 0 ? 'today' : d === 1 ? 'tomorrow' : d === -1 ? 'yesterday' : d > 0 ? `in ${plural(d, 'day')}` : `${plural(-d, 'day')} ago`;
+};
+
+/** One number card in the row at the top; the whole card opens the list behind it. */
+function StatCard({ label, value, tone, href, children }: { label: string; value: ReactNode; tone?: 'missing' | 'pending'; href: string; children?: ReactNode }) {
+    return (
+        <Link href={href} className="group grid min-w-40 shrink-0 snap-start content-start gap-1 rounded-lg border bg-card p-4 hover:bg-accent sm:min-w-0">
+            <span className="text-sm text-muted-foreground">{label}</span>
+            <span className={cn('text-3xl font-bold tabular-nums', tone === 'missing' ? 'text-missing' : tone === 'pending' ? 'text-pending' : 'text-ink')}>{value}</span>
+            {children && <span className="text-xs text-muted-foreground">{children}</span>}
+        </Link>
+    );
+}
 
 function RemindersCard({ reminders }: { reminders: Reminder[] }) {
     const [showAll, setShowAll] = useState(false);
-    const overdue = reminders.filter((r) => r.severity === 'overdue').length;
-    const shown = showAll ? reminders : reminders.slice(0, REMINDERS_SHOWN);
+    const [kind, setKind] = useState<string | null>(null);
+    const kinds = Object.entries(reminders.reduce<Record<string, number>>((acc, r) => {
+        const k = reminderLabel[r.type];
+        acc[k] = (acc[k] ?? 0) + 1;
+        return acc;
+    }, {})).sort((a, b) => b[1] - a[1]);
+    const filtered = kind ? reminders.filter((r) => reminderLabel[r.type] === kind) : reminders;
+    const shown = showAll ? filtered : filtered.slice(0, REMINDERS_SHOWN);
+    const chip = (label: string, n: number, value: string | null) => (
+        <button key={label} type="button" aria-pressed={kind === value} onClick={() => { setKind(value); setShowAll(false); }}
+            className={cn('shrink-0 rounded-full border px-3 py-1 text-sm font-semibold whitespace-nowrap',
+                kind === value ? 'border-primary bg-primary text-primary-foreground' : 'bg-background hover:bg-accent')}>
+            {label} {n}
+        </button>
+    );
 
     return (
-        <Section
-            title="Needs attention"
-            description={reminders.length ? `${plural(reminders.length, 'thing')} to act on, ${overdue} overdue. Overdue first, then by date.` : 'Probation, check-ins, documents and offboarding that are due or overdue.'}
-        >
+        <section id="needs-attention" className="scroll-mt-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-base font-bold">Needs attention</h2>
+                {kinds.length > 1 && (
+                    <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none]" role="group" aria-label="Show one kind">
+                        {chip('All', reminders.length, null)}
+                        {kinds.map(([k, n]) => chip(chipLabel[k] ?? k, n, k))}
+                    </div>
+                )}
+            </div>
             {reminders.length === 0 ? (
                 <p className="rounded-lg border px-3 py-4 text-sm text-muted-foreground">Nothing needs attention today.</p>
             ) : (
@@ -108,23 +124,23 @@ function RemindersCard({ reminders }: { reminders: Reminder[] }) {
                                 <span className="col-span-full min-w-0 sm:col-span-1">
                                     <span className="font-semibold group-hover:text-cascade group-hover:underline">{r.employee_name}</span>
                                     <span className="text-muted-foreground"> {r.employee_code}</span>
-                                    <span className="block sm:inline"><span className="hidden sm:inline">: </span>{r.message}</span>
+                                    <span className="block">{r.message}</span>
                                 </span>
                                 <span className="col-start-3 row-start-1 text-xs text-muted-foreground tabular-nums sm:col-start-4">{formatDate(r.due_date)}</span>
                                 <ArrowUpRight className="hidden size-4 text-muted-foreground opacity-0 group-hover:opacity-100 sm:block" />
                             </Link>
                         </li>
                     ))}
-                    {reminders.length > REMINDERS_SHOWN && (
+                    {filtered.length > REMINDERS_SHOWN && (
                         <li className="px-3 py-2">
                             <button type="button" onClick={() => setShowAll((v) => !v)} className="text-sm font-semibold text-cascade hover:underline">
-                                {showAll ? 'Show fewer' : `Show all (${reminders.length})`}
+                                {showAll ? 'Show fewer' : `Show all ${filtered.length}`}
                             </button>
                         </li>
                     )}
                 </ul>
             )}
-        </Section>
+        </section>
     );
 }
 
@@ -139,229 +155,184 @@ function describe(a: ActivityItem): string {
     return `${a.description ?? 'Record'} ${a.event}`;
 }
 
-function SmallList<T>({ items, empty, render }: { items: T[]; empty: string; render: (item: T) => ReactNode }) {
-    if (!items.length) return <p className="rounded-lg border px-3 py-3 text-sm text-muted-foreground">{empty}</p>;
-    return <ul className="divide-y rounded-lg border">{items.map(render)}</ul>;
-}
-
-const relative = (today: string, date: string) => {
-    const d = daysBetween(today, date);
-    return d === 0 ? 'today' : d === 1 ? 'tomorrow' : d === -1 ? 'yesterday' : d > 0 ? `in ${plural(d, 'day')}` : `${plural(-d, 'day')} ago`;
-};
-
-/** Counts on the Home attendance strip; each opens the Attendance page filtered to that status. */
-const attendanceTiles = [
-    { key: 'Present', label: 'Present', tone: 'text-done' },
-    { key: 'Late', label: 'Late', tone: 'text-pending' },
-    { key: 'Absent', label: 'Absent', tone: 'text-missing' },
-    { key: 'Missing punch', label: 'Missing punch', tone: 'text-pending' },
-    { key: 'On leave', label: 'On leave', tone: 'text-ink' },
-];
-
-type Upcoming = { key: string; id: number | null; name: string; date: string; kind: 'anniversary' | 'birthday' | 'holiday'; years: number | null };
+type WeekItem = { key: string; date: string; id: number | null; name: string; what: string; when: string };
 
 export default function Dashboard(props: Props) {
     const { auth } = usePage<SharedProps>().props;
-    const { totals, onboarding: o, documents: d, attendance: att } = props;
-    const legal = o.legalPending;
+    const { totals, onboarding: o, documents: d, attendance: att, today } = props;
     const firstName = auth.user?.name.split(' ')[0];
-    const upcoming: Upcoming[] = [
-        ...props.celebrations.map((c) => ({ ...c, key: `${c.kind}-${c.id}-${c.date}` })),
-        ...props.holidays.map((h) => ({ key: `holiday-${h.date}-${h.name}`, id: null, name: h.company ? `${h.name} (${h.company})` : h.name, date: h.date, kind: 'holiday' as const, years: null })),
-    ].sort((x, y) => x.date.localeCompare(y.date)).slice(0, 10);
-    const companyName = props.companies.find((c) => c.id === props.company)?.name;
+    const overdue = props.reminders.filter((r) => r.severity === 'overdue').length;
+    const owed = d.population - d.compliant;
     const inCompany = props.company ? `&company=${props.company}` : '';
-    const count = (key: string) => !att ? 0 : key === 'Late' ? att.late : key === 'Present' ? (att.statuses.Present ?? 0) + (att.statuses['At work'] ?? 0) : att.statuses[key] ?? 0;
+    const waiting = props.requestsWaiting;
+    const waitingTotal = waiting ? waiting.attendance + waiting.leave + waiting.wfh + waiting.loans : 0;
+    const waitingParts = waiting ? [
+        waiting.leave && `${waiting.leave} leave`, waiting.wfh && `${waiting.wfh} WFH`,
+        waiting.attendance && plural(waiting.attendance, 'attendance fix', 'attendance fixes'), waiting.loans && plural(waiting.loans, 'loan'),
+    ].filter(Boolean).join(', ') : '';
+
+    const within = (date: string) => Math.abs(daysBetween(today, date)) <= WEEK;
+    const week: WeekItem[] = [
+        ...props.newPeople.filter((p) => within(p.start)).map((p) => ({
+            key: `start-${p.id}`, date: p.start, id: p.id, name: p.name, what: p.start > today ? 'starts work' : 'started work', when: relative(today, p.start),
+        })),
+        ...props.celebrations.map((c) => ({
+            key: `${c.kind}-${c.id}-${c.date}`, date: c.date, id: c.id, name: c.name,
+            what: c.kind === 'birthday' ? 'birthday' : `${plural(c.years ?? 0, 'year')} with us`, when: relative(today, c.date),
+        })),
+        ...props.holidays.filter((h) => within(h.date)).map((h) => ({
+            key: `holiday-${h.date}-${h.name}`, date: h.date, id: null, name: h.company ? `${h.name} (${h.company})` : h.name, what: 'holiday', when: relative(today, h.date),
+        })),
+        ...props.away.map((l) => ({
+            key: `away-${l.id}-${l.from}`, date: l.from < today ? today : l.from, id: l.id, name: l.name,
+            what: `on ${l.type.toLowerCase()}${l.part === 'short' ? ', short leave' : l.part !== 'full' ? ', half day' : ''}`,
+            when: l.from === l.to ? formatDate(l.from) : `${l.from <= today ? 'until' : formatDate(l.from) + ' to'} ${formatDate(l.to)}`,
+        })),
+    ].sort((x, y) => x.date.localeCompare(y.date));
+
+    /** Each line opens the list behind it; text is [one, many]. Lines with 0 are hidden. */
+    const lists = [
+        { n: owed, href: '/documents?status=Pending', tone: 'pending', text: ['person has a document missing or pending', 'people have a document missing or pending'], show: true },
+        { n: o.legalAnyPending, href: '/onboarding?legal=pending', tone: 'pending', text: ['in onboarding without a signed NDA, NCA or policy'], show: true },
+        { n: o.overdue.length, href: '/onboarding?probation=overdue', tone: 'missing', text: ['past probation end with no decision'], show: true },
+        { n: o.endingSoon.length, href: '/onboarding?probation=ending', tone: 'pending', text: ['finishes probation in the next 7 days', 'finish probation in the next 7 days'], show: true },
+        { n: totals.reviews, href: '/reviews', tone: 'pending', text: ["performance review waiting for HR's part", "performance reviews waiting for HR's part"], show: auth.can.edit },
+        { n: totals.needsReview, href: '/employees?review=1', tone: 'ink', text: ['record flagged at import', 'records flagged at import'], show: true },
+        { n: totals.unassigned, href: '/employees?unassigned=1', tone: 'ink', text: ['person not on the BCC or Emerge department lists', 'people not on the BCC or Emerge department lists'], show: true },
+        { n: totals.offboarding, href: '/offboarding', tone: 'ink', text: ['offboarding open', 'offboardings open'], show: true },
+    ].filter((l) => l.show && l.n > 0);
+
+    const switchCompany = (id: number | null) => router.get('/dashboard', id ? { company: id } : {}, { preserveScroll: true, replace: true });
 
     return (
         <>
             <Head title="Home" />
             <PageHeader
-                title={firstName ? `Hello, ${firstName}` : 'Home'}
-                description={`${formatDate(props.today)}${companyName ? `, ${companyName}` : ''}`}
+                eyebrow={longDate(today)}
+                title={firstName ? `${greeting()}, ${firstName}` : 'Home'}
                 help="What needs doing today. Company-wide numbers are on Overview, and the full lists are on Reports."
-                actions={auth.can.edit && (
+                actions={
                     <>
-                        <Button variant="outline" asChild><Link href="/employees/create"><UserPlus /> Add employee</Link></Button>
-                        <Button variant="outline" asChild><Link href="/attendance/imports"><Upload /> Upload attendance</Link></Button>
-                        <Button variant="outline" asChild><Link href="/leave"><Palmtree /> Record leave</Link></Button>
-                        <Button variant="outline" asChild><Link href="/reports"><FileChartColumn /> Reports</Link></Button>
+                        {props.companies.length > 1 && (
+                            <div className="inline-flex rounded-md border bg-background p-0.5" role="group" aria-label="Company">
+                                {[{ id: null as number | null, name: 'All' }, ...props.companies].map((c) => (
+                                    <button key={c.id ?? 'all'} type="button" aria-pressed={props.company === c.id} onClick={() => switchCompany(c.id)}
+                                        className={cn('rounded px-3 py-1.5 text-sm font-semibold', props.company === c.id ? 'bg-primary text-primary-foreground' : 'hover:bg-accent')}>
+                                        {c.name}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                        {auth.can.edit && (
+                            <>
+                                <Button variant="outline" asChild><Link href="/attendance/imports"><Upload /> Upload attendance</Link></Button>
+                                <Button variant="outline" asChild><Link href="/leave"><Palmtree /> Record leave</Link></Button>
+                                <Button asChild><Link href="/employees/create"><Plus /> Add employee</Link></Button>
+                            </>
+                        )}
                     </>
-                )}
-            >
-                {props.companies.length > 1 && (
-                    <NativeSelect className="w-48" value={props.company ?? ''} placeholder="All companies" aria-label="Company"
-                        options={props.companies.map((c) => ({ value: c.id, label: c.name }))}
-                        onChange={(e) => router.get('/dashboard', e.target.value ? { company: e.target.value } : {}, { preserveScroll: true, replace: true })} />
-                )}
-            </PageHeader>
+                }
+            />
 
-            <div className="grid gap-8 p-4 md:p-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-                <div className="grid content-start gap-8">
+            <div className="grid gap-8 p-4 md:p-6">
+                {/* Phones: the cards scroll sideways; wider screens: one row. */}
+                <div className={cn('-mx-4 flex snap-x scroll-px-4 gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 md:grid-cols-3',
+                    waiting ? 'xl:grid-cols-5' : 'xl:grid-cols-4')}>
+                    <StatCard label="Needs attention" value={props.reminders.length} tone={overdue ? 'missing' : props.reminders.length ? 'pending' : undefined} href="#needs-attention">
+                        {props.reminders.length ? `${overdue} overdue` : 'Nothing due'}
+                    </StatCard>
+                    {waiting && (
+                        <StatCard label="Requests waiting" value={waitingTotal} tone={waitingTotal ? 'pending' : undefined} href="/requests">
+                            {waitingParts || 'Nothing waiting'}
+                        </StatCard>
+                    )}
+                    <StatCard label={att && att.date !== today ? `Came in on ${formatDate(att.date)}` : 'At work today'}
+                        value={att ? <>{att.came_in} <span className="text-base font-normal text-muted-foreground">of {att.people}</span></> : '-'}
+                        href={att ? `/attendance?date=${att.date}${inCompany}` : '/attendance'}>
+                        {att ? (
+                            <span className="grid gap-1">
+                                <span className="block h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
+                                    <span className="block h-full rounded-full bg-done" style={{ width: `${att.people ? Math.round((att.came_in / att.people) * 100) : 0}%` }} />
+                                </span>
+                                {att.people > att.linked && <span>{att.people - att.linked} not linked</span>}
+                            </span>
+                        ) : 'No punches loaded yet'}
+                    </StatCard>
+                    <StatCard label="Probation decisions" value={o.overdue.length} tone={o.overdue.length ? 'missing' : undefined} href="/onboarding?probation=overdue">
+                        past end date, still Pending
+                    </StatCard>
+                    <StatCard label="Documents owed" value={owed} tone={owed ? 'pending' : undefined} href="/documents?status=Pending">
+                        people with one or more
+                    </StatCard>
+                </div>
+
+                <div className="grid gap-8 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
                     <RemindersCard reminders={props.reminders} />
-                    <Section title="Recent changes" description="Every change is kept in the activity log.">
-                        {props.activity.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">No changes yet.</p>
-                        ) : (
-                            <ol className="divide-y rounded-lg border">
-                                {props.activity.map((a) => (
-                                    <li key={a.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 px-3 py-2 text-sm">
-                                        <span className="w-28 shrink-0 text-xs text-muted-foreground tabular-nums">{formatDateTime(a.when)}</span>
-                                        <span className="font-semibold">{a.user}</span>
-                                        <span className="min-w-0 flex-1">
-                                            {describe(a)}
-                                            {a.employee && (
-                                                <>
-                                                    {' for '}
-                                                    <Link href={`/employees/${a.employee.id}`} className="text-cascade hover:underline">{a.employee.name}</Link>
-                                                </>
-                                            )}
+
+                    <div className="grid content-start gap-8">
+                        <Section title="Lists to check">
+                            {lists.length === 0 ? (
+                                <p className="rounded-lg border px-3 py-3 text-sm text-muted-foreground">Nothing to check.</p>
+                            ) : (
+                                <ul className="divide-y rounded-lg border">
+                                    {lists.map((l) => (
+                                        <li key={l.href}>
+                                            <Link href={l.href} className="group flex items-baseline gap-3 px-3 py-2.5 hover:bg-accent">
+                                                <span className={cn('w-10 shrink-0 text-right text-xl font-bold tabular-nums', l.tone === 'missing' ? 'text-missing' : l.tone === 'pending' ? 'text-pending' : 'text-ink')}>{l.n}</span>
+                                                <span className="flex-1 text-sm">{l.n === 1 ? l.text[0] : l.text[l.text.length - 1]}</span>
+                                                <ArrowUpRight className="size-4 shrink-0 self-center text-muted-foreground opacity-0 group-hover:opacity-100" />
+                                            </Link>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                            <p className="mt-2 text-xs text-muted-foreground">Lists with nothing in them are hidden.</p>
+                        </Section>
+
+                        <Section title="This week">
+                            <ul className="divide-y rounded-lg border">
+                                {week.map((w) => (
+                                    <li key={w.key} className="flex items-baseline justify-between gap-3 px-3 py-2 text-sm">
+                                        <span className="min-w-0">
+                                            {w.id ? <Link href={`/employees/${w.id}`} className="font-semibold hover:text-cascade hover:underline">{w.name}</Link>
+                                                : <span className="font-semibold">{w.name}</span>}
+                                            <span className="text-muted-foreground"> {w.what}</span>
                                         </span>
+                                        <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{w.when}</span>
                                     </li>
                                 ))}
-                            </ol>
-                        )}
-                    </Section>
-                </div>
+                                {props.away.length === 0 && <li className="px-3 py-2 text-sm text-muted-foreground">Nobody is on leave this week</li>}
+                            </ul>
+                        </Section>
 
-                <div className="grid content-start gap-8">
-                    <Section
-                        title="Attendance"
-                        description={att
-                            ? `${att.date === props.today ? 'Today' : formatDate(att.date)}, the last day with punches loaded. ${att.linked} of ${att.people} people are linked.`
-                            : 'No attendance files uploaded yet.'}
-                        actions={att && <Link href={`/attendance?date=${att.date}${inCompany}`} className="text-sm font-semibold text-cascade hover:underline">Open the day</Link>}
-                    >
-                        {att && att.linked === 0 ? (
-                            <p className="rounded-lg border px-3 py-3 text-sm text-muted-foreground">
-                                Punches are loaded, but nobody is linked to a machine number or HR.my ID yet.{' '}
-                                {auth.can.edit && <Link href="/attendance/links?tab=numbers" className="font-semibold text-cascade hover:underline">Link people</Link>}
-                            </p>
-                        ) : att ? (
-                            <dl className="grid grid-cols-3 gap-2 text-center sm:grid-cols-6">
-                                <Link href={`/employees${props.company ? `?company=${props.company}` : ''}`} className="rounded-md border bg-muted/40 px-1 py-2 hover:bg-accent">
-                                    <dd className="text-lg font-bold">{totals.current}</dd>
-                                    <dt className="text-xs text-muted-foreground">Total staff</dt>
-                                </Link>
-                                {attendanceTiles.map((t) => (
-                                    <Link key={t.key} href={`/attendance?date=${att.date}&status=${encodeURIComponent(t.key)}${inCompany}`} className="rounded-md border px-1 py-2 hover:bg-accent">
-                                        <dd className={cn('text-lg font-bold', count(t.key) ? t.tone : 'text-muted-foreground')}>{count(t.key)}</dd>
-                                        <dt className="text-xs text-muted-foreground">{t.label}</dt>
-                                    </Link>
-                                ))}
-                            </dl>
-                        ) : auth.can.edit ? (
-                            <p className="rounded-lg border px-3 py-3 text-sm">
-                                <Link href="/attendance/imports" className="font-semibold text-cascade hover:underline">Upload a machine or HR.my file</Link> to see who came in.
-                            </p>
-                        ) : null}
-                    </Section>
-
-                    <Section title="Lists to check" description="Each line opens the list behind it.">
-                        <ul className="grid gap-0.5 rounded-lg border p-2">
-                            {auth.can.edit && (
-                                <Attention n={totals.requests} href="/attendance/requests" tone="missing">
-                                    attendance fixes asked for on My page are waiting for HR
-                                </Attention>
+                        <details className="group rounded-lg border">
+                            <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-sm font-bold [&::-webkit-details-marker]:hidden">
+                                <ChevronRight className="size-4 transition-transform group-open:rotate-90" aria-hidden />
+                                Recent changes by people {props.activityToday > 0 && <span className="font-normal text-muted-foreground">({props.activityToday} today)</span>}
+                            </summary>
+                            {props.activity.length === 0 ? (
+                                <p className="border-t px-3 py-3 text-sm text-muted-foreground">No changes yet.</p>
+                            ) : (
+                                <ol className="divide-y border-t">
+                                    {props.activity.map((a) => (
+                                        <li key={a.id} className="grid gap-0.5 px-3 py-2 text-sm">
+                                            <span className="text-xs text-muted-foreground tabular-nums">{formatDateTime(a.when)}, {a.user}</span>
+                                            <span>
+                                                {describe(a)}
+                                                {a.employee && (
+                                                    <>
+                                                        {' for '}
+                                                        <Link href={`/employees/${a.employee.id}`} className="text-cascade hover:underline">{a.employee.name}</Link>
+                                                    </>
+                                                )}
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ol>
                             )}
-                            {auth.can.edit && totals.reviews > 0 && (
-                                <Attention n={totals.reviews} href="/reviews">
-                                    performance reviews are waiting for HR's part
-                                </Attention>
-                            )}
-                            <Attention n={o.overdue.length} href="/onboarding?probation=overdue" tone="missing">
-                                people are past their probation end date with the result still Pending
-                            </Attention>
-                            <Attention n={o.endingSoon.length} href="/onboarding?probation=ending">
-                                people finish probation in the next 7 days
-                            </Attention>
-                            <Attention n={o.legalAnyPending} href="/onboarding?legal=pending">
-                                people in onboarding are missing a signed NDA, NCA or policy acknowledgment
-                                <span className="block text-xs text-muted-foreground">
-                                    NDA {legal.nda_signed}, NCA {legal.nca_signed}, policy {legal.policy_acknowledgment}
-                                </span>
-                            </Attention>
-                            <Attention n={d.population - d.compliant} href="/documents?status=Pending">
-                                current employees have at least one document missing or pending
-                            </Attention>
-                            <Attention n={totals.needsReview} href="/employees?review=1" tone="neutral">
-                                records were flagged during the import and need a quick check
-                            </Attention>
-                            <Attention n={totals.unassigned} href="/employees?unassigned=1" tone="neutral">
-                                people aren't on the BCC or Emerge department lists yet
-                            </Attention>
-                            <Attention n={totals.offboarding} href="/offboarding" tone="neutral">
-                                offboardings are open
-                            </Attention>
-                        </ul>
-                    </Section>
+                        </details>
+                    </div>
                 </div>
-
-                <div className="grid gap-8 md:grid-cols-2 xl:col-span-2 xl:grid-cols-4">
-                    <Section title="Probation ending" description="Result still Pending.">
-                        <div className="grid gap-4">
-                            <div>
-                                <h3 className="mb-1.5 text-xs font-semibold text-missing">Past the end date</h3>
-                                <PeopleList people={o.overdue} empty="Nobody is past their end date." today={props.today} />
-                            </div>
-                            <div>
-                                <h3 className="mb-1.5 text-xs font-semibold text-pending">Next 7 days</h3>
-                                <PeopleList people={o.endingSoon} empty="Nobody finishes probation this week." today={props.today} />
-                            </div>
-                        </div>
-                    </Section>
-
-                    <Section title="Away this week" description="Leave recorded from today to next week.">
-                        <SmallList items={props.away} empty="Nobody has leave recorded this week." render={(l) => (
-                            <li key={`${l.id}-${l.from}`} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                                <span className="flex min-w-0 items-center gap-2.5">
-                                    <Avatar name={l.name} photo={l.photo} className="size-7 text-[10px]" />
-                                    <Link href={`/employees/${l.id}`} className="min-w-0 truncate font-semibold hover:text-cascade hover:underline">{l.name}</Link>
-                                </span>
-                                <span className="shrink-0 text-right text-xs text-muted-foreground">
-                                    {l.type}{l.part !== 'full' && (l.part === 'short' ? ', short leave' : ', half day')}
-                                    <span className="block tabular-nums">{l.from === l.to ? formatDate(l.from) : `${formatDate(l.from)} to ${formatDate(l.to)}`}</span>
-                                </span>
-                            </li>
-                        )} />
-                    </Section>
-
-                    <Section title="New people" description="Started in the last 30 days or starting soon.">
-                        <SmallList items={props.newPeople} empty="Nobody new in the last 30 days." render={(p) => (
-                            <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                                <span className="flex min-w-0 items-center gap-2.5">
-                                    <Avatar name={p.name} photo={p.photo} className="size-7 text-[10px]" />
-                                    <span className="min-w-0">
-                                        <Link href={`/employees/${p.id}`} className="block truncate font-semibold hover:text-cascade hover:underline">{p.name}</Link>
-                                        {p.role && <span className="block truncate text-xs text-muted-foreground">{p.role}</span>}
-                                    </span>
-                                </span>
-                                <span className={cn('shrink-0 text-xs tabular-nums', p.start > props.today ? 'text-info' : 'text-muted-foreground')}>
-                                    {p.start > props.today ? 'starts ' : 'started '}{relative(props.today, p.start)}
-                                </span>
-                            </li>
-                        )} />
-                    </Section>
-
-                    <Section title="Coming up" description={auth.can.edit ? 'Birthdays, work anniversaries and holidays.' : 'Work anniversaries and holidays.'}>
-                        <SmallList items={upcoming} empty="Nothing in the next week." render={(c) => (
-                            <li key={c.key} className="flex items-center gap-2.5 px-3 py-2 text-sm">
-                                {c.kind === 'birthday' ? <Cake className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                                    : c.kind === 'anniversary' ? <PartyPopper className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                                        : <CalendarDays className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
-                                <span className="min-w-0 flex-1">
-                                    {c.id ? <Link href={`/employees/${c.id}`} className="font-semibold hover:text-cascade hover:underline">{c.name}</Link>
-                                        : <span className="font-semibold">{c.name}</span>}
-                                    <span className="block text-xs text-muted-foreground">
-                                        {c.kind === 'birthday' ? 'Birthday' : c.kind === 'anniversary' ? `${plural(c.years ?? 0, 'year')} with us` : 'Holiday'}
-                                    </span>
-                                </span>
-                                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{relative(props.today, c.date)}</span>
-                            </li>
-                        )} />
-                    </Section>
-                </div>
-
             </div>
         </>
     );
