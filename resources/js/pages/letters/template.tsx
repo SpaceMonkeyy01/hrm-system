@@ -185,7 +185,7 @@ export default function LetterTemplateEditor({ template: t, issued, fields, chec
                         {form.isDirty && <span className="text-sm text-muted-foreground">Unsaved changes</span>}
                     </div>
 
-                    <Section title="Preview" description="The text above filled in for one person, as the draft would be. Nothing is saved or issued.">
+                    <Section title="Preview" help="The text above filled in for one person, as the draft would be. Nothing is saved or issued.">
                         <div className="grid gap-4">
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <Field label="Preview for" htmlFor="preview-person">

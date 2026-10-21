@@ -67,7 +67,7 @@ export default function ReviewPage({ cycle, review, employee, canEdit, scale, re
                             : 'No self-review for this person.'}
                 </p>
 
-                <Section title="Ratings" description="Talk to their manager, then rate each line." actions={<ScaleKey scale={scale} />}>
+                <Section title="Ratings" help="Talk to their manager, then rate each line." actions={<ScaleKey scale={scale} />}>
                     <RatingRows criteria={cycle.criteria} scale={scale} disabled={!canEdit}
                         ratings={form.data.manager_ratings} comments={form.data.manager_comments}
                         onRate={canEdit ? (k, v) => form.setData('manager_ratings', { ...form.data.manager_ratings, [k]: v }) : undefined}

@@ -94,7 +94,7 @@ export default function ReviewCycleShow({ cycle, reviews, statuses, cycleStatuse
                     </p>
                 )}
 
-                <Section title="What is rated" description={cycle.status === 'draft' ? 'Rated 1 to 5. Change the lines before opening the cycle.' : 'Rated 1 to 5. Fixed once the cycle is open.'}>
+                <Section title="What is rated" help={cycle.status === 'draft' ? 'Rated 1 to 5. Change the lines before opening the cycle.' : 'Rated 1 to 5. Fixed once the cycle is open.'}>
                     {cycle.status === 'draft' ? <CriteriaEditor cycle={cycle} /> : (
                         <ul className="grid gap-1 text-sm sm:grid-cols-2">
                             {cycle.criteria.map((c) => <li key={c.key}><span className="font-semibold">{c.label}</span>{c.description && <span className="text-muted-foreground">: {c.description}</span>}</li>)}

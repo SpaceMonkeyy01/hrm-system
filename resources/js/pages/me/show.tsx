@@ -420,7 +420,7 @@ export default function MyPage(props: Props) {
                                 <Detail label="Confirmation date">{formatDate(me.confirmation_date)}</Detail>
                             </dl>
                         </Section>
-                        <Section title="Personal" description="Only you and HR see these. Ask HR to correct anything wrong.">
+                        <Section title="Personal" help="Only you and HR see these. Ask HR to correct anything wrong.">
                             <dl className="grid gap-4 rounded-lg border p-4 sm:grid-cols-2">
                                 <Detail label="CNIC">{me.cnic}</Detail>
                                 <Detail label="CNIC expiry">{formatDate(me.cnic_expiry)}</Detail>
@@ -430,10 +430,10 @@ export default function MyPage(props: Props) {
                                 <Detail label="Bank">{[me.bank_name, me.bank_account_last4 && `account ending ${me.bank_account_last4}`].filter(Boolean).join(', ')}</Detail>
                             </dl>
                         </Section>
-                        <Section title="Contact details" description="Keep these up to date. Changes save straight to your record." className="lg:col-span-2">
+                        <Section title="Contact details" help="Keep these up to date. Changes save straight to your record." className="lg:col-span-2">
                             <ContactForm me={me} />
                         </Section>
-                        <Section title="Company property with you" className="lg:col-span-2" description="Hand these back to HR when you leave. Tell HR if anything here is wrong.">
+                        <Section title="Company property with you" className="lg:col-span-2" help="Hand these back to HR when you leave. Tell HR if anything here is wrong.">
                             <AssetList rows={props.assets ?? []} empty="Nothing from the asset register is with you." />
                         </Section>
                         <Section title="Documents HR has on file" className="lg:col-span-2"

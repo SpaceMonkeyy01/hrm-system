@@ -68,7 +68,7 @@ function PendingFiles({ pending }: { pending: Pending }) {
         onError: (e) => toast.error(Object.values(e)[0] ?? 'Not done.'),
     });
     return (
-        <Section title="Check before importing" description="What the app read from each file. Nothing is saved until you press Import.">
+        <Section title="Check before importing" help="What the app read from each file. Nothing is saved until you press Import.">
             <div className="grid gap-4">
                 {pending.files.map((f) => (
                     <article key={f.id} className="rounded-lg border">
@@ -145,7 +145,7 @@ export default function AttendanceImports({ imports, unlinkedCount, sources, pen
                 <UploadForm maxKb={maxKb} />
                 {pending && pending.files.length > 0 && <PendingFiles pending={pending} />}
 
-                <Section title="Link IDs to employees" description="Each person has a number on the machine and an ID in HR.my. Linking them once connects all their punches, past and future.">
+                <Section title="Link IDs to employees" help="Each person has a number on the machine and an ID in HR.my. Linking them once connects all their punches, past and future.">
                     {unlinkedCount === 0
                         ? <EmptyState title="Every number in the attendance files belongs to someone." />
                         : (

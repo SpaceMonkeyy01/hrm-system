@@ -64,13 +64,13 @@ export default function Overview(props: Props) {
                 </div>
 
                 <div className="grid gap-8 xl:grid-cols-2">
-                    <Section title="Headcount" description="People on the books at the end of each month."
+                    <Section title="Headcount" help="People on the books at the end of each month."
                         actions={<Link href={report('turnover')} className="text-sm font-semibold text-cascade hover:underline">See as table</Link>}>
                         <div className="rounded-lg border p-4">
                             <LineChart label="Headcount by month" data={props.monthly.map((m) => ({ label: short(m.label), value: m.closing }))} />
                         </div>
                     </Section>
-                    <Section title="Joined and left" description="People who started or left in each month."
+                    <Section title="Joined and left" help="People who started or left in each month."
                         actions={<Link href={report('joiners-leavers')} className="text-sm font-semibold text-cascade hover:underline">See who</Link>}>
                         <div className="rounded-lg border p-4">
                             <PairedColumns label="Joiners and leavers by month" series={['Joined', 'Left']}
@@ -80,7 +80,8 @@ export default function Overview(props: Props) {
                 </div>
 
                 <div className="grid gap-8 xl:grid-cols-2">
-                    <Section title="Departments" description={`Current employees per department${rest ? `, largest 12 shown` : ''}.`}>
+                    <Section title="Departments" description={rest ? 'The largest 12 shown.' : undefined}
+                    help="Current employees per department.">
                         <div className="rounded-lg border p-4">
                             <BarList items={[
                                 ...shownDepartments.map((x) => ({

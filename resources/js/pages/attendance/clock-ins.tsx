@@ -96,7 +96,7 @@ export default function ClockIns(props: Props) {
 
                 <Section
                     title="Office networks"
-                    description="The office's internet addresses. Add every line the office uses: each Wi-Fi or cable network that goes out through a different connection."
+                    help="The office's internet addresses. Add every line the office uses: each Wi-Fi or cable network that goes out through a different connection."
                     actions={<Button size="sm" onClick={() => setAdding('')}><Plus /> Add network</Button>}
                 >
                     <div className="grid gap-3">
@@ -130,7 +130,8 @@ export default function ClockIns(props: Props) {
                 </Section>
 
                 {props.unlisted.length > 0 && (
-                    <Section title="Addresses not on the list" description={`Where people clocked in from, ${formatDate(f.from)} to ${formatDate(f.to)}. An address many colleagues use is probably an office line.`}>
+                    <Section title="Addresses not on the list" description={`${formatDate(f.from)} to ${formatDate(f.to)}.`}
+                        help="Where people clocked in from. An address many colleagues use is probably an office line.">
                         <ul className="divide-y rounded-lg border">
                             {props.unlisted.map((u) => (
                                 <li key={u.address} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5 text-sm">

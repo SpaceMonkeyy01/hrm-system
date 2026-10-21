@@ -53,14 +53,18 @@ export function PageHeader({
     );
 }
 
-export function Section({ title, description, actions, children, className }: {
-    title: ReactNode; description?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string;
+/** A titled block inside a page. Like PageHeader: description for live facts, help (a ? beside the title) for how it works. */
+export function Section({ title, description, help, actions, children, className }: {
+    title: ReactNode; description?: ReactNode; help?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string;
 }) {
     return (
         <section className={className}>
             <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
                 <div>
-                    <h2 className="text-base font-bold">{title}</h2>
+                    <div className="flex items-center gap-1.5">
+                        <h2 className="text-base font-bold">{title}</h2>
+                        {help && <HelpTip label={typeof title === 'string' ? `About ${title}` : 'About this section'}>{help}</HelpTip>}
+                    </div>
                     {description && <p className="text-sm text-muted-foreground">{description}</p>}
                 </div>
                 {actions}

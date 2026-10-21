@@ -363,10 +363,10 @@ export default function LeaveIndex(props: Props) {
                 </TabsContent>
 
                 <TabsContent value="types">
-                    <Section title="Leave types" description="Switch a type off to stop new leave of that type; past records keep it. Allowance: days a year (working days, pro-rated for new joiners, lapses on 31 Dec) or days each time (calendar days per leave, e.g. Maternity 90).">
+                    <Section title="Leave types" help="Switch a type off to stop new leave of that type; past records keep it. Allowance: days a year (working days, pro-rated for new joiners, lapses on 31 Dec) or days each time (calendar days per leave, e.g. Maternity 90).">
                         <Types types={props.types} can={can} />
                     </Section>
-                    <Section title="Deductions and short leave" description="How absences, late sign-ins / early sign-offs and short leaves count against balances.">
+                    <Section title="Deductions and short leave" help="How absences, late sign-ins / early sign-offs and short leaves count against balances.">
                         <DeductionSettings settings={props.settings} can={can} />
                     </Section>
                 </TabsContent>
