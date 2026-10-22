@@ -7,11 +7,13 @@ use App\Models\AttendanceRequest;
 use App\Models\ConductEntry;
 use App\Models\ControlledDocument;
 use App\Models\Employee;
+use App\Models\Holiday;
 use App\Models\IssuedLetter;
 use App\Models\LeaveRecord;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\Loan;
+use App\Models\MachineSync;
 use App\Models\MedicalRequest;
 use App\Models\Meeting;
 use App\Models\Review;
@@ -57,7 +59,7 @@ class MeController extends Controller
         if (! $employee) {
             return Inertia::render('me/show', ['employee' => null]);
         }
-        $employee->load(['company:id,name', 'department:id,name', 'team:id,name', 'manager:id,full_name']);
+        $employee->load(['company:id,name,hr_email','department:id,name', 'team:id,name', 'manager:id,full_name']);
         $board = new StatusBoard([$employee->id]);
         $docs = $board->values($employee->id, 'document');
 
@@ -127,6 +129,16 @@ class MeController extends Controller
                 'daysBack' => (int) config('hrm.self_service.request_days_back'),
                 'editable' => config('hrm.self_service.editable_fields'),
             ],
+            // This year's public holidays for their company (Leave list and "Coming up" on Today)
+            'holidays' => Holiday::query()->whereYear('date', CarbonImmutable::today()->year)
+                ->where(fn ($q) => $q->whereNull('company_id')->orWhere('company_id', $employee->company_id))->orderBy('date')->get(['date', 'name'])
+                ->map(fn ($h) => ['date' => $h->date->toDateString(), 'name' => $h->name])->unique('date')->values(),
+            // Where "Ask HR" links send an email: their company's HR address, else the app's sender
+            'hrEmail' => $employee->company?->hr_email ?: config('mail.from.address'),
+            // Machine punches arrive with each sync, so Today says how fresh they are
+            'lastSync' => $employee->attendance_machine_id
+                ? MachineSync::query()->where('ok', true)->when($employee->attendance_device_id, fn ($q, $d) => $q->where('attendance_device_id', $d))
+                    ->latest('finished_at')->first(['finished_at'])?->finished_at?->toIso8601String() : null,
             'today' => CarbonImmutable::today()->toDateString(),
         ]);
     }

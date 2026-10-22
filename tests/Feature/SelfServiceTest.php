@@ -46,6 +46,27 @@ class SelfServiceTest extends TestCase
         return $this->actingAs($as ?? $this->login)->post('/me/requests', $data + ['reason' => 'Forgot to punch out']);
     }
 
+    public function test_my_page_today_gets_holidays_hr_email_sync_time_and_the_todo_badge(): void
+    {
+        $other = Company::create(['name' => 'Emerge', 'code' => 'EMG', 'employee_code_prefix' => 'EMG-', 'employee_code_digits' => 3]);
+        $this->company->update(['hr_email' => 'hr@fake.test']);
+        \App\Models\Holiday::create(['date' => '2026-08-14', 'name' => 'Fake common']);
+        \App\Models\Holiday::create(['date' => '2026-08-15', 'name' => 'Fake ours', 'company_id' => $this->company->id]);
+        \App\Models\Holiday::create(['date' => '2026-08-16', 'name' => 'Fake theirs', 'company_id' => $other->id]);
+        \App\Models\MachineSync::create(['trigger' => 'cron', 'started_at' => '2026-05-20 11:50:00', 'finished_at' => '2026-05-20 11:50:05', 'ok' => true]);
+        \App\Models\ConductEntry::create(['employee_id' => $this->me->id, 'type' => 'appreciation', 'happened_on' => '2026-05-19', 'title' => 'Fake thanks']);
+
+        $this->actingAs($this->login)->get('/me')->assertInertia(fn (AssertableInertia $p) => $p
+            ->where('holidays', [['date' => '2026-08-14', 'name' => 'Fake common'], ['date' => '2026-08-15', 'name' => 'Fake ours']])
+            ->where('hrEmail', 'hr@fake.test')
+            ->where('lastSync', fn ($at) => str_starts_with((string) $at, '2026-05-20T11:50:05'))
+            ->where('me.todo', 1));
+        // HR logins don't get the staff badge; someone with no machine number gets no sync time.
+        $this->actingAs($this->user('hr'))->get('/dashboard')->assertInertia(fn (AssertableInertia $p) => $p->where('me', null));
+        $this->me->update(['attendance_machine_id' => null]);
+        $this->actingAs($this->login)->get('/me')->assertInertia(fn (AssertableInertia $p) => $p->where('lastSync', null));
+    }
+
     public function test_employee_login_lands_on_my_page_and_cannot_open_hr_pages(): void
     {
         $this->post('/login', ['email' => 'me@test.local', 'password' => 'secret-pass'])->assertRedirect('/me');

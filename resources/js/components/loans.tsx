@@ -2,6 +2,7 @@ import { router, useForm } from '@inertiajs/react';
 import { HandCoins } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { Field } from '@/components/field';
+import { Meter } from '@/components/meter';
 import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -80,6 +81,9 @@ export function MyLoans({ loans }: { loans: LoanRow[] }) {
                         <li key={l.id} className="grid gap-2 px-3 py-3 text-sm sm:grid-cols-[1fr_auto] sm:items-start">
                             <div>
                                 <p className="font-semibold tabular-nums">{loanSummary(l)}</p>
+                                {(l.status === 'active' || l.status === 'repaid') && (
+                                    <Meter value={l.repaid} max={l.amount} label={`${rupees(l.repaid)} of ${rupees(l.amount)} repaid`} tone={l.status === 'repaid' ? 'done' : 'primary'} className="my-1.5 max-w-sm" />
+                                )}
                                 <p className="text-muted-foreground">{l.reason}</p>
                                 {l.repayments.length > 0 && (
                                     <p className="mt-1 text-xs text-muted-foreground tabular-nums">Deducted: {l.repayments.map((r) => `${monthLabel(r.month)} ${rupees(r.amount)}`).join(', ')}</p>

@@ -1,5 +1,5 @@
 import { router } from '@inertiajs/react';
-import { Building2, House, LogIn, LogOut } from 'lucide-react';
+import { Building2, Clock, House, LogIn, LogOut } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { duration, type Place } from '@/components/attendance';
 import { Button } from '@/components/ui/button';
@@ -35,8 +35,12 @@ function PlaceIcon({ place }: { place: Place | null }) {
         : <House className="inline size-3.5 text-info" aria-label="remote" />;
 }
 
-/** Clock in / out on the My page. Each press is saved straight away; mistakes go to HR as an "ask HR to fix a day". */
-export function ClockCard({ clock, today }: { clock: ClockState; today: string }) {
+/**
+ * Clock in / out on the My page, as one line and the button. Each press is saved straight away; mistakes go to HR as
+ * an "ask HR to fix a day". lastSync: when machine punches last arrived (people on the machine), so nobody clocks in
+ * twice while the machine's punch is still on its way.
+ */
+export function ClockCard({ clock, today, lastSync }: { clock: ClockState; today: string; lastSync?: string | null }) {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [now, setNow] = useState(() => Date.now());
@@ -69,45 +73,47 @@ export function ClockCard({ clock, today }: { clock: ClockState; today: string }
         });
     };
     const since = open ? Math.max(0, Math.floor((now - new Date(open.at).getTime()) / 60000)) : 0;
+    const placeText = clock.place === 'office' ? 'On the office network: counts as office time' : 'Away from the office: counts as remote time';
+    const synced = lastSync ? new Date(lastSync).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : null;
 
     return (
-        <section className="flex flex-wrap items-center justify-between gap-4 rounded-lg border p-4" aria-label="Clock in">
-            <div className="grid gap-1">
-                <p className="font-bold">
-                    {open ? <>Clocked in since {open.time} <span className="font-normal text-muted-foreground">({duration(since)})</span></> : 'You are not clocked in'}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                    {clock.place === 'office' ? 'You are on the office network, so this counts as office time.' : 'You are not on the office network, so this counts as remote time.'}
-                </p>
-                {clock.presses.length > 0 && (
-                    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                        <span className="text-muted-foreground">{clock.date === today ? 'Today' : formatDate(clock.date)}:</span>
-                        {clock.presses.map((p) => (
-                            <span key={p.at} className="inline-flex items-center gap-1 tabular-nums">
-                                {p.method} {p.time} <PlaceIcon place={p.place} />
-                                {p.stated && <span className="text-xs text-muted-foreground" title="The time you typed for leaving the office">(stated)</span>}
-                            </span>
-                        ))}
-                    </p>
-                )}
-                {closeOffice && (
-                    <div className="grid gap-2 rounded-md border border-pending/40 bg-pending-soft p-3 text-sm">
-                        <p>
-                            <strong>You checked in at the office at {clock.office_open} and didn't check out.</strong> Before clocking in from here,
-                            enter the time you left the office. It is saved as your office check-out and marked as typed by you.
+        <section className="grid gap-3 rounded-lg border bg-muted/40 p-4" aria-label="Clock in">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                    <span className="hidden size-10 shrink-0 items-center justify-center rounded-full bg-background sm:flex"><Clock className="size-5 text-cascade" /></span>
+                    <div className="min-w-0">
+                        <p className="font-bold">
+                            {open ? <>At work since {open.time}</> : clock.office_open ? <>On the office machine since {clock.office_open}</> : 'Not clocked in'}
                         </p>
-                        <label className="flex flex-wrap items-center gap-2">
-                            <span>I left the office at</span>
-                            <Input type="time" className="h-9 w-32" value={leftOffice} min={clock.office_open ?? undefined}
-                                onChange={(e) => setLeftOffice(e.target.value)} aria-label="Time you left the office" />
-                        </label>
+                        <p className="text-sm text-muted-foreground">
+                            {open ? `${duration(since)} so far · ${open.place === 'office' ? 'office' : 'remote'}` : placeText}
+                            {synced && ` · machine last synced ${synced}`}
+                        </p>
                     </div>
-                )}
-                {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
+                </div>
+                <Button size="lg" variant={open ? 'outline' : 'default'} disabled={busy} onClick={press} className="w-full sm:w-auto">
+                    {open ? <LogOut /> : <LogIn />} {busy ? 'Saving' : open ? 'Clock out' : closeOffice ? 'Close office time and clock in' : 'Clock in'}
+                </Button>
             </div>
-            <Button size="lg" variant={open ? 'outline' : 'default'} disabled={busy} onClick={press}>
-                {open ? <LogOut /> : <LogIn />} {busy ? 'Saving' : open ? 'Clock out' : closeOffice ? 'Check out of office and clock in' : 'Clock in'}
-            </Button>
+            {clock.presses.length > 0 && (
+                <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    <span>{clock.date === today ? 'Today' : formatDate(clock.date)}:</span>
+                    {clock.presses.map((p) => (
+                        <span key={p.at} className="inline-flex items-center gap-1 text-foreground tabular-nums">
+                            {p.method} {p.time} <PlaceIcon place={p.place} />
+                            {p.stated && <span className="text-muted-foreground" title="The time you typed for leaving the office">(stated)</span>}
+                        </span>
+                    ))}
+                </p>
+            )}
+            {closeOffice && (
+                <label className="flex flex-wrap items-center gap-2 rounded-md border border-pending/40 bg-pending-soft px-3 py-2 text-sm">
+                    <span>You didn't check out of the office ({clock.office_open}). I left at</span>
+                    <Input type="time" className="h-9 w-32 bg-background" value={leftOffice} min={clock.office_open ?? undefined}
+                        onChange={(e) => setLeftOffice(e.target.value)} aria-label="Time you left the office" />
+                </label>
+            )}
+            {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
         </section>
     );
 }

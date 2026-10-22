@@ -3,6 +3,8 @@
 namespace App\Http\Middleware;
 
 use App\Http\Controllers\RequestsInboxController;
+use App\Models\ConductEntry;
+use App\Models\Meeting;
 use App\Models\Review;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -53,6 +55,12 @@ class HandleInertiaRequests extends Middleware
                     'reviews' => Review::where('status', 'manager_review')->whereHas('cycle', fn ($q) => $q->where('status', 'open'))->whereHas('employee')->count(),
                 ];
             })() : null,
+            // Staff logins: what My page asks of them (a self-review, something to acknowledge), as the sidebar badge.
+            'me' => fn () => $user?->employee_id && ! $user->canViewHr() ? [
+                'todo' => Review::where('employee_id', $user->employee_id)->where('status', 'self_review')->whereHas('cycle', fn ($q) => $q->where('status', 'open'))->count()
+                    + ConductEntry::where('employee_id', $user->employee_id)->whereNull('acknowledged_at')->count()
+                    + Meeting::where('employee_id', $user->employee_id)->where('shared', true)->whereNull('acknowledged_at')->count(),
+            ] : null,
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

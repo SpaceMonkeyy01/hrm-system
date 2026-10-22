@@ -808,7 +808,7 @@ export default function EmployeeShow(props: Props) {
 
                 <TabsContent value="time" className="grid gap-10">
                     <section className="grid gap-3">
-                        <h2 className="font-bold">Last 12 months</h2>
+                        <h2 className="font-bold">Attendance over the year</h2>
                         <AttendanceHeatmap year={props.attendanceYear} />
                     </section>
                     <section className="grid gap-3">

@@ -45,7 +45,9 @@ import {
     SidebarMenuBadge,
     SidebarMenuButton,
     SidebarMenuItem,
+    useSidebar,
 } from '@/components/ui/sidebar';
+import { ME_SECTIONS, openSection, sectionFromHash, useHash } from '@/components/me-sections';
 import { APP_CREDIT } from '@/lib/app-info';
 import { cn } from '@/lib/utils';
 import type { SharedProps } from '@/types';
@@ -163,12 +165,45 @@ function NavGroup({ label, items, active, className }: { label?: string; items: 
     );
 }
 
+/** Staff logins: the sections of My page (/me#leave), the one for the current #hash lit up. */
+function MeNav() {
+    const { url, props } = usePage<SharedProps>();
+    const hash = useHash();
+    const onMe = new URL(url, 'http://x').pathname === '/me';
+    const current = onMe ? sectionFromHash(hash) : null;
+    const todo = props.me?.todo ?? 0;
+    const { setOpenMobile } = useSidebar();
+    return (
+        <SidebarGroup className="py-1">
+            <SidebarMenu>
+                {ME_SECTIONS.map((s) => {
+                    const count = s.key === 'reviews' ? todo : 0;
+                    return (
+                        <SidebarMenuItem key={s.key}>
+                            <SidebarMenuButton asChild isActive={s.key === current} tooltip={{ children: s.title }}>
+                                <a href={`/me#${s.key}`} onClick={(e) => { if (onMe) { e.preventDefault(); openSection(s.key); setOpenMobile(false); } }}>
+                                    <s.icon />
+                                    <span>{s.title}</span>
+                                </a>
+                            </SidebarMenuButton>
+                            {count > 0 && (
+                                <SidebarMenuBadge className="rounded-full bg-pending-soft px-1.5 text-pending" aria-label={`${count} to do`}>{count}</SidebarMenuBadge>
+                            )}
+                        </SidebarMenuItem>
+                    );
+                })}
+            </SidebarMenu>
+        </SidebarGroup>
+    );
+}
+
 export function AppSidebar() {
     const { auth } = usePage<SharedProps>().props;
     const user = auth.user!;
     const search = useEmployeeSearch();
     const visible = auth.can.view ? groups.map((g) => ({ ...g, items: g.items.filter((i) => !i.edit || auth.can.edit) })) : [];
-    const showMine = auth.can.self || !auth.can.view;
+    const staff = !auth.can.view;
+    const showMine = auth.can.self && !staff;
     const active = useActive([...visible.flatMap((g) => g.items), ...(showMine ? mine : []), ...(auth.can.admin ? settings : [])]);
 
     return (
@@ -197,6 +232,7 @@ export function AppSidebar() {
 
             <SidebarContent className="gap-0">
                 {visible.map((g, i) => <NavGroup key={g.label ?? i} label={g.label} items={g.items} active={active} />)}
+                {staff && <MeNav />}
                 {showMine && <NavGroup label="Me" items={mine} active={active} />}
                 {auth.can.admin && <NavGroup label="Admin" items={settings} active={active} className="mt-auto" />}
             </SidebarContent>

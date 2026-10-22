@@ -18,7 +18,7 @@ export type WfhRequestRow = {
 
 const tone: Record<WfhRequestRow['status'], Tone> = { pending: 'pending', approved: 'done', rejected: 'missing', cancelled: 'neutral' };
 
-function AskDialog({ today, onClose }: { today: string; onClose: () => void }) {
+export function WfhDialog({ today, onClose }: { today: string; onClose: () => void }) {
     const form = useForm({ start_date: today, end_date: today, reason: '' });
     const submit = (e: FormEvent) => {
         e.preventDefault();
@@ -61,7 +61,7 @@ export function MyWfhRequests({ requests, today }: { requests: WfhRequestRow[]; 
         <section className="grid gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="font-bold">Work from home</h2>
-                <Button onClick={() => setAsking(true)}><House /> Ask to work from home</Button>
+                <Button variant="outline" onClick={() => setAsking(true)}><House /> Ask to work from home</Button>
             </div>
             {requests.length === 0 ? <p className="text-sm text-muted-foreground">No work from home requests yet.</p> : (
                 <ul className="divide-y rounded-lg border">
@@ -88,7 +88,7 @@ export function MyWfhRequests({ requests, today }: { requests: WfhRequestRow[]; 
                     ))}
                 </ul>
             )}
-            {asking && <AskDialog today={today} onClose={() => setAsking(false)} />}
+            {asking && <WfhDialog today={today} onClose={() => setAsking(false)} />}
         </section>
     );
 }

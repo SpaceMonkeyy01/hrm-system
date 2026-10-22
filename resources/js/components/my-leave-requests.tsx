@@ -23,7 +23,7 @@ export type LeaveTypeOption = { id: number; name: string; yearly_days: number | 
 
 export const leaveRequestTone: Record<LeaveRequestRow['status'], Tone> = { pending: 'pending', approved: 'done', rejected: 'missing', cancelled: 'neutral' };
 
-function ApplyDialog({ types, parts, uploads, today, onClose }: {
+export function LeaveApplyDialog({ types, parts, uploads, today, onClose }: {
     types: LeaveTypeOption[]; parts: Record<string, string>; uploads: { enabled: boolean; max_mb: number }; today: string; onClose: () => void;
 }) {
     const form = useForm<{ leave_type_id: string; start_date: string; end_date: string; part: string; reason: string; attachment: File | null }>({
@@ -122,7 +122,7 @@ export function MyLeaveRequests({ requests, types, parts, uploads, today }: {
                     ))}
                 </ul>
             )}
-            {applying && <ApplyDialog types={types} parts={parts} uploads={uploads} today={today} onClose={() => setApplying(false)} />}
+            {applying && <LeaveApplyDialog types={types} parts={parts} uploads={uploads} today={today} onClose={() => setApplying(false)} />}
         </section>
     );
 }
