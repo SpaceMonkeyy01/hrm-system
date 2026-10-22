@@ -47,7 +47,7 @@ export default function Overview(props: Props) {
                 actions={props.companies.length > 1 && (
                     <NativeSelect className="w-44" aria-label="Company" value={props.filters.company ?? ''} placeholder="All companies"
                         options={props.companies.map((c) => ({ value: c.id, label: c.name }))}
-                        onChange={(e) => router.get('/overview', e.target.value ? { company: e.target.value } : {}, { preserveState: true, preserveScroll: true, replace: true })} />
+                        onChange={(e) => router.get('/overview', { company: e.target.value || 'all' }, { preserveState: true, preserveScroll: true, replace: true })} />
                 )}
             />
 

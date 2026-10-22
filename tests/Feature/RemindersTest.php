@@ -341,9 +341,36 @@ class RemindersTest extends TestCase
 
         $this->artisan('hr:send-reminders', ['--dry-run' => true])
             ->expectsOutputToContain('Probation ends tomorrow')
-            ->expectsOutputToContain('Dry run: no email sent. Would send to: hr@example.test')
+            ->expectsOutputToContain('== For both companies (hr@example.test)')
+            ->expectsOutputToContain('Dry run: no email sent.')
             ->assertSuccessful();
         Mail::assertNothingSent();
+    }
+
+    public function test_each_login_gets_only_its_home_companys_people(): void
+    {
+        $this->travelTo($this->today->setTime(8, 0));
+        Mail::fake();
+        $emerge = \App\Models\Company::create(['name' => 'Emerge', 'code' => 'EMG', 'employee_code_prefix' => 'EMG-', 'employee_code_digits' => 3]);
+        $this->person(['full_name' => 'Fake Bcc Person'], ['probation_end_date' => $this->day(1)]);
+        $emg = $this->person(['full_name' => 'Fake Emerge Person'], ['probation_end_date' => $this->day(1)]);
+        $emg->update(['company_id' => $emerge->id]);
+        $this->user('hr', ['email' => 'hr.bcc@example.test', 'company_id' => $this->company->id]);
+        $this->user('hr', ['email' => 'hr.emerge@example.test', 'company_id' => $emerge->id]);
+        $this->user('admin', ['email' => 'boss@example.test']);   // no home company: both
+
+        $this->artisan('hr:send-reminders')->assertSuccessful();
+        $names = fn (RemindersDigest $m) => array_column($m->reminders, 'employee_name');
+        Mail::assertSent(RemindersDigest::class, fn ($m) => $m->hasTo('hr.bcc@example.test') && $names($m) === ['Fake Bcc Person']);
+        Mail::assertSent(RemindersDigest::class, fn ($m) => $m->hasTo('hr.emerge@example.test') && $names($m) === ['Fake Emerge Person']);
+        Mail::assertSent(RemindersDigest::class, fn ($m) => $m->hasTo('boss@example.test') && count($names($m)) === 2);
+
+        // Nothing for one company: that login gets no email at all
+        Mail::fake();
+        Onboarding::where('employee_id', $emg->id)->sole()->update(['probation_end_date' => $this->day(40)]);
+        $this->artisan('hr:send-reminders')->assertSuccessful();
+        Mail::assertNotSent(RemindersDigest::class, fn ($m) => $m->hasTo('hr.emerge@example.test'));
+        Mail::assertSent(RemindersDigest::class, fn ($m) => $m->hasTo('hr.bcc@example.test'));
     }
 
     public function test_command_is_scheduled_daily_at_the_configured_time(): void

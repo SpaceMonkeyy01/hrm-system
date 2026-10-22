@@ -17,15 +17,16 @@ import { formatDateTime, plural } from '@/lib/format';
 import type { SharedProps } from '@/types';
 
 type User = { id: number; name: string; email: string; role: string; is_active: boolean; employee_id: number | null; employee: string | null; created_at: string | null;
-    last_login_at: string | null; has_history: boolean };
+    last_login_at: string | null; has_history: boolean; company_id: number | null };
 type Option = { value: number; label: string };
 
 const roleName = (r: string) => (r === 'hr' ? 'HR' : r[0].toUpperCase() + r.slice(1));
 
 const firstError = (e: Record<string, string>) => toast.error(Object.values(e)[0] ?? 'Not done.');
 
-function UserRow({ user, roles, isMe, employees }: { user: User; roles: Record<string, string>; isMe: boolean; employees: Option[] }) {
-    const form = useForm({ name: user.name, email: user.email, role: user.role, is_active: user.is_active, password: '', employee_id: user.employee_id ? String(user.employee_id) : '' });
+function UserRow({ user, roles, isMe, employees, companies }: { user: User; roles: Record<string, string>; isMe: boolean; employees: Option[]; companies: Option[] }) {
+    const form = useForm({ name: user.name, email: user.email, role: user.role, is_active: user.is_active, password: '', employee_id: user.employee_id ? String(user.employee_id) : '',
+        company_id: user.company_id ? String(user.company_id) : '' });
     const submit = (e: FormEvent) => {
         e.preventDefault();
         form.put(`/settings/users/${user.id}`, { preserveScroll: true, onSuccess: () => { form.setDefaults({ ...form.data, password: '' }); form.reset('password'); } });
@@ -42,6 +43,10 @@ function UserRow({ user, roles, isMe, employees }: { user: User; roles: Record<s
                 <NativeSelect aria-label="Role" value={form.data.role} disabled={isMe} onChange={(e) => form.setData('role', e.target.value)}
                     options={Object.keys(roles).map((r) => ({ value: r, label: roleName(r) }))} />
                 {form.errors.role && <p className="mt-1 text-xs text-missing">{form.errors.role}</p>}
+                {form.data.role !== 'employee' && companies.length > 1 && (
+                    <NativeSelect aria-label="Home company" className="mt-1 h-8 text-xs" value={form.data.company_id} placeholder="Both companies"
+                        options={companies} onChange={(e) => form.setData('company_id', e.target.value)} />
+                )}
             </td>
             <td className="py-2 pr-3">
                 <NativeSelect aria-label="Their employee record" value={form.data.employee_id} placeholder={form.data.role === 'employee' ? 'Pick the employee' : 'Not linked'}
@@ -92,10 +97,12 @@ function UserRow({ user, roles, isMe, employees }: { user: User; roles: Record<s
     );
 }
 
-export default function Users({ users, roles, employees, staffLogins }: { users: User[]; roles: Record<string, string>; employees: Option[]; staffLogins: { ready: number; noEmail: number; emailTaken: number } }) {
+export default function Users({ users, roles, employees, companies, staffLogins }: {
+    users: User[]; roles: Record<string, string>; employees: Option[]; companies: Option[]; staffLogins: { ready: number; noEmail: number; emailTaken: number };
+}) {
     const { auth } = usePage<SharedProps>().props;
     const [open, setOpen] = useState(false);
-    const form = useForm({ name: '', email: '', role: 'hr', password: '', employee_id: '', send_invite: true });
+    const form = useForm({ name: '', email: '', role: 'hr', password: '', employee_id: '', company_id: '', send_invite: true });
     const submit = (e: FormEvent) => {
         e.preventDefault();
         form.post('/settings/users', { preserveScroll: true, onSuccess: () => { form.reset(); setOpen(false); } });
@@ -130,11 +137,12 @@ export default function Users({ users, roles, employees, staffLogins }: { users:
                     <thead>
                         <tr className="border-b text-left text-xs text-muted-foreground">
                             <th className="min-w-56 py-2.5 pr-3 font-semibold">Name and email</th>
-                            <th className="w-36 py-2.5 pr-3 font-semibold">
-                                Role{' '}
+                            <th className="w-40 py-2.5 pr-3 font-semibold">
+                                Role and home company{' '}
                                 <HelpTip label="What each role can do">
                                     <ul className="grid gap-1.5">
                                         {Object.entries(roles).map(([k, v]) => <li key={k}>{v}</li>)}
+                                        <li>Home company: pages open on that company, and the 08:00 email covers only its people. They can still pick All.</li>
                                     </ul>
                                 </HelpTip>
                             </th>
@@ -145,7 +153,7 @@ export default function Users({ users, roles, employees, staffLogins }: { users:
                         </tr>
                     </thead>
                     <tbody className="divide-y">
-                        {users.map((u) => <UserRow key={u.id} user={u} roles={roles} employees={employees} isMe={u.id === auth.user?.id} />)}
+                        {users.map((u) => <UserRow key={u.id} user={u} roles={roles} employees={employees} companies={companies} isMe={u.id === auth.user?.id} />)}
                     </tbody>
                 </table>
             </div>
@@ -167,6 +175,13 @@ export default function Users({ users, roles, employees, staffLogins }: { users:
                             <NativeSelect id="u-role" value={form.data.role} onChange={(e) => form.setData('role', e.target.value)}
                                 options={Object.entries(roles).map(([k, v]) => ({ value: k, label: v }))} />
                         </Field>
+                        {form.data.role !== 'employee' && companies.length > 1 && (
+                            <Field label="Home company" htmlFor="u-company" error={form.errors.company_id}
+                                hint="Pages open on this company and the 08:00 email covers only its people. They can still pick All.">
+                                <NativeSelect id="u-company" value={form.data.company_id} placeholder="Both companies" options={companies}
+                                    onChange={(e) => form.setData('company_id', e.target.value)} />
+                            </Field>
+                        )}
                         <Field label="Their employee record" htmlFor="u-emp" error={form.errors.employee_id}
                             hint={form.data.role === 'employee' ? 'Employee logins see only this record, on My page.' : 'Optional. Linking gives them My page too.'}>
                             <NativeSelect id="u-emp" value={form.data.employee_id} placeholder={form.data.role === 'employee' ? 'Pick the employee' : 'Not linked'}

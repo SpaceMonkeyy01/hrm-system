@@ -314,7 +314,8 @@ class AttendanceTest extends TestCase
 
         $hr = $this->user('hr');
         $this->actingAs($hr)->get('/attendance?date=2026-05-13&company='.$emerge->id)->assertInertia($rows(json_encode([$emgLinked->id])));
-        $this->actingAs($hr)->get('/attendance?date=2026-05-13&linked=yes')
+        // The company picked is remembered (RememberCompany), so everyone again is ?company=all
+        $this->actingAs($hr)->get('/attendance?date=2026-05-13&linked=yes&company=all')
             ->assertInertia($rows(json_encode([$bccLinked->id, $emgLinked->id])))
             ->assertInertia(fn (AssertableInertia $p) => $p->where('links', ['yes' => 2, 'no' => 1])->where('counts.No data', 2)->missing('counts.Not linked'));
         $this->actingAs($hr)->get('/attendance?date=2026-05-13&linked=no&company='.$this->company->id)->assertInertia($rows(json_encode([$bccNot->id])));

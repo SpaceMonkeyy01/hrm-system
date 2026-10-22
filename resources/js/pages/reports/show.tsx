@@ -23,7 +23,7 @@ type Column = { key: string; label: string; type: 'text' | 'number' | 'date' | '
 type Person = { id: number; name: string; code: string };
 type DayCell = { code: string; tone: Tone | null; title: string };
 type Row = Record<string, unknown>;
-type Filters = { month: string; from: string; to: string; year: number; date: string; within: number; company: number | null; department: number | null; day: string; week: string };
+type Filters = { month: string; from: string; to: string; year: number; date: string; within: number; company: number | 'all' | null; department: number | null; day: string; week: string };
 type Company = { id: number; name: string; departments: { id: number; name: string }[] };
 type Props = {
     report: { key: string; title: string; description: string; group: string; filters: string[]; wide: boolean };
@@ -179,7 +179,7 @@ export default function ReportShow({ report, filters, today, companies, result }
                     {has('company') && companies.length > 1 && (
                         <label className="grid gap-1 text-xs font-semibold text-muted-foreground">Company
                             <NativeSelect className="w-40" value={filters.company ?? ''} placeholder="All companies" options={companies.map((c) => ({ value: c.id, label: c.name }))}
-                                onChange={(e) => go({ company: e.target.value ? Number(e.target.value) : null, department: null })} />
+                                onChange={(e) => go({ company: e.target.value ? Number(e.target.value) : 'all', department: null })} />
                         </label>
                     )}
                     {has('department') && (

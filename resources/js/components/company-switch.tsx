@@ -1,7 +1,10 @@
 import { cn } from '@/lib/utils';
 
-/** { company: 4 } when one is picked, else {}: add it to links and filter changes so the choice carries over. */
-export const companyParam = (company: number | null | undefined) => (company ? { company } : {});
+/**
+ * { company: 4 }, or { company: 'all' } for All: the choice is remembered for the session (RememberCompany), and pages
+ * open on the login's home company until one is picked, so All has to be said out loud.
+ */
+export const companyParam = (company: number | null | undefined): { company: number | 'all' } => ({ company: company || 'all' });
 
 /**
  * All / BCC / Emerge: narrows the page to one company's people (?company=, read by Company::picked on the server).

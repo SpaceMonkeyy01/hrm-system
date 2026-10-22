@@ -250,7 +250,7 @@ export default function Assets(props: Props) {
                     ))}
                     <NativeSelect className="w-44" aria-label="Type" value={props.filters.type ?? ''} placeholder="All types" options={toOptions(props.types)} onChange={(e) => go({ type: e.target.value || undefined })} />
                     {props.companies.length > 1 && (
-                        <NativeSelect className="w-40" aria-label="Company" value={props.filters.company ?? ''} placeholder="All companies" options={props.companies.map((c) => ({ value: c.id, label: c.name }))} onChange={(e) => go({ company: e.target.value || undefined })} />
+                        <NativeSelect className="w-40" aria-label="Company" value={props.filters.company ?? ''} placeholder="All companies" options={props.companies.map((c) => ({ value: c.id, label: c.name }))} onChange={(e) => go({ company: e.target.value || 'all' })} />
                     )}
                     <NativeSelect className="w-52" aria-label="Warranty" value={props.filters.warranty ?? ''} placeholder="Any warranty"
                         options={[{ value: 'ending', label: `Warranty ending (${props.warrantyDays} days)` }, { value: 'expired', label: 'Warranty expired' }]} onChange={(e) => go({ warranty: e.target.value || undefined })} />

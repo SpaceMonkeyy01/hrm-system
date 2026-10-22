@@ -159,11 +159,12 @@ class Reminders
     /**
      * Active people who started before the recent-starter window and still have missing documents.
      * They get no per-person reminders; the email mentions the count once a week (documents_backlog_weekday).
+     * $company: only that company's people (the daily email of a login with a home company).
      */
-    public static function documentsBacklog(CarbonInterface $today): int
+    public static function documentsBacklog(CarbonInterface $today, ?int $company = null): int
     {
         $today = CarbonImmutable::parse($today)->startOfDay();
-        $older = Employee::query()->where('status', 'active')->whereNotNull('start_date')->get(['id', 'start_date'])
+        $older = Employee::query()->where('status', 'active')->inCompany($company)->whereNotNull('start_date')->get(['id', 'start_date'])
             ->reject(fn (Employee $e) => HrRules::isRecentStarter($e->start_date, $today));
         if ($older->isEmpty()) {
             return 0;

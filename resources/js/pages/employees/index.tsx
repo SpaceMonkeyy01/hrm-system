@@ -22,7 +22,7 @@ type Row = {
     manager: { id: number; name: string } | null;
 };
 type Filters = {
-    q?: string; company?: number; department?: number; status: string; review?: boolean; unassigned?: boolean; sort?: string;
+    q?: string; company?: number | 'all'; department?: number; status: string; review?: boolean; unassigned?: boolean; sort?: string;
     type?: string; mode?: string; manager?: number; started_from?: string; started_to?: string; login?: 'yes' | 'no'; linked?: 'yes' | 'no';
 };
 type Option = { value: number; label: string };
@@ -138,7 +138,7 @@ export default function EmployeesIndex(props: Props) {
         filters.unassigned && { key: 'unassigned', label: 'No company yet', clear: () => apply({ unassigned: undefined }) },
     ].filter(Boolean) as FilterChip[];
     const visibleSet = [filters.company, filters.department, filters.status !== 'current' ? filters.status : null, filters.q].filter(Boolean).length;
-    const clearAll = () => { setQ(''); apply({ q: undefined, company: undefined, department: undefined, status: 'current', type: undefined, mode: undefined, manager: undefined,
+    const clearAll = () => { setQ(''); apply({ q: undefined, company: 'all', department: undefined, status: 'current', type: undefined, mode: undefined, manager: undefined,
         login: undefined, linked: undefined, started_from: undefined, started_to: undefined, review: undefined, unassigned: undefined }); };
     const narrowed = employees.total !== props.statusTotal;
 
@@ -208,7 +208,7 @@ export default function EmployeesIndex(props: Props) {
                 }>
                     {companies.length > 1 && (
                         <NativeSelect aria-label="Company" className="w-40" value={filters.company ?? ''} placeholder="All companies"
-                            onChange={(e) => apply({ company: e.target.value ? Number(e.target.value) : undefined, department: undefined })}
+                            onChange={(e) => apply({ company: e.target.value ? Number(e.target.value) : 'all', department: undefined })}
                             options={companies.map((c) => ({ value: c.id, label: c.name }))} />
                     )}
                     <NativeSelect aria-label="Department" className="w-52" value={filters.department ?? ''} placeholder="All departments"

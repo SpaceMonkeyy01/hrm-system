@@ -291,7 +291,7 @@ export default function LeaveIndex(props: Props) {
             <Head title="Leave" />
             <PageHeader title="Leave" help="Approved leave and public holidays. Staff apply on My page and HR approves under Requests; leave approved elsewhere is recorded here."
                 actions={<>
-                    <CompanySwitch companies={props.companies} value={props.company} onChange={(id) => go({ company: id ?? undefined, department: undefined })} />
+                    <CompanySwitch companies={props.companies} value={props.company} onChange={(id) => go({ company: id ?? 'all', department: undefined })} />
                     {can && <>
                         <Button variant="outline" asChild><Link href={`/leave/requests${props.company ? `?company=${props.company}` : ''}`}>Requests{nav?.leave ? ` (${nav.leave})` : ''}</Link></Button>
                         <Button onClick={() => setAdding(true)}><Plus /> Record leave</Button>

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Models\Company;
 use App\Models\Employee;
 use App\Models\User;
 use App\Notifications\SetPasswordNotification;
@@ -22,15 +23,17 @@ class UserController extends Controller
     public function index(): Response
     {
         $users = User::query()->with('employee:id,full_name,employee_code')->orderBy('name')
-            ->get(['id', 'name', 'email', 'role', 'is_active', 'last_login_at', 'employee_id', 'created_at']);
+            ->get(['id', 'name', 'email', 'role', 'is_active', 'last_login_at', 'employee_id', 'company_id', 'created_at']);
         $history = User::withHistory($users->pluck('id')->all());
 
         return Inertia::render('settings/users', [
-            'users' => $users->map(fn ($u) => [...$u->only('id', 'name', 'email', 'role', 'is_active', 'employee_id'),
+            'users' => $users->map(fn ($u) => [...$u->only('id', 'name', 'email', 'role', 'is_active', 'employee_id', 'company_id'),
                 'employee' => $u->employee ? "{$u->employee->full_name} ({$u->employee->employee_code})" : null,
                 'created_at' => $u->created_at?->toIso8601String(), 'last_login_at' => $u->last_login_at?->toIso8601String(),
                 'has_history' => isset($history[$u->id])]),
             'roles' => config('hrm.roles'),
+            // Home company of HR, viewer and admin logins: pages open on it and the daily email covers only its people.
+            'companies' => Company::query()->orderBy('name')->get(['id', 'name'])->map(fn ($c) => ['value' => $c->id, 'label' => $c->name]),
             'staffLogins' => (fn ($c) => ['ready' => $c['ready']->count(), 'noEmail' => $c['noEmail'], 'emailTaken' => $c['emailTaken']])(StaffLoginController::candidates()),
             // Current staff, for linking a login to its own employee record (My page).
             'employees' => Employee::query()->whereIn('status', ['active', 'offboarding'])->orderBy('full_name')->get(['id', 'full_name', 'employee_code'])
@@ -54,6 +57,9 @@ class UserController extends Controller
             ...$this->employeeRule(null),
         ], self::MESSAGES);
         $invite = $request->boolean('send_invite');
+        if ($data['role'] === 'employee') {
+            $data['company_id'] = null;
+        }
         $user = User::create(collect($data)->except('send_invite')->all() + ['is_active' => true]
             + ($invite ? ['password' => Str::random(40)] : []));   // unknown to everyone until they use the link
 
@@ -92,7 +98,7 @@ class UserController extends Controller
         if (empty($data['password'])) {
             unset($data['password']);
         }
-        $user->update($data);
+        $user->update(['company_id' => $data['role'] === 'employee' ? null : ($data['company_id'] ?? null)] + $data);
 
         return back()->with('success', "Saved {$user->email}.");
     }
@@ -134,10 +140,14 @@ class UserController extends Controller
         'employee_id.unique' => 'That employee already has a login.',
     ];
 
-    /** Employee logins must belong to someone; other roles may (so HR staff get My page too). */
+    /**
+     * Employee logins must belong to someone; other roles may (so HR staff get My page too). Home company: HR, viewer
+     * and admin logins only (staff logins only ever see their own record).
+     */
     private function employeeRule(?User $user): array
     {
         return ['employee_id' => ['nullable', 'required_if:role,employee', 'integer',
-            Rule::exists('employees', 'id')->withoutTrashed(), Rule::unique('users', 'employee_id')->ignore($user?->id)]];
+            Rule::exists('employees', 'id')->withoutTrashed(), Rule::unique('users', 'employee_id')->ignore($user?->id)],
+            'company_id' => ['nullable', 'integer', 'exists:companies,id']];
     }
 }

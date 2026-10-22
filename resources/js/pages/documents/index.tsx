@@ -132,7 +132,7 @@ export default function DocumentsIndex({ rows, columns, owed, optionSets, filter
                     </>
                 }>
                     <NativeSelect aria-label="Company" className="w-40" value={filters.company ?? ''} placeholder="All companies"
-                        onChange={(e) => apply({ company: e.target.value || undefined, department: undefined })} options={companies.map((c) => ({ value: c.id, label: c.name }))} />
+                        onChange={(e) => apply({ company: e.target.value || 'all', department: undefined })} options={companies.map((c) => ({ value: c.id, label: c.name }))} />
                     <NativeSelect aria-label="Department" className="w-52" value={filters.department ?? ''} placeholder="All departments"
                         onChange={(e) => apply({ department: e.target.value || undefined })} options={departments.map((d) => ({ value: d.id, label: d.name }))} />
                     <NativeSelect aria-label="Status" className="w-36" value={filters.status ?? ''} placeholder="Any status"

@@ -67,7 +67,7 @@ export default function AttendanceIndex(props: Props) {
                     {props.date !== props.today && <Button variant="ghost" onClick={() => go({ date: props.today })}>Today</Button>}
                     {props.companies.length > 1 && (
                         <NativeSelect className="w-44" value={props.filters.company ?? ''} placeholder="All companies" options={props.companies.map((c) => ({ value: c.id, label: c.name }))}
-                            aria-label="Company" onChange={(e) => go({ company: e.target.value || undefined, department: undefined })} />
+                            aria-label="Company" onChange={(e) => go({ company: e.target.value || 'all', department: undefined })} />
                     )}
                     <NativeSelect className="w-56" value={props.filters.department ?? ''} placeholder="All departments" options={departments}
                         aria-label="Department" onChange={(e) => go({ department: e.target.value || undefined })} />

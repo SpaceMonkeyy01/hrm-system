@@ -16,10 +16,10 @@ class User extends Authenticatable
     /** @use HasFactory<UserFactory> */
     use HasFactory, LogsActivity, Notifiable;
 
-    protected $fillable = ['name', 'email', 'password', 'role', 'is_active', 'employee_id'];
+    protected $fillable = ['name', 'email', 'password', 'role', 'is_active', 'employee_id', 'company_id'];
 
     /** Same defaults as the migration, so a just-created model has them in memory too. */
-    protected $attributes = ['role' => 'viewer', 'is_active' => true, 'employee_id' => null];
+    protected $attributes = ['role' => 'viewer', 'is_active' => true, 'employee_id' => null, 'company_id' => null];
 
     protected $hidden = ['password', 'remember_token'];
 

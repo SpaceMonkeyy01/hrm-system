@@ -74,6 +74,32 @@ class CompanySwitchTest extends TestCase
         $this->assertSame([], $this->props("/attendance/requests?company={$this->bcc->id}")['requests']);
     }
 
+    public function test_pages_open_on_the_logins_home_company_and_remember_the_choice(): void
+    {
+        $admin = $this->user('admin');
+        $this->actingAs($admin)->put("/settings/users/{$admin->id}", ['name' => 'Fake Admin', 'role' => 'admin', 'is_active' => true, 'company_id' => $this->emerge->id])
+            ->assertSessionHasNoErrors();
+        $this->assertSame($this->emerge->id, $admin->fresh()->company_id);
+        $hr = $this->user('hr', ['company_id' => $this->bcc->id]);
+
+        // First visit: the home company, on any page with the company filter
+        $this->actingAs($hr)->get('/requests')->assertInertia(fn (AssertableInertia $p) => $p->where('company', $this->bcc->id));
+        $this->actingAs($hr)->get('/employees')->assertInertia(fn (AssertableInertia $p) => $p->where('filters.company', (string) $this->bcc->id));
+        // Picking All sticks as they move around (pages linked without ?company=)
+        $this->actingAs($hr)->get('/requests?company=all')->assertInertia(fn (AssertableInertia $p) => $p->where('company', null));
+        $this->actingAs($hr)->get('/leave')->assertInertia(fn (AssertableInertia $p) => $p->where('company', null)->where('records', fn ($r) => count($r) === 2));
+        // So does picking the other company
+        $this->actingAs($hr)->get("/loans?company={$this->emerge->id}");
+        $this->actingAs($hr)->get('/medical')->assertInertia(fn (AssertableInertia $p) => $p->where('company', $this->emerge->id));
+        // Downloads use exactly what they're given: no company in the link = everyone
+        $csv = $this->actingAs($hr)->get('/export/employees')->streamedContent();
+        $this->assertStringContainsString('Fake Bcc', $csv);
+        $this->assertStringContainsString('Fake Emerge', $csv);
+
+        // A login with no home company opens on everyone, as before
+        $this->actingAs($this->user('hr'))->get('/requests')->assertInertia(fn (AssertableInertia $p) => $p->where('company', null));
+    }
+
     public function test_leave_page_narrows_people_and_holidays(): void
     {
         Holiday::create(['date' => '2026-05-28', 'name' => 'Fake common']);

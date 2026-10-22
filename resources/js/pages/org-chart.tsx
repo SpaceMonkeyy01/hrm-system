@@ -222,7 +222,7 @@ export default function OrgChart(props: Props) {
                         {props.companies.length > 1 && (
                             <NativeSelect className="w-40" aria-label="Company" value={props.filters.company ?? ''} placeholder="All companies"
                                 options={props.companies.map((c) => ({ value: c.id, label: c.name }))}
-                                onChange={(e) => router.get('/org-chart', e.target.value ? { company: e.target.value } : {}, { preserveState: true, replace: true })} />
+                                onChange={(e) => router.get('/org-chart', { company: e.target.value || 'all' }, { preserveState: true, replace: true })} />
                         )}
                         <div className="relative w-full sm:w-56">
                             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />

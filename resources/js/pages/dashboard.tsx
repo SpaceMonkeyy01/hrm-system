@@ -204,7 +204,7 @@ export default function Dashboard(props: Props) {
         { n: totals.offboarding, href: '/offboarding', tone: 'ink', text: ['offboarding open', 'offboardings open'], show: true },
     ].filter((l) => l.show && l.n > 0);
 
-    const switchCompany = (id: number | null) => router.get('/dashboard', id ? { company: id } : {}, { preserveScroll: true, replace: true });
+    const switchCompany = (id: number | null) => router.get('/dashboard', { company: id ?? 'all' }, { preserveScroll: true, replace: true });
 
     return (
         <>

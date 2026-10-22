@@ -220,7 +220,7 @@ export default function OnboardingIndex({ rows, columns, optionSets, filters, co
                     </>
                 }>
                     <NativeSelect aria-label="Company" className="w-40" value={filters.company ?? ''} placeholder="All companies"
-                        onChange={(e) => apply({ company: e.target.value || undefined, department: undefined })} options={companies.map((c) => ({ value: c.id, label: c.name }))} />
+                        onChange={(e) => apply({ company: e.target.value || 'all', department: undefined })} options={companies.map((c) => ({ value: c.id, label: c.name }))} />
                     <NativeSelect aria-label="Department" className="w-52" value={filters.department ?? ''} placeholder="All departments"
                         onChange={(e) => apply({ department: e.target.value || undefined })} options={departments.map((d) => ({ value: d.id, label: d.name }))} />
                     <NativeSelect aria-label="Probation" className="w-44" value={filters.probation ?? ''} placeholder="Any probation"
