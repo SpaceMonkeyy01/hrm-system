@@ -18,7 +18,7 @@ const RESTORE = 'hrm.trail.restore';
 const ROOTS = new Set([
     'dashboard', 'overview', 'reports/index', 'employees/index', 'org-chart', 'onboarding/index', 'documents/index',
     'reviews/index', 'offboarding/index', 'attendance/index', 'attendance/schedules', 'attendance/punches',
-    'attendance/clock-ins', 'attendance/devices', 'attendance/links', 'leave/index', 'assets/index',
+    'attendance/clock-ins', 'attendance/devices', 'attendance/links', 'leave/index', 'assets/index', 'loans/index', 'medical/index',
     'controlled-documents/index', 'settings/users', 'settings/structure', 'settings/checklists', 'letters/templates', 'me/show', 'account',
 ]);
 

@@ -14,6 +14,11 @@ const attendance: Tab[] = [
     { title: 'Links', href: '/attendance/links', edit: true },
 ];
 
+const employeeCare: Tab[] = [
+    { title: 'Loans', href: '/loans', edit: true },
+    { title: 'Medical', href: '/medical', edit: true },
+];
+
 const settings: Tab[] = [
     { title: 'Users', href: '/settings/users' },
     { title: 'Departments & teams', href: '/settings/structure' },
@@ -43,4 +48,5 @@ function SectionTabs({ tabs, label }: { tabs: Tab[]; label: string }) {
 }
 
 export const AttendanceTabs = () => <SectionTabs tabs={attendance} label="Attendance pages" />;
-export const SettingsTabs = () => <SectionTabs tabs={settings} label="Settings pages" />;
+export const EmployeeCareTabs = () => <SectionTabs tabs={employeeCare} label="Employee care pages" />;
+export const SettingsTabs =() => <SectionTabs tabs={settings} label="Settings pages" />;

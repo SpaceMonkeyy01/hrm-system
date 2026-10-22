@@ -9,6 +9,7 @@ import { rupees } from '@/components/loans';
 import { medicalSummary, medicalTone, paidLine } from '@/components/medical';
 import type { MedicalRow } from '@/components/medical';
 import { PageHeader } from '@/components/page-header';
+import { EmployeeCareTabs } from '@/components/section-tabs';
 import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -66,8 +67,10 @@ export default function MedicalRequests(props: Props) {
             <Head title="Medical requests" />
             <PageHeader actions={<CompanySwitch companies={props.companies} value={props.company}
                     onChange={(id) => router.get('/medical', { ...(props.status === 'pending' ? {} : { status: props.status }), ...companyParam(id) }, { preserveState: true, replace: true })} />}
-                back={{ href: `/requests${props.company ? `?company=${props.company}` : ''}`, label: 'Requests' }} title="Medical requests"
-                help="Bills staff claim back and advances for treatment, sent from My page. Approve the amount asked or less, then mark it paid once the money has gone out. There is no yearly limit; each request shows what the person had approved this year.">
+                back={{ href: `/requests${props.company ? `?company=${props.company}` : ''}`, label: 'Requests' }} title="Medical requests" tabs={<EmployeeCareTabs />}
+                help="Bills staff claim back and advances for treatment, sent from My page. Approve the amount asked or less, then mark it paid once the money has gone out. There is no yearly limit; each request shows what the person had approved this year." />
+
+            <div className="grid gap-4 px-4 py-6 md:px-6">
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
                     {Object.entries(props.statuses).map(([key, label]) => (
                         <Button key={key} size="sm" variant={props.status === key ? 'default' : 'outline'}
@@ -76,9 +79,6 @@ export default function MedicalRequests(props: Props) {
                         </Button>
                     ))}
                 </div>
-            </PageHeader>
-
-            <div className="px-4 py-6 md:px-6">
                 {props.requests.length === 0 ? (
                     <EmptyState icon={pending ? CheckCheck : Stethoscope} title={pending ? 'No medical requests waiting.' : 'No medical requests here.'} />
                 ) : (

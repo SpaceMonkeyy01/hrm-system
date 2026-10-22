@@ -8,7 +8,7 @@ import {
     DoorOpen,
     FileChartColumn,
     FileCheck2,
-    HandCoins,
+    HeartHandshake,
     House,
     Inbox,
     Laptop,
@@ -53,10 +53,10 @@ import type { SharedProps } from '@/types';
 /**
  * edit: only for HR and admin logins (the page itself returns 403 to others).
  * badge: key of a count in the shared "nav" prop (HandleInertiaRequests), shown when above 0.
- * match: the path prefix that lights the item up, when it differs from href (Settings opens Users but covers /settings/*).
- * Attendance and Settings have more pages; those are tabs on the pages (components/section-tabs.tsx).
+ * match: the path prefix(es) that light the item up, when they differ from href (Settings opens Users but covers /settings/*).
+ * Attendance, Employee care and Settings have more pages; those are tabs on the pages (components/section-tabs.tsx).
  */
-type Item = { title: string; href: string; icon: LucideIcon; edit?: boolean; badge?: 'requests' | 'reviews' | 'leave' | 'inbox'; match?: string };
+type Item = { title: string; href: string; icon: LucideIcon; edit?: boolean; badge?: 'requests' | 'reviews' | 'leave' | 'inbox'; match?: string | string[] };
 type Group = { label?: string; items: Item[] };
 
 const groups: Group[] = [
@@ -91,7 +91,8 @@ const groups: Group[] = [
         label: 'Company',
         items: [
             { title: 'Assets', href: '/assets', icon: Laptop },
-            { title: 'Loans', href: '/loans', icon: HandCoins, edit: true },            { title: 'Controlled documents', href: '/controlled-documents', icon: ScrollText },
+            { title: 'Employee care', href: '/loans', icon: HeartHandshake, edit: true, match: ['/loans', '/medical'] },
+            { title: 'Controlled documents', href: '/controlled-documents', icon: ScrollText },
             { title: 'Letter templates', href: '/letters/templates', icon: Mail, edit: true },
         ],
     },
@@ -129,9 +130,9 @@ export function AppLogo({ variant = 'mark' }: { variant?: 'mark' | 'full' }) {
 function useActive(all: Item[]): string | undefined {
     const { url } = usePage();
     const path = new URL(url, 'http://x').pathname;
-    const prefix = (i: Item) => i.match ?? i.href;
-    const matches = (i: Item) => path === prefix(i) || path.startsWith(prefix(i) + '/');
-    return all.filter(matches).sort((a, b) => prefix(b).length - prefix(a).length)[0]?.href;
+    // Length of the longest prefix of the item that matches the path, 0 for none.
+    const score = (i: Item) => Math.max(0, ...[i.match ?? i.href].flat().filter((p) => path === p || path.startsWith(p + '/')).map((p) => p.length));
+    return all.filter((i) => score(i) > 0).sort((a, b) => score(b) - score(a))[0]?.href;
 }
 
 function NavGroup({ label, items, active, className }: { label?: string; items: Item[]; active?: string; className?: string }) {

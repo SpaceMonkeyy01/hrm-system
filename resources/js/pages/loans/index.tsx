@@ -8,6 +8,7 @@ import { Field } from '@/components/field';
 import { loanSummary, loanTone, monthLabel, rupees } from '@/components/loans';
 import type { LoanRow } from '@/components/loans';
 import { PageHeader } from '@/components/page-header';
+import { EmployeeCareTabs } from '@/components/section-tabs';
 import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -75,8 +76,10 @@ export default function Loans(props: Props) {
             <Head title="Loans" />
             <PageHeader actions={<CompanySwitch companies={props.companies} value={props.company}
                     onChange={(id) => router.get('/loans', { ...(props.status === 'pending' ? {} : { status: props.status }), ...companyParam(id) }, { preserveState: true, replace: true })} />}
-                back={{ href: `/requests${props.company ? `?company=${props.company}` : ''}`, label: 'Requests' }} title="Loans"
-                help="Loan requests from My page and the loans being repaid. Until payroll is in the app, record each month's deduction here.">
+                back={{ href: `/requests${props.company ? `?company=${props.company}` : ''}`, label: 'Requests' }} title="Loans" tabs={<EmployeeCareTabs />}
+                help="Loan requests from My page and the loans being repaid. Until payroll is in the app, record each month's deduction here." />
+
+            <div className="grid gap-4 px-4 py-6 md:px-6">
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
                     {Object.entries(props.statuses).map(([key, label]) => (
                         <Button key={key} size="sm" variant={props.status === key ? 'default' : 'outline'}
@@ -85,9 +88,6 @@ export default function Loans(props: Props) {
                         </Button>
                     ))}
                 </div>
-            </PageHeader>
-
-            <div className="px-4 py-6 md:px-6">
                 {props.loans.length === 0 ? (
                     <EmptyState icon={pending ? CheckCheck : HandCoins} title={pending ? 'No loan requests waiting.' : 'No loans here.'} />
                 ) : (
