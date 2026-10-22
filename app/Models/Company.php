@@ -22,6 +22,20 @@ class Company extends Model
         return $company?->hr_email ? [$company->hr_email, "{$company->name} HR"] : null;
     }
 
+    /** The company picked with ?company= on pages with the All / BCC / Emerge switch, or null for all (unknown ids too). */
+    public static function picked(): ?int
+    {
+        $id = request()->integer('company') ?: null;
+
+        return $id && self::whereKey($id)->exists() ? $id : null;
+    }
+
+    /** Props for the switch: the picked company and the list to pick from. */
+    public static function switchProps(): array
+    {
+        return ['company' => self::picked(), 'companies' => self::query()->orderBy('name')->get(['id', 'name'])];
+    }
+
     public function departments(): HasMany
     {
         return $this->hasMany(Department::class)->orderBy('name');

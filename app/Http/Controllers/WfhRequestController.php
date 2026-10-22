@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Company;
 use App\Models\WfhRequest;
 use App\Services\StaffMail;
 use Illuminate\Http\RedirectResponse;
@@ -19,20 +20,22 @@ class WfhRequestController extends Controller
     {
         $f = $request->validate(['status' => ['nullable', Rule::in(array_keys(WfhRequest::STATUSES))]]);
         $status = $f['status'] ?? 'pending';
+        $switch = Company::switchProps();
+        $inCompany = fn ($q) => $q->inCompany($switch['company']);
         $requests = WfhRequest::query()->with(['decider:id,name', 'employee:id,employee_code,full_name,department_id,work_mode', 'employee.department:id,name'])
-            ->where('status', $status)->whereHas('employee')
+            ->where('status', $status)->whereHas('employee', $inCompany)
             ->when($status === 'pending', fn ($q) => $q->orderBy('start_date'), fn ($q) => $q->latest('decided_at')->latest('id'))
             ->limit(200)->get();
 
         return Inertia::render('attendance/wfh', [
             'status' => $status,
             'statuses' => WfhRequest::STATUSES,
-            'counts' => WfhRequest::query()->whereHas('employee')->select('status', DB::raw('count(*) as n'))->groupBy('status')->pluck('n', 'status'),
+            'counts' => WfhRequest::query()->whereHas('employee', $inCompany)->select('status', DB::raw('count(*) as n'))->groupBy('status')->pluck('n', 'status'),
             'requests' => $requests->map(fn (WfhRequest $r) => $r->props() + [
                 'employee' => ['id' => $r->employee->id, 'name' => $r->employee->full_name, 'code' => $r->employee->employee_code,
                     'department' => $r->employee->department?->name, 'work_mode' => $r->employee->work_mode],
             ])->values(),
-        ]);
+        ] + $switch);
     }
 
     public function approve(Request $request, WfhRequest $wfhRequest): RedirectResponse

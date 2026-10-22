@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AttendanceAdjustment;
 use App\Models\AttendanceRequest;
+use App\Models\Company;
 use App\Models\Employee;
 use App\Services\AttendanceBoard;
 use App\Services\StaffMail;
@@ -26,9 +27,11 @@ class AttendanceRequestController extends Controller
     {
         $f = $request->validate(['status' => ['nullable', Rule::in(array_keys(AttendanceRequest::STATUSES))]]);
         $status = $f['status'] ?? 'pending';
+        $switch = Company::switchProps();
+        $inCompany = fn ($q) => $q->inCompany($switch['company']);
         $requests = AttendanceRequest::query()->with(['employee:id,employee_code,full_name,department_id,company_id,start_date,exit_date,status,attendance_machine_id,hr_portal_id',
             'employee.department:id,name', 'decider:id,name'])
-            ->where('status', $status)->whereHas('employee')
+            ->where('status', $status)->whereHas('employee', $inCompany)
             ->when($status === 'pending', fn ($q) => $q->orderBy('date'), fn ($q) => $q->latest('decided_at')->latest('id'))
             ->limit(200)->get();
 
@@ -43,7 +46,7 @@ class AttendanceRequestController extends Controller
         return Inertia::render('attendance/requests', [
             'status' => $status,
             'statuses' => AttendanceRequest::STATUSES,
-            'counts' => AttendanceRequest::query()->whereHas('employee')->select('status', DB::raw('count(*) as n'))->groupBy('status')->pluck('n', 'status'),
+            'counts' => AttendanceRequest::query()->whereHas('employee', $inCompany)->select('status', DB::raw('count(*) as n'))->groupBy('status')->pluck('n', 'status'),
             'requests' => $requests->map(function (AttendanceRequest $r) use ($board, $now) {
                 $day = $board?->day($r->employee, $r->date->toDateString(), $now);
 
@@ -55,7 +58,7 @@ class AttendanceRequestController extends Controller
                 ];
             })->values(),
             'attendanceStatuses' => config('hrm.attendance.statuses'),
-        ]);
+        ] + $switch);
     }
 
     public function approve(Request $request, AttendanceRequest $correction): RedirectResponse

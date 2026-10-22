@@ -1,6 +1,7 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { ArrowUpRight, ChevronRight, Palmtree, Plus, Upload } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
+import { CompanySwitch } from '@/components/company-switch';
 import { PageHeader, Section } from '@/components/page-header';
 import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
@@ -213,16 +214,7 @@ export default function Dashboard(props: Props) {
                 help="What needs doing today. Company-wide numbers are on Overview, and the full lists are on Reports."
                 actions={
                     <>
-                        {props.companies.length > 1 && (
-                            <div className="inline-flex rounded-md border bg-background p-0.5" role="group" aria-label="Company">
-                                {[{ id: null as number | null, name: 'All' }, ...props.companies].map((c) => (
-                                    <button key={c.id ?? 'all'} type="button" aria-pressed={props.company === c.id} onClick={() => switchCompany(c.id)}
-                                        className={cn('rounded px-3 py-1.5 text-sm font-semibold', props.company === c.id ? 'bg-primary text-primary-foreground' : 'hover:bg-accent')}>
-                                        {c.name}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
+                        <CompanySwitch companies={props.companies} value={props.company} onChange={switchCompany} />
                         {auth.can.edit && (
                             <>
                                 <Button variant="outline" asChild><Link href="/attendance/imports"><Upload /> Upload attendance</Link></Button>

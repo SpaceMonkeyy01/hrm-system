@@ -1,5 +1,6 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { ChevronRight } from 'lucide-react';
+import { CompanySwitch, companyParam } from '@/components/company-switch';
 import { PageHeader } from '@/components/page-header';
 import { StatusPill } from '@/components/status-pill';
 import { timeAgo } from '@/lib/format';
@@ -7,12 +8,13 @@ import { timeAgo } from '@/lib/format';
 /** app/Http/Controllers/RequestsInboxController.php */
 type Queue = { key: string; title: string; description: string; href: string; pending: number; oldest: string | null };
 
-export default function RequestsInbox({ queues }: { queues: Queue[] }) {
+export default function RequestsInbox({ queues, company, companies }: { queues: Queue[]; company: number | null; companies: { id: number; name: string }[] }) {
     const total = queues.reduce((n, q) => n + q.pending, 0);
     return (
         <>
             <Head title="Requests" />
-            <PageHeader title="Requests" description={total ? `${total} waiting for HR.` : 'Nothing waiting.'} help="Everything staff asked for on their My page shows here." />
+            <PageHeader title="Requests" description={total ? `${total} waiting for HR.` : 'Nothing waiting.'} help="Everything staff asked for on their My page shows here."
+                actions={<CompanySwitch companies={companies} value={company} onChange={(id) => router.get('/requests', companyParam(id), { preserveState: true, replace: true })} />} />
             <div className="grid max-w-3xl gap-3 px-4 py-6 md:px-6">
                 {queues.map((q) => (
                     <Link key={q.key} href={q.href} className="flex items-center gap-4 rounded-lg border p-4 hover:bg-accent/40">

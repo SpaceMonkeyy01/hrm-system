@@ -37,29 +37,33 @@ class LeaveController extends Controller
         $today = CarbonImmutable::today();
         $first = CarbonImmutable::parse(($f['month'] ?? $today->format('Y-m')).'-01');
         $last = $first->endOfMonth();
+        // ?company= (the All / BCC / Emerge switch) narrows people and holidays; leave types and settings stay shared.
+        $company = Company::picked();
 
         $records = LeaveRecord::query()->with(['employee:id,employee_code,full_name,department_id', 'employee.department:id,name', 'type:id,name', 'author:id,name'])
             ->where('start_date', '<=', $last->toDateString())->where('end_date', '>=', $first->toDateString())
             ->when($f['type'] ?? null, fn ($q, $v) => $q->where('leave_type_id', $v))
-            ->whereHas('employee', fn ($q) => $q->search($f['q'] ?? null)->when($f['department'] ?? null, fn ($d, $v) => $d->where('department_id', $v)))
+            ->whereHas('employee', fn ($q) => $q->inCompany($company)->search($f['q'] ?? null)->when($f['department'] ?? null, fn ($d, $v) => $d->where('department_id', $v)))
             ->orderBy('start_date')->get();
 
         return Inertia::render('leave/index', [
             'month' => $first->format('Y-m'),
             'today' => $today->toDateString(),
             'filters' => $f,
+            'company' => $company,
             'records' => $records->map(fn (LeaveRecord $r) => $this->recordProps($r))->values(),
-            'onLeaveToday' => LeaveRecord::query()->with('employee:id,full_name', 'type:id,name')
+            'onLeaveToday' => LeaveRecord::query()->with('employee:id,full_name', 'type:id,name')->whereHas('employee', fn ($q) => $q->inCompany($company))
                 ->where('start_date', '<=', $today->toDateString())->where('end_date', '>=', $today->toDateString())->get()
                 ->map(fn ($r) => ['id' => $r->employee->id, 'name' => $r->employee->full_name, 'type' => $r->type->name, 'part' => $r->part])->values(),
             'types' => LeaveType::query()->withCount('records')->orderBy('sort_order')->orderBy('name')->get()
                 ->map(fn ($t) => [...$t->only('id', 'name', 'is_paid', 'is_active', 'sort_order', 'yearly_days', 'per_leave_days'), 'used' => $t->records_count]),
-            'balances' => $this->balances($f, $first->year),
+            'balances' => $this->balances($f, $first->year, $company),
             'settings' => LeaveSettings::all(),
-            'holidays' => Holiday::query()->with('company:id,name')->whereYear('date', $first->year)->orderBy('date')->get()
+            'holidays' => Holiday::query()->with('company:id,name')->whereYear('date', $first->year)
+                ->when($company, fn ($q) => $q->where(fn ($q) => $q->whereNull('company_id')->orWhere('company_id', $company)))->orderBy('date')->get()
                 ->map(fn ($h) => ['id' => $h->id, 'date' => $h->date->toDateString(), 'name' => $h->name, 'company' => $h->company?->name, 'company_id' => $h->company_id]),
             'year' => $first->year,
-            'people' => Employee::query()->whereIn('status', ['active', 'offboarding'])->orderBy('full_name')->get(['id', 'employee_code', 'full_name'])
+            'people' => Employee::query()->whereIn('status', ['active', 'offboarding'])->inCompany($company)->orderBy('full_name')->get(['id', 'employee_code', 'full_name'])
                 ->map(fn ($e) => ['id' => $e->id, 'label' => "{$e->full_name} ({$e->employee_code})"]),
             'companies' => Company::query()->orderBy('name')->with('departments:id,company_id,name')->get(['id', 'name'])
                 ->map(fn ($c) => ['id' => $c->id, 'name' => $c->name, 'departments' => $c->departments->map->only('id', 'name')->all()]),
@@ -190,11 +194,11 @@ class LeaveController extends Controller
             : 'Saved. Attendance deductions are off until you pick a start date.');
     }
 
-    /** Balances tab: current staff (same search and department filters as the list), yearly types only. */
-    private function balances(array $f, int $year): array
+    /** Balances tab: current staff (same company, search and department filters as the list), yearly types only. */
+    private function balances(array $f, int $year, ?int $company): array
     {
         $types = LeaveBalances::yearlyTypes();
-        $people = Employee::query()->whereIn('status', ['active', 'offboarding'])->with('department:id,name')
+        $people = Employee::query()->whereIn('status', ['active', 'offboarding'])->inCompany($company)->with('department:id,name')
             ->search($f['q'] ?? null)->when($f['department'] ?? null, fn ($q, $v) => $q->where('department_id', $v))
             ->orderBy('full_name')->get(['id', 'employee_code', 'full_name', 'department_id', 'company_id', 'start_date']);
         $rows = LeaveBalances::summary($people, $year, $types);

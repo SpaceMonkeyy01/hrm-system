@@ -3,6 +3,7 @@ import { CalendarDays, Check, Palmtree, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { toast } from 'sonner';
+import { CompanySwitch, companyParam } from '@/components/company-switch';
 import { EmptyState } from '@/components/empty-state';
 import { Field } from '@/components/field';
 import { NativeSelect } from '@/components/native-select';
@@ -28,7 +29,7 @@ type Settings = { absent_days: number; late_early_days: number; short_leave_days
 type Holiday = { id: number; date: string; name: string; company: string | null; company_id: number | null };
 type Company = { id: number; name: string; departments: { id: number; name: string }[] };
 type Props = {
-    month: string; today: string; filters: { type?: number; department?: number; q?: string };
+    month: string; today: string; filters: { type?: number; department?: number; q?: string }; company: number | null;
     records: LeaveRecordRow[]; onLeaveToday: { id: number; name: string; type: string; part: string }[];
     types: LeaveType[]; holidays: Holiday[]; year: number; people: { id: number; label: string }[]; companies: Company[];
     parts: Record<string, string>; balances: Balances; settings: Settings;
@@ -279,17 +280,22 @@ export default function LeaveIndex(props: Props) {
     const can = auth.can.edit;
     const [adding, setAdding] = useState(false);
     const [q, setQ] = useState(props.filters.q ?? '');
-    const go = (changes: Record<string, unknown>) => router.get('/leave', { ...props.filters, month: props.month, ...changes }, { preserveState: true, preserveScroll: true, replace: true });
-    const departments = props.companies.flatMap((c) => c.departments.map((d) => ({ value: d.id, label: props.companies.length > 1 ? `${d.name} (${c.name})` : d.name })));
+    const go = (changes: Record<string, unknown>) => router.get('/leave', { ...props.filters, month: props.month, ...companyParam(props.company), ...changes }, { preserveState: true, preserveScroll: true, replace: true });
+    // With one company picked, only its departments (a department of the other company would show nobody)
+    const departments = props.companies.filter((c) => !props.company || c.id === props.company)
+        .flatMap((c) => c.departments.map((d) => ({ value: d.id, label: props.companies.length > 1 && !props.company ? `${d.name} (${c.name})` : d.name })));
     const hash = typeof window !== 'undefined' ? window.location.hash.slice(1) : '';
 
     return (
         <>
             <Head title="Leave" />
             <PageHeader title="Leave" help="Approved leave and public holidays. Staff apply on My page and HR approves under Requests; leave approved elsewhere is recorded here."
-                actions={can && <>
-                    <Button variant="outline" asChild><Link href="/leave/requests">Requests{nav?.leave ? ` (${nav.leave})` : ''}</Link></Button>
-                    <Button onClick={() => setAdding(true)}><Plus /> Record leave</Button>
+                actions={<>
+                    <CompanySwitch companies={props.companies} value={props.company} onChange={(id) => go({ company: id ?? undefined, department: undefined })} />
+                    {can && <>
+                        <Button variant="outline" asChild><Link href={`/leave/requests${props.company ? `?company=${props.company}` : ''}`}>Requests{nav?.leave ? ` (${nav.leave})` : ''}</Link></Button>
+                        <Button onClick={() => setAdding(true)}><Plus /> Record leave</Button>
+                    </>}
                 </>} />
             <Tabs defaultValue={['balances', 'holidays', 'types'].includes(hash) ? hash : 'records'} className="px-4 pt-4 pb-10 md:px-6"
                 onValueChange={(v) => history.replaceState(history.state, '', `#${v}`)}>

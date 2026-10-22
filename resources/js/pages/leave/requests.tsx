@@ -1,6 +1,7 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { Check, CheckCheck, Inbox, Paperclip, X } from 'lucide-react';
 import { useState } from 'react';
+import { CompanySwitch, companyParam } from '@/components/company-switch';
 import { EmptyState } from '@/components/empty-state';
 import { Field } from '@/components/field';
 import { balanceText, leaveDates } from '@/components/leave';
@@ -18,7 +19,7 @@ type Row = LeaveRequestRow & {
     employee: { id: number; name: string; code: string; department: string | null };
     balance: LeaveBalance | null; over_per_leave: number; per_leave_days: number | null;
 };
-type Props = { status: string; statuses: Record<string, string>; counts: Record<string, number>; requests: Row[] };
+type Props = { status: string; company: number | null; companies: { id: number; name: string }[]; statuses: Record<string, string>; counts: Record<string, number>; requests: Row[] };
 
 /** What approving this would do to the balance: "Annual: 9 of 14 left, 4 after" / "goes 2 over". */
 function BalanceLine({ r }: { r: Row }) {
@@ -72,14 +73,16 @@ export default function LeaveRequests(props: Props) {
         <>
             <Head title="Leave requests" />
             <PageHeader
-                back={{ href: '/leave', label: 'Leave' }}
+                actions={<CompanySwitch companies={props.companies} value={props.company}
+                    onChange={(id) => router.get('/leave/requests', { ...(props.status === 'pending' ? {} : { status: props.status }), ...companyParam(id) }, { preserveState: true, replace: true })} />}
+                back={{ href: `/leave${props.company ? `?company=${props.company}` : ''}`, label: 'Leave' }}
                 title="Leave requests"
                 help="Leave staff applied for on My page. Check the attached form (the manager's approval is on it), then approve or say why not."
             >
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
                     {Object.entries(props.statuses).map(([key, label]) => (
                         <Button key={key} size="sm" variant={props.status === key ? 'default' : 'outline'}
-                            onClick={() => router.get('/leave/requests', key === 'pending' ? {} : { status: key }, { preserveState: true, replace: true })}>
+                            onClick={() => router.get('/leave/requests', { ...(key === 'pending' ? {} : { status: key }), ...companyParam(props.company) }, { preserveState: true, replace: true })}>
                             {label} {props.counts[key] ?? 0}
                         </Button>
                     ))}

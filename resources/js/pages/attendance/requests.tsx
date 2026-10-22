@@ -1,6 +1,7 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { Check, CheckCheck, Inbox, X } from 'lucide-react';
 import { useState } from 'react';
+import { CompanySwitch, companyParam } from '@/components/company-switch';
 import { EmptyState } from '@/components/empty-state';
 import { Field } from '@/components/field';
 import { PageHeader } from '@/components/page-header';
@@ -17,7 +18,7 @@ type Row = {
     employee: { id: number; name: string; code: string; department: string | null };
     now: { status: string | null; in: string | null; out: string | null; punches: string[] } | null;
 };
-type Props = { status: string; statuses: Record<string, string>; counts: Record<string, number>; requests: Row[]; attendanceStatuses: Record<string, Tone> };
+type Props = { status: string; company: number | null; companies: { id: number; name: string }[]; statuses: Record<string, string>; counts: Record<string, number>; requests: Row[]; attendanceStatuses: Record<string, Tone> };
 
 const tone: Record<string, Tone> = { pending: 'pending', approved: 'done', rejected: 'missing', cancelled: 'neutral' };
 
@@ -59,14 +60,16 @@ export default function AttendanceRequests(props: Props) {
         <>
             <Head title="Attendance requests" />
             <PageHeader
-                back={{ href: '/attendance', label: 'Attendance' }}
+                actions={<CompanySwitch companies={props.companies} value={props.company}
+                    onChange={(id) => router.get('/attendance/requests', { ...(props.status === 'pending' ? {} : { status: props.status }), ...companyParam(id) }, { preserveState: true, replace: true })} />}
+                back={{ href: `/attendance${props.company ? `?company=${props.company}` : ''}`, label: 'Attendance' }}
                 title="Attendance requests"
                 help="Fixes staff asked for on My page: a forgotten punch, the machine down, working from another site."
             >
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
                     {Object.entries(props.statuses).map(([key, label]) => (
                         <Button key={key} size="sm" variant={props.status === key ? 'default' : 'outline'}
-                            onClick={() => router.get('/attendance/requests', key === 'pending' ? {} : { status: key }, { preserveState: true, replace: true })}>
+                            onClick={() => router.get('/attendance/requests', { ...(key === 'pending' ? {} : { status: key }), ...companyParam(props.company) }, { preserveState: true, replace: true })}>
                             {label} {props.counts[key] ?? 0}
                         </Button>
                     ))}

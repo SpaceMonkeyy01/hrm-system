@@ -1,6 +1,7 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { Check, CheckCheck, Inbox, X } from 'lucide-react';
 import { useState } from 'react';
+import { CompanySwitch, companyParam } from '@/components/company-switch';
 import { DecideDialog } from '@/components/decide-dialog';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
@@ -15,7 +16,7 @@ type Row = {
     decision_note: string | null; decided_by: string | null; decided_at: string | null; created_at: string | null;
     employee: { id: number; name: string; code: string; department: string | null; work_mode: string | null };
 };
-type Props = { status: string; statuses: Record<string, string>; counts: Record<string, number>; requests: Row[] };
+type Props = { status: string; company: number | null; companies: { id: number; name: string }[]; statuses: Record<string, string>; counts: Record<string, number>; requests: Row[] };
 
 const tone: Record<string, Tone> = { pending: 'pending', approved: 'done', rejected: 'missing', cancelled: 'neutral' };
 const dates = (r: Row) => (r.start_date === r.end_date ? formatDate(r.start_date) : `${formatDate(r.start_date)} to ${formatDate(r.end_date)}`);
@@ -28,14 +29,16 @@ export default function WfhRequests(props: Props) {
         <>
             <Head title="Work from home requests" />
             <PageHeader
-                back={{ href: '/requests', label: 'Requests' }}
+                actions={<CompanySwitch companies={props.companies} value={props.company}
+                    onChange={(id) => router.get('/attendance/wfh', { ...(props.status === 'pending' ? {} : { status: props.status }), ...companyParam(id) }, { preserveState: true, replace: true })} />}
+                back={{ href: `/requests${props.company ? `?company=${props.company}` : ''}`, label: 'Requests' }}
                 title="Work from home requests"
                 help="Days staff asked to work from home. Approved days show WFH approved on attendance; remote time on other days is flagged."
             >
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
                     {Object.entries(props.statuses).map(([key, label]) => (
                         <Button key={key} size="sm" variant={props.status === key ? 'default' : 'outline'}
-                            onClick={() => router.get('/attendance/wfh', key === 'pending' ? {} : { status: key }, { preserveState: true, replace: true })}>
+                            onClick={() => router.get('/attendance/wfh', { ...(key === 'pending' ? {} : { status: key }), ...companyParam(props.company) }, { preserveState: true, replace: true })}>
                             {label} {props.counts[key] ?? 0}
                         </Button>
                     ))}

@@ -1,6 +1,7 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import { Check, CheckCheck, HandCoins, Plus, Trash2, X } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
+import { CompanySwitch, companyParam } from '@/components/company-switch';
 import { DecideDialog } from '@/components/decide-dialog';
 import { EmptyState } from '@/components/empty-state';
 import { Field } from '@/components/field';
@@ -18,7 +19,7 @@ type Row = LoanRow & {
     employee: { id: number; name: string; code: string; department: string | null; start_date: string | null };
     owing_other: number;
 };
-type Props = { status: string; statuses: Record<string, string>; counts: Record<string, number>; loans: Row[]; thisMonth: string };
+type Props = { status: string; company: number | null; companies: { id: number; name: string }[]; statuses: Record<string, string>; counts: Record<string, number>; loans: Row[]; thisMonth: string };
 
 /** Next month as "YYYY-MM": the usual first deduction. */
 const nextMonth = (ym: string) => {
@@ -72,12 +73,14 @@ export default function Loans(props: Props) {
     return (
         <>
             <Head title="Loans" />
-            <PageHeader back={{ href: '/requests', label: 'Requests' }} title="Loans"
+            <PageHeader actions={<CompanySwitch companies={props.companies} value={props.company}
+                    onChange={(id) => router.get('/loans', { ...(props.status === 'pending' ? {} : { status: props.status }), ...companyParam(id) }, { preserveState: true, replace: true })} />}
+                back={{ href: `/requests${props.company ? `?company=${props.company}` : ''}`, label: 'Requests' }} title="Loans"
                 help="Loan requests from My page and the loans being repaid. Until payroll is in the app, record each month's deduction here.">
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
                     {Object.entries(props.statuses).map(([key, label]) => (
                         <Button key={key} size="sm" variant={props.status === key ? 'default' : 'outline'}
-                            onClick={() => router.get('/loans', key === 'pending' ? {} : { status: key }, { preserveState: true, replace: true })}>
+                            onClick={() => router.get('/loans', { ...(key === 'pending' ? {} : { status: key }), ...companyParam(props.company) }, { preserveState: true, replace: true })}>
                             {label} {props.counts[key] ?? 0}
                         </Button>
                     ))}

@@ -34,8 +34,7 @@ class DashboardController extends Controller
         $today = CarbonImmutable::today();
         $now = CarbonImmutable::now();
         $private = request()->user()->can('edit-hr');
-        $company = request()->integer('company') ?: null;
-        $company = $company && Company::whereKey($company)->exists() ? $company : null;
+        $company = Company::picked();
         $inCompany = fn ($q) => $q->when($company, fn ($q) => $q->where('company_id', $company));
         $current = Employee::query()->whereIn('status', ['active', 'offboarding'])->tap($inCompany)
             ->get(['id', 'employee_code', 'full_name', 'company_id', 'department_id', 'start_date', 'exit_date', 'status',

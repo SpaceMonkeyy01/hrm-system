@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Company;
 use App\Models\LeaveRecord;
 use App\Models\LeaveRequest;
 use App\Services\LeaveBalances;
@@ -26,16 +27,18 @@ class LeaveRequestController extends Controller
     {
         $f = $request->validate(['status' => ['nullable', Rule::in(array_keys(LeaveRequest::STATUSES))]]);
         $status = $f['status'] ?? 'pending';
+        $switch = Company::switchProps();
+        $inCompany = fn ($q) => $q->inCompany($switch['company']);
         $requests = LeaveRequest::query()->with(['type:id,name,yearly_days,per_leave_days', 'decider:id,name',
             'employee:id,employee_code,full_name,department_id,company_id,start_date', 'employee.department:id,name'])
-            ->where('status', $status)->whereHas('employee')
+            ->where('status', $status)->whereHas('employee', $inCompany)
             ->when($status === 'pending', fn ($q) => $q->orderBy('start_date'), fn ($q) => $q->latest('decided_at')->latest('id'))
             ->limit(200)->get();
 
         return Inertia::render('leave/requests', [
             'status' => $status,
             'statuses' => LeaveRequest::STATUSES,
-            'counts' => LeaveRequest::query()->whereHas('employee')->select('status', DB::raw('count(*) as n'))->groupBy('status')->pluck('n', 'status'),
+            'counts' => LeaveRequest::query()->whereHas('employee', $inCompany)->select('status', DB::raw('count(*) as n'))->groupBy('status')->pluck('n', 'status'),
             'requests' => $requests->map(fn (LeaveRequest $r) => $r->props() + [
                 'employee' => ['id' => $r->employee->id, 'name' => $r->employee->full_name, 'code' => $r->employee->employee_code,
                     'department' => $r->employee->department?->name],
@@ -46,7 +49,7 @@ class LeaveRequestController extends Controller
                 'over_per_leave' => $r->type ? LeaveBalances::overLimit($r->type, $r->start_date->toDateString(), $r->end_date->toDateString()) : 0,
                 'per_leave_days' => $r->type?->per_leave_days,
             ])->values(),
-        ]);
+        ] + $switch);
     }
 
     /** The attached form, inline (PDF and images open in the browser). */

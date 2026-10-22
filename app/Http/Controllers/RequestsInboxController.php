@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\AttendanceRequest;
+use App\Models\Company;
 use App\Models\LeaveRequest;
 use App\Models\Loan;
 use App\Models\WfhRequest;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -24,26 +26,33 @@ class RequestsInboxController extends Controller
         'loans' => [Loan::class, 'Loans', 'Loan requests, with the amount and months to repay.', '/loans', 'created_at'],
     ];
 
-    /** @return array<string, int> key => requests waiting for HR */
-    public static function pendingCounts(): array
+    /** @return array<string, int> key => requests waiting for HR (from people of $company only, when given) */
+    public static function pendingCounts(?int $company = null): array
     {
-        return array_map(fn ($q) => $q[0]::query()->where('status', 'pending')->whereHas('employee')->count(), self::QUEUES);
+        return array_map(fn ($q) => self::waiting($q[0], $company)->count(), self::QUEUES);
     }
 
     /** @return list<array{key: string, title: string, description: string, href: string, pending: int, oldest: ?string}> */
-    public static function queues(): array
+    public static function queues(?int $company = null): array
     {
-        $counts = self::pendingCounts();
+        $counts = self::pendingCounts($company);
 
         return collect(self::QUEUES)->map(fn ($q, $key) => [
-            'key' => $key, 'title' => $q[1], 'description' => $q[2], 'href' => $q[3], 'pending' => $counts[$key],
-            'oldest' => $counts[$key]
-                ? CarbonImmutable::parse($q[0]::query()->where('status', 'pending')->whereHas('employee')->min('created_at'))->toIso8601String() : null,
+            'key' => $key, 'title' => $q[1], 'description' => $q[2], 'href' => $q[3].($company ? "?company=$company" : ''), 'pending' => $counts[$key],
+            'oldest' => $counts[$key] ? CarbonImmutable::parse(self::waiting($q[0], $company)->min('created_at'))->toIso8601String() : null,
         ])->values()->all();
     }
 
     public function index(): Response
     {
-        return Inertia::render('requests', ['queues' => self::queues()]);
+        $switch = Company::switchProps();
+
+        return Inertia::render('requests', ['queues' => self::queues($switch['company'])] + $switch);
+    }
+
+    /** @param class-string<\Illuminate\Database\Eloquent\Model> $model */
+    private static function waiting(string $model, ?int $company): Builder
+    {
+        return $model::query()->where('status', 'pending')->whereHas('employee', fn ($q) => $q->inCompany($company));
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Company;
 use App\Models\Loan;
 use App\Models\LoanRepayment;
 use App\Services\StaffMail;
@@ -24,8 +25,10 @@ class LoanController extends Controller
     {
         $f = $request->validate(['status' => ['nullable', Rule::in(array_keys(Loan::STATUSES))]]);
         $status = $f['status'] ?? 'pending';
+        $switch = Company::switchProps();
+        $inCompany = fn ($q) => $q->inCompany($switch['company']);
         $loans = Loan::query()->with(['decider:id,name', 'repayments', 'employee:id,employee_code,full_name,department_id,start_date', 'employee.department:id,name'])
-            ->where('status', $status)->whereHas('employee')
+            ->where('status', $status)->whereHas('employee', $inCompany)
             ->when($status === 'pending', fn ($q) => $q->orderBy('created_at'), fn ($q) => $q->latest('decided_at')->latest('id'))
             ->limit(200)->get();
         // What else each person still owes, so HR sees it before approving another.
@@ -35,14 +38,14 @@ class LoanController extends Controller
         return Inertia::render('loans/index', [
             'status' => $status,
             'statuses' => Loan::STATUSES,
-            'counts' => Loan::query()->whereHas('employee')->select('status', DB::raw('count(*) as n'))->groupBy('status')->pluck('n', 'status'),
+            'counts' => Loan::query()->whereHas('employee', $inCompany)->select('status', DB::raw('count(*) as n'))->groupBy('status')->pluck('n', 'status'),
             'loans' => $loans->map(fn (Loan $l) => $l->props() + [
                 'employee' => ['id' => $l->employee->id, 'name' => $l->employee->full_name, 'code' => $l->employee->employee_code,
                     'department' => $l->employee->department?->name, 'start_date' => $l->employee->start_date?->toDateString()],
                 'owing_other' => round(($owing[$l->employee_id] ?? 0) - ($l->status === 'active' ? max(0, $l->amount - $l->repaid()) : 0), 2),
             ])->values(),
             'thisMonth' => CarbonImmutable::today()->format('Y-m'),
-        ]);
+        ] + $switch);
     }
 
     public function approve(Request $request, Loan $loan): RedirectResponse

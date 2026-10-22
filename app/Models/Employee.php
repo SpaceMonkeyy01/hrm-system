@@ -208,6 +208,12 @@ class Employee extends Model
         return $this->hasMany(ActivityLog::class)->latest('id');
     }
 
+    /** Only people of company $id; everyone when null (the All / BCC / Emerge switch, Company::picked). */
+    public function scopeInCompany(Builder $q, ?int $id): Builder
+    {
+        return $id ? $q->where('company_id', $id) : $q;
+    }
+
     /** Name, code, system ID, HR.my ID or CNIC contains $term. */
     public function scopeSearch(Builder $q, ?string $term): Builder
     {
