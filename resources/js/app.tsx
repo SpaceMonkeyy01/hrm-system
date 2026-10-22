@@ -6,6 +6,7 @@ import { FlashToaster } from '@/components/flash-toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import AuthLayout from '@/layouts/auth-layout';
+import BareLayout from '@/layouts/bare-layout';
 import PrintLayout from '@/layouts/print-layout';
 
 const appName = import.meta.env.VITE_APP_NAME || 'HRM System';
@@ -24,7 +25,8 @@ void createInertiaApp({
         }
         return (await load()).default;
     },
-    layout: (name) => (name.startsWith('auth/') ? AuthLayout : name.startsWith('print/') ? PrintLayout : AppLayout),
+    // The login page draws its own full-screen scene (pages/auth/login.tsx); forgot and reset password use AuthLayout.
+    layout: (name) => (name === 'auth/login' ? BareLayout : name.startsWith('auth/') ? AuthLayout : name.startsWith('print/') ? PrintLayout : AppLayout),
     strictMode: true,
     withApp(app) {
         return (

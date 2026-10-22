@@ -84,6 +84,10 @@ return [
         'double_tap_seconds' => 60,
     ],
 
+    // Login page: the Islamic date is the Umm al-Qura calendar; Pakistan's moon sighting is often a day behind it.
+    // -1 shows it a day earlier. Set HRM_HIJRI_OFFSET in the environment if the date on the login page is off.
+    'hijri_offset' => (int) env('HRM_HIJRI_OFFSET', 0),
+
     // Self-service (My page)
     'self_service' => [
         // How far back someone can ask HR to fix a day.

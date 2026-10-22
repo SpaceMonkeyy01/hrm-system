@@ -21,6 +21,16 @@ class AccessTest extends TestCase
         $this->put('/checklist/1/1', ['status' => 'Yes'])->assertRedirect('/login');
     }
 
+    public function test_login_page_gets_the_default_workday_and_the_hijri_offset(): void
+    {
+        $this->get('/login')->assertOk()->assertInertia(fn (AssertableInertia $p) => $p->component('auth/login')
+            ->where('workday', ['start' => '09:00', 'end' => '18:00'])->where('hijriOffset', 0));   // no default schedule yet
+
+        \App\Models\WorkSchedule::create(['name' => 'Fake 10 to 7', 'type' => 'fixed', 'start_time' => '10:00', 'end_time' => '19:00', 'working_days' => [1, 2, 3, 4, 5], 'is_default' => true]);
+        config(['hrm.hijri_offset' => -1]);
+        $this->get('/login')->assertInertia(fn (AssertableInertia $p) => $p->where('workday', ['start' => '10:00', 'end' => '19:00'])->where('hijriOffset', -1));
+    }
+
     public function test_login_works_only_for_active_users(): void
     {
         $this->user('hr', ['email' => 'hr@test.local', 'password' => 'secret-pass']);

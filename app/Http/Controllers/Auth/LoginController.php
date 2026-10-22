@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\WorkSchedule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -18,7 +19,15 @@ class LoginController extends Controller
 {
     public function create(): Response
     {
-        return Inertia::render('auth/login');
+        // The clock's workday ring and "time left" line: the default schedule's hours, else 9 to 6.
+        $schedule = WorkSchedule::query()->where('is_default', true)->first(['type', 'start_time', 'end_time']);
+        $fixed = $schedule && ! $schedule->isFlexible() && $schedule->start_time && $schedule->end_time;
+
+        return Inertia::render('auth/login', [
+            'workday' => ['start' => $fixed ? substr($schedule->start_time, 0, 5) : '09:00', 'end' => $fixed ? substr($schedule->end_time, 0, 5) : '18:00'],
+            // Days to move the Islamic (Umm al-Qura) date by, when Pakistan's moon sighting differs (config hrm.hijri_offset)
+            'hijriOffset' => (int) config('hrm.hijri_offset', 0),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
