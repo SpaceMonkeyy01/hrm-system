@@ -187,6 +187,11 @@ class ClockInTest extends TestCase
         AttendancePunch::create(['source' => 'app', 'device_user_id' => (string) $this->me->id, 'punched_at' => '2026-05-18 09:00:00',
             'work_date' => '2026-05-18', 'method' => 'In', 'place' => 'remote']);
         $this->assertSame('Absent', $this->day('2026-05-19')['status']);
+        // Days before the first app clock-in need a file like everyone else: no file covers Friday 15 May, so No data.
+        $this->assertSame('No data', $this->day('2026-05-15')['status']);
+        AttendancePunch::create(['source' => 'machine', 'device_user_id' => '999', 'punched_at' => '2026-05-15 09:00:00', 'work_date' => '2026-05-15']);
+        $this->me->update(['attendance_machine_id' => '1']);
+        $this->assertSame('Absent', $this->day('2026-05-15')['status'], 'the machine file covers it and they have a machine number');
 
         // Someone who has never clocked in and has no numbers stays "Not linked".
         $other = $this->employee($this->company, ['full_name' => 'Fake Other', 'start_date' => '2025-01-01']);

@@ -24,7 +24,8 @@ use Illuminate\Support\Collection;
  * "No data": attendance arrives as uploaded files, so a day nobody's file covers can't be called absent.
  * A day counts as covered for a person when anyone at all punched that day in a source the person uses
  * (machine and/or HR.my). Otherwise Absent and Not in yet read "No data". The app's own clock-in is live, not a
- * file: anyone who has ever clocked in on the app counts as covered every day (and as linked).
+ * file: anyone who has ever clocked in on the app counts as linked, and as covered every day from their first app
+ * clock-in on (earlier days still need a file, so old days don't all turn Absent).
  */
 class AttendanceBoard
 {
@@ -51,7 +52,7 @@ class AttendanceBoard
     /** @var array<string, array<string, true>> source => date => anyone punched that day */
     private array $covered = ['machine' => [], 'hrmy' => []];
 
-    /** @var array<int, true> employee ids that have ever clocked in on the app */
+    /** @var array<int, string> employee id => work date of their first app clock-in (only people who ever clocked in) */
     private array $appUsers = [];
 
     /** @var array<int, list<array{from: string, to: string}>> employee id => approved work from home ranges */
@@ -105,8 +106,8 @@ class AttendanceBoard
         }
 
         foreach (AttendancePunch::query()->where('source', AttendanceClock::SOURCE)->whereIn('device_user_id', array_map('strval', $ids))
-            ->distinct()->pluck('device_user_id') as $id) {
-            $this->appUsers[(int) $id] = true;
+            ->groupBy('device_user_id')->selectRaw('device_user_id, min(work_date) as first_day')->toBase()->get() as $row) {
+            $this->appUsers[(int) $row->device_user_id] = substr((string) $row->first_day, 0, 10);
         }
         foreach (AttendancePunch::query()->whereBetween('work_date', [$from, $to])->distinct()->toBase()->get(['source', 'work_date']) as $c) {
             $this->covered[$c->source][substr((string) $c->work_date, 0, 10)] = true;
@@ -249,10 +250,13 @@ class AttendanceBoard
         return $e->attendance_machine_id || $e->hr_portal_id || isset($this->appUsers[$e->id]);
     }
 
-    /** Anyone punched on $date in a source this person uses (the app's clock-in always counts: it's live). */
+    /**
+     * Anyone punched on $date in a source this person uses. The app's clock-in is live, so it counts every day from the
+     * person's first app clock-in on; days before that only count when a machine / HR.my file covers them.
+     */
     public function isCovered(Employee $e, string $date): bool
     {
-        return isset($this->appUsers[$e->id])
+        return (isset($this->appUsers[$e->id]) && $date >= $this->appUsers[$e->id])
             || ($e->attendance_machine_id && isset($this->covered['machine'][$date]))
             || ($e->hr_portal_id && isset($this->covered['hrmy'][$date]));
     }
