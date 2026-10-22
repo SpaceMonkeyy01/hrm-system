@@ -114,8 +114,8 @@ class AttendanceBoard
         }
 
         foreach (AttendanceAdjustment::query()->whereIn('employee_id', $ids)->whereBetween('date', [$from, $to])
-            ->get(['employee_id', 'date', 'check_in', 'check_out', 'sessions', 'note']) as $a) {
-            $this->adjustments[$a->employee_id][$a->date->toDateString()] = $a->only('check_in', 'check_out', 'sessions', 'note');
+            ->get(['employee_id', 'date', 'check_in', 'check_out', 'sessions', 'day_off', 'note']) as $a) {
+            $this->adjustments[$a->employee_id][$a->date->toDateString()] = $a->only('check_in', 'check_out', 'sessions', 'day_off', 'note');
         }
 
         foreach (WfhRequest::query()->where('status', 'approved')->whereIn('employee_id', $ids)

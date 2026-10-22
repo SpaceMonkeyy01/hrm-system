@@ -187,6 +187,37 @@ class AttendanceTest extends TestCase
         $this->assertSame('Absent', $day()['status']);
     }
 
+    public function test_weekly_off_turns_a_working_day_into_a_day_off(): void
+    {
+        $this->schedule(['is_default' => true]);
+        $e = $this->employee($this->company, ['attendance_machine_id' => '1', 'start_date' => '2026-01-01']);
+        $other = $this->employee($this->company, ['attendance_machine_id' => '9', 'start_date' => '2026-01-01']);
+        $this->upload([['A', '2', '5/13/2026 10:00:00 AM'], ['B', '9', '5/14/2026 10:00:00 AM'], ['B', '9', '5/14/2026 2:00:00 PM']]);   // others punched: both days are covered
+        $hr = $this->user('hr');
+        $day = fn (Employee $who, string $date) => collect($this->actingAs($hr)->get("/employees/{$who->id}?month=2026-05")->viewData('page')['props']['attendance']['days'])->firstWhere('date', $date);
+        $this->assertSame('Absent', $day($e, '2026-05-13')['status']);
+
+        $this->actingAs($this->user('viewer'))->put("/attendance/{$e->id}/2026-05-13", ['day_off' => true])->assertForbidden();
+        $this->actingAs($hr)->put("/attendance/{$e->id}/2026-05-13", ['day_off' => true])->assertSessionHasNoErrors();
+        $d = $day($e, '2026-05-13');
+        $this->assertSame(['Day off', false, true, 'Weekly off'], [$d['status'], $d['working_day'], $d['day_off'], $d['note']]);
+
+        // Came in on their weekly off anyway: worked a day off, never late
+        $this->actingAs($hr)->put("/attendance/{$other->id}/2026-05-14", ['day_off' => true, 'note' => 'Rota'])->assertSessionHasNoErrors();
+        $this->assertSame(['Worked day off', 0], [$day($other, '2026-05-14')['status'], $day($other, '2026-05-14')['late']]);
+
+        // Times HR sets later keep the weekly off; making it a working day again keeps those times
+        $this->actingAs($hr)->put("/attendance/{$other->id}/2026-05-14", ['sessions' => [['in' => '10:00', 'out' => '14:00', 'place' => 'office']], 'note' => 'Half shift'])->assertSessionHasNoErrors();
+        $this->assertSame('Worked day off', $day($other, '2026-05-14')['status']);
+        $this->actingAs($hr)->put("/attendance/{$other->id}/2026-05-14", ['day_off' => false])->assertSessionHasNoErrors();
+        $this->assertSame([false, 'Half shift'], [AttendanceAdjustment::where('employee_id', $other->id)->sole()->day_off, AttendanceAdjustment::where('employee_id', $other->id)->sole()->note]);
+
+        // Only the weekly off: taking it away removes HR's change, so the day is Absent again
+        $this->actingAs($hr)->put("/attendance/{$e->id}/2026-05-13", ['day_off' => false])->assertSessionHasNoErrors();
+        $this->assertFalse(AttendanceAdjustment::where('employee_id', $e->id)->exists());
+        $this->assertSame('Absent', $day($e, '2026-05-13')['status']);
+    }
+
     public function test_hr_edits_a_split_day_as_sessions(): void
     {
         $this->schedule(['is_default' => true]);

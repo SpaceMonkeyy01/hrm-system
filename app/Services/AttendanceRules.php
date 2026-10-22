@@ -55,7 +55,7 @@ class AttendanceRules
      *         sessions = HR's version of the day, used instead of the punches' sessions
      * @param  array{holiday?: ?string, leave?: ?array{type: string, part: string}}  $context
      * @return array{date: string, status: ?string, in: ?string, out: ?string, in_source: ?string, out_source: ?string,
-     *     worked: ?int, late: int, early: int, short: int, overtime: int, punches: int, working_day: bool, adjusted: bool,
+     *     worked: ?int, late: int, early: int, short: int, overtime: int, punches: int, working_day: bool, adjusted: bool, day_off: bool,
      *     note: ?string, holiday: ?string, leave: ?array{type: string, part: string},
      *     sessions: list<array{in: ?string, out: ?string, source: string, minutes: ?int, edited: bool, in_where: ?string, out_where: ?string,
      *         inside: bool, stated: bool}>,  inside = wholly within another session: shown, adds no time or place;
@@ -70,8 +70,10 @@ class AttendanceRules
         $holiday = $context['holiday'] ?? null;
         $leave = $context['leave'] ?? null;
         $fullLeave = $leave && $leave['part'] === 'full';
+        // HR made this day their weekly off (Edit day): like a day off on the schedule.
+        $dayOff = ! empty($adjustment['day_off']);
         $working = ($schedule === null || in_array(CarbonImmutable::parse($date)->isoWeekday(), array_map('intval', $schedule->working_days ?? []), true))
-            && $holiday === null;
+            && $holiday === null && ! $dayOff;
 
         // HR's own sessions (Edit day) replace the punches' sessions; the punch count stays. A time out before the
         // time in is the next morning.
@@ -165,7 +167,7 @@ class AttendanceRules
         $result = [
             'date' => $date, 'status' => null, 'in' => $in, 'out' => $out, 'in_source' => $inSource, 'out_source' => $outSource,
             'worked' => null, 'late' => 0, 'early' => 0, 'short' => 0, 'overtime' => 0, 'punches' => $count, 'working_day' => $working,
-            'adjusted' => $adjustment !== null, 'note' => $adjustment['note'] ?? null, 'holiday' => $holiday, 'leave' => $leave,
+            'adjusted' => $adjustment !== null, 'day_off' => $dayOff, 'note' => $adjustment['note'] ?? null, 'holiday' => $holiday, 'leave' => $leave,
             'sessions' => $sessions, 'where' => $where,
             'in_where' => $in ? ($sessions[0]['in_where'] ?? null) : null,
             'out_where' => $out && $outSource !== 'auto' ? ($sessions[$last]['out_where'] ?? null) : null,

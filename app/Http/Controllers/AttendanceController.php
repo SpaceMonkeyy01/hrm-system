@@ -107,6 +107,9 @@ class AttendanceController extends Controller
     {
         abort_unless(preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) && strtotime($date), 404);
         $time = ['nullable', 'regex:/^([01]\d|2[0-3]):[0-5]\d$/'];
+        if ($request->has('day_off')) {
+            return $this->saveDayOff($request, $employee, $date);
+        }
         if ($request->has('sessions')) {
             return $this->saveSessions($request, $employee, $date, $time);
         }
@@ -161,6 +164,34 @@ class AttendanceController extends Controller
         );
 
         return back()->with('success', "Saved {$employee->full_name}'s day for ".CarbonImmutable::parse($date)->format('j M').'.');
+    }
+
+    /**
+     * Weekly off: this working day is the person's day off (staff whose weekly off moves). Times HR already set stay;
+     * taking it off again leaves those times, or removes the change altogether when it was only the weekly off.
+     */
+    private function saveDayOff(Request $request, Employee $employee, string $date): RedirectResponse
+    {
+        $data = $request->validate(['day_off' => ['required', 'boolean'], 'note' => ['nullable', 'string', 'max:500']]);
+        $existing = AttendanceAdjustment::where('employee_id', $employee->id)->whereDate('date', $date)->first();
+        $day = CarbonImmutable::parse($date)->format('j M');
+        if (! $data['day_off']) {
+            if ($existing?->onlyDayOff()) {
+                $existing->delete();
+            } else {
+                $existing?->update(['day_off' => false, 'updated_by' => $request->user()->id]);
+            }
+
+            return back()->with('success', "$day is a working day again for {$employee->full_name}.");
+        }
+        $note = trim($data['note'] ?? '') ?: 'Weekly off';
+        if ($existing) {
+            $existing->update(['day_off' => true, 'note' => $existing->onlyDayOff() ? $note : $existing->note, 'updated_by' => $request->user()->id]);
+        } else {
+            AttendanceAdjustment::create(['employee_id' => $employee->id, 'date' => $date, 'day_off' => true, 'note' => $note, 'updated_by' => $request->user()->id]);
+        }
+
+        return back()->with('success', "$day is {$employee->full_name}'s weekly off: not absent, and nothing comes off their leave.");
     }
 
     public function clearAdjustment(Employee $employee, string $date): RedirectResponse

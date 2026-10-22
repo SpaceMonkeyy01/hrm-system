@@ -32,6 +32,8 @@ export type AttendanceDay = {
     punches: number;
     working_day: boolean;
     adjusted: boolean;
+    /** HR made this working day the person's weekly off (Edit day) */
+    day_off: boolean;
     note: string | null;
     schedule: string | null;
     punchTimes: string[];
@@ -275,7 +277,8 @@ export function AdjustDialog({ open, onClose, employee, day, only }: {
         : [{ in: '', out: '', place: '' }]);
     const [note, setNote] = useState(day.note ?? '');
     const [errors, setErrors] = useState<Record<string, string>>({});
-    const [mode, setMode] = useState<'times' | 'leave'>(day.leave_record ? 'leave' : 'times');
+    const [mode, setMode] = useState<'times' | 'leave' | 'off'>(day.leave_record ? 'leave' : day.day_off ? 'off' : 'times');
+    const [offNote, setOffNote] = useState(day.day_off ? (day.note ?? '') : '');
     const opts = { preserveScroll: true, only, onSuccess: () => onClose(), onError: setErrors };
     const set = (i: number, patch: Partial<SessionRow>) => setRows((r) => r.map((row, j) => (j === i ? { ...row, ...patch } : row)));
     const rowErrors = Object.entries(errors).filter(([k]) => k.startsWith('sessions')).map(([, v]) => v);
@@ -295,13 +298,30 @@ export function AdjustDialog({ open, onClose, employee, day, only }: {
                     <DialogDescription>Punches: {day.punchTimes.length ? day.punchTimes.join(', ') : 'none'}. Status now: {day.status}.</DialogDescription>
                 </DialogHeader>
                 <div className="inline-flex justify-self-start rounded-md border p-0.5" role="group" aria-label="What to change">
-                    {(['times', 'leave'] as const).map((m) => (
+                    {(['times', 'leave', 'off'] as const).map((m) => (
                         <Button key={m} type="button" size="sm" variant={mode === m ? 'default' : 'ghost'} onClick={() => setMode(m)}>
-                            {m === 'times' ? 'Times' : day.leave_record ? 'Leave' : 'Mark as leave'}
+                            {m === 'times' ? 'Times' : m === 'off' ? 'Weekly off' : day.leave_record ? 'Leave' : 'Mark as leave'}
                         </Button>
                     ))}
                 </div>
-                {mode === 'leave' ? <LeavePanel employee={employee} day={day} only={only} onClose={onClose} /> : (
+                {mode === 'off' ? (
+                    <form className="grid gap-4" onSubmit={(e) => { e.preventDefault(); router.put(`/attendance/${employee.id}/${day.date}`, { day_off: true, note: offNote }, opts); }}>
+                        <p className="text-sm text-muted-foreground">
+                            {day.day_off
+                                ? 'This day is their weekly off: it counts as a day off, not absent, and nothing comes off their leave.'
+                                : 'Make this day their weekly off, for staff whose day off moves around. It counts as a day off, not absent, and nothing comes off their leave. If they punched anyway it shows as Worked day off.'}
+                        </p>
+                        <Field label="Note (optional)" htmlFor="off-note" error={errors.note}>
+                            <Input id="off-note" value={offNote} placeholder="Weekly off" onChange={(e) => setOffNote(e.target.value)} />
+                        </Field>
+                        <DialogFooter className="gap-2 sm:justify-between">
+                            {day.day_off ? (
+                                <Button type="button" variant="ghost" onClick={() => router.put(`/attendance/${employee.id}/${day.date}`, { day_off: false }, opts)}>Make it a working day again</Button>
+                            ) : <span />}
+                            <Button type="submit">{day.day_off ? 'Save note' : 'Mark as weekly off'}</Button>
+                        </DialogFooter>
+                    </form>
+                ) : mode === 'leave' ? <LeavePanel employee={employee} day={day} only={only} onClose={onClose} /> : (
                 <form onSubmit={save} className="grid gap-4">
                     <p className="text-sm text-muted-foreground">
                         Each row is one stretch of work; the time between rows isn't counted. A row with no end is a missing punch;
