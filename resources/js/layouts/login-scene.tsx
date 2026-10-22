@@ -60,13 +60,11 @@ function useClock(workday: { start: string; end: string }, hijriOffset: number) 
             : `${Math.floor(left / 60)}h ${left % 60}m left in the workday`,
         // How much of the workday has gone, as the ring's dash
         arc: `${Math.round(CIRC * Math.max(0, Math.min(1, (mins - start) / (end - start))))} ${Math.round(CIRC)}`,
-        startLabel: twelve(start),
-        endLabel: twelve(end % 1440),
     };
 }
 
 /** The decorations around the dial, in the design's 1440 x 900 space (desktop scene only). */
-function Doodles({ startLabel, endLabel }: { startLabel: string; endLabel: string }) {
+function Doodles() {
     return (
         <>
             <g fill="none" stroke="#85b4c9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity=".42">
@@ -90,25 +88,7 @@ function Doodles({ startLabel, endLabel }: { startLabel: string; endLabel: strin
                     <path d="M-6 80 L132 80" stroke="#85b4c9" strokeWidth="1.5" fill="none" />
                     {['M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <text key={i} x={3 + i * 22.2} y="96" fontSize="10">{d}</text>)}
                 </g>
-                <g transform="translate(1196 70)" opacity=".55">
-                    <circle cx="0" cy="0" r="30" fill="none" stroke="#0b3a4e" strokeWidth="9" />
-                    <circle cx="0" cy="0" r="30" fill="none" stroke="#85b4c9" strokeWidth="9" strokeDasharray="160 189" transform="rotate(-90)" strokeLinecap="round" />
-                    <text x="44" y="-4" fontSize="11" letterSpacing="2">LEAVE</text><text x="44" y="12" fontSize="11" letterSpacing="2">LEFT</text>
-                </g>
-                <g transform="translate(860 832)" opacity=".6">
-                    <path d="M0 0 L420 0" stroke="#85b4c9" strokeWidth="1.5" strokeDasharray="4 6" fill="none" />
-                    <circle cx="0" cy="0" r="6" /><circle cx="210" cy="0" r="5" fill="none" stroke="#85b4c9" strokeWidth="2" /><circle cx="420" cy="0" r="6" />
-                    <text x="-8" y="-14" fontSize="11" letterSpacing="2">IN {startLabel}</text><text x="190" y="-14" fontSize="11" letterSpacing="2">LUNCH</text>
-                    <text x="428" y="-14" fontSize="11" letterSpacing="2" textAnchor="end">OUT {endLabel}</text>
-                </g>
             </g>
-            <g className="login-float-2"><g transform="translate(700 640) rotate(-5)">
-                <path d="M0 4 Q0 0 4 0 L124 2 Q128 2 128 6 L126 66 Q126 70 122 70 L4 68 Q0 68 0 64 Z" fill="#0b3a4e" stroke="#85b4c9" strokeWidth="1.5" opacity=".9" />
-                <path d="M50 -6 L80 -4 L78 8 L48 6 Z" fill="#85b4c9" opacity=".35" />
-                <text x="14" y="30" fontFamily={JOST} fontSize="13" fill="#d6ecf5">Leave approved</text>
-                <path d="M16 46 L24 54 L40 38" fill="none" stroke="#5fb0d4" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                <text x="48" y="54" fontFamily={JOST} fontSize="11" fill="#85b4c9">see you Monday</text>
-            </g></g>
         </>
     );
 }
@@ -180,7 +160,7 @@ export default function LoginScene({ children }: { children: ReactNode }) {
                 <g className="login-orbit"><circle cx="420" cy="190" r="6" fill="#85b4c9" /><circle cx="760" cy="450" r="4" fill="#1f7aa0" /></g>
                 <circle cx="420" cy="450" r="260" fill="none" stroke="#0b3a4e" strokeWidth="6" />
                 <circle cx="420" cy="450" r="260" fill="none" stroke="#5fb0d4" strokeWidth="6" strokeLinecap="round" strokeDasharray={c.arc} transform="rotate(-90 420 450)" />
-                <Doodles startLabel={c.startLabel} endLabel={c.endLabel} />
+                <Doodles />
                 <g textAnchor="middle">
                     <text x="420" y="362" fontSize="12" fontWeight="700" letterSpacing="2.4" fill="#85b4c9">{c.greeting.toUpperCase()}</text>
                     <text x="420" y="462" fontFamily={JOST} fontSize="104" fontWeight="300" fill="#ffffff" style={{ fontVariantNumeric: 'tabular-nums' }}>
