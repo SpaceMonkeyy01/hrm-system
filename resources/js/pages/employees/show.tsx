@@ -515,7 +515,7 @@ function DetailsTab({ e }: { e: Employee }) {
         ] },
         ...(e.private_hidden ? [] : [
             { title: 'Personal', rows: [
-                ['Full name', e.full_name], ['First and last name', [e.first_name, e.last_name].filter(Boolean).join(' ')], ['Father or husband name', e.father_name],
+                ['Full name', e.full_name], ['First and last name', [e.first_name, e.last_name].filter(Boolean).join(' ')], ['Father or spouse name', e.father_name],
                 ['CNIC', e.cnic], ['CNIC expiry', formatDate(e.cnic_expiry)], ['Date of birth', formatDate(e.date_of_birth)],
                 ['Marital status', e.marital_status], ['Blood group', e.blood_group],
             ] as DetailRow[] },

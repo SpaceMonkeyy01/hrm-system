@@ -14,7 +14,7 @@ class LetterRenderer
 {
     /** {{field}} => label HR sees in the template help and the "not on file" list. */
     public const FIELDS = [
-        'name' => 'Full name', 'father_name' => "Father's or husband's name", 'cnic' => 'CNIC', 'code' => 'Employee code',
+        'name' => 'Full name', 'father_name' => "Father's or spouse's name", 'cnic' => 'CNIC', 'code' => 'Employee code',
         'role' => 'Role', 'department' => 'Department', 'team' => 'Team', 'company' => 'Company', 'employment_type' => 'Employment type',
         'start_date' => 'Start date', 'confirmation_date' => 'Confirmation date', 'exit_date' => 'Exit date',
         'today' => "Today's date", 'details' => 'Details typed when issuing',

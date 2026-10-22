@@ -141,7 +141,7 @@ export default function EmployeeForm({ employee, companies, managers, employment
                 <fieldset className="grid gap-4 sm:grid-cols-2">
                     <legend className="mb-3 font-bold">Identity</legend>
                     {text('full_name', 'Full name', { required: true, autoFocus: !editing })}
-                    {text('father_name', 'Father or husband name')}
+                    {text('father_name', 'Father or spouse name')}
                     {text('first_name', 'First name')}
                     {text('last_name', 'Last name')}
                     {text('cnic', 'CNIC', { placeholder: '35202-1234567-1', inputMode: 'numeric' })}
