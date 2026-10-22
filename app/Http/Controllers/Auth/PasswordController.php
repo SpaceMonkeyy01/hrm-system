@@ -21,7 +21,7 @@ class PasswordController extends Controller
 {
     public function request(): Response
     {
-        return Inertia::render('auth/forgot-password');
+        return Inertia::render('auth/forgot-password', LoginController::sceneProps());
     }
 
     public function email(Request $request): RedirectResponse
@@ -40,7 +40,7 @@ class PasswordController extends Controller
     {
         return Inertia::render('auth/reset-password', [
             'token' => $token, 'email' => (string) $request->query('email', ''), 'invite' => $request->boolean('invite'),
-        ]);
+        ] + LoginController::sceneProps());
     }
 
     public function update(Request $request): RedirectResponse
