@@ -19,6 +19,8 @@ import { MyReviews } from '@/components/my-reviews';
 import { MyWfhRequests } from '@/components/my-wfh-requests';
 import { MyLoans } from '@/components/loans';
 import type { LoanRow } from '@/components/loans';
+import { MyMedicalRequests } from '@/components/medical';
+import type { MedicalRow } from '@/components/medical';
 import { MyFeedback } from '@/components/feedback';
 import type { ConductRow, MeetingRow } from '@/components/feedback';
 import type { WfhRequestRow } from '@/components/my-wfh-requests';
@@ -68,6 +70,9 @@ type Props = {
     leaveRequests?: LeaveRequestRow[];
     wfhRequests?: WfhRequestRow[];
     loans?: LoanRow[];
+    medicalRequests?: MedicalRow[];
+    medicalKinds?: Record<string, string>;
+    medicalPatients?: Record<string, string>;
     conduct?: ConductRow[];
     meetings?: MeetingRow[];
     leaveTypes?: LeaveTypeOption[];
@@ -180,7 +185,7 @@ export default function MyPage(props: Props) {
     const a = props.attendance;
     const today = props.today;
     const pending = props.requests.filter((r) => r.status === 'pending').length + (props.wfhRequests ?? []).filter((r) => r.status === 'pending').length
-        + (props.loans ?? []).filter((l) => l.status === 'pending').length;
+        + (props.loans ?? []).filter((l) => l.status === 'pending').length + (props.medicalRequests ?? []).filter((m) => m.status === 'pending').length;
     const yourTurn = (props.reviews ?? []).filter((r) => r.canSelfReview || (r.status === 'completed' && !r.acknowledged_at)).length;
     const owed = props.documents.filter((d) => !d.done);
     const toAck = [...(props.conduct ?? []), ...(props.meetings ?? [])].filter((x) => !x.acknowledged_at).length;
@@ -327,6 +332,8 @@ export default function MyPage(props: Props) {
                     <div className="grid max-w-3xl gap-4">
                         <MyWfhRequests requests={props.wfhRequests ?? []} today={today} />
                         <MyLoans loans={props.loans ?? []} />
+                        <MyMedicalRequests requests={props.medicalRequests ?? []} kinds={props.medicalKinds ?? {}} patients={props.medicalPatients ?? {}}
+                            uploads={props.uploads ?? { enabled: false, max_mb: 10 }} />
                         <h2 className="mt-2 font-bold">Attendance fixes</h2>
                         <p className="text-sm text-muted-foreground">Fixes you asked HR for. Once approved, the new times count in your attendance.</p>
                         {props.requests.length === 0 ? (

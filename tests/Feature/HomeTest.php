@@ -35,7 +35,7 @@ class HomeTest extends TestCase
         WfhRequest::create(['employee_id' => $e->id, 'start_date' => '2026-05-23', 'end_date' => '2026-05-23', 'reason' => 'x']);
 
         $this->actingAs($this->user('hr'))->get('/dashboard')->assertInertia(fn (AssertableInertia $p) => $p
-            ->where('requestsWaiting', ['attendance' => 0, 'leave' => 1, 'wfh' => 2, 'loans' => 0]));
+            ->where('requestsWaiting', ['attendance' => 0, 'leave' => 1, 'wfh' => 2, 'loans' => 0, 'medical' => 0]));
         $this->actingAs($this->user('viewer'))->get('/dashboard')->assertInertia(fn (AssertableInertia $p) => $p->where('requestsWaiting', null));
     }
 

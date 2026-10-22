@@ -88,6 +88,7 @@ class User extends Authenticatable
         'office_networks' => ['created_by'], 'review_cycles' => ['created_by'], 'reviews' => ['reviewed_by'],
         'wfh_requests' => ['requested_by', 'decided_by'], 'conduct_entries' => ['created_by'], 'meetings' => ['created_by'],
         'loans' => ['requested_by', 'decided_by'], 'loan_repayments' => ['recorded_by'],
+        'medical_requests' => ['requested_by', 'decided_by', 'paid_by'],
     ];
 
     /**

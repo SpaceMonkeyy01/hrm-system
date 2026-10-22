@@ -36,7 +36,7 @@ type Props = {
     holidays: { date: string; name: string; company: string | null }[];
     activity: ActivityItem[];
     activityToday: number;
-    requestsWaiting: { attendance: number; leave: number; wfh: number; loans: number } | null;
+    requestsWaiting: { attendance: number; leave: number; wfh: number; loans: number; medical: number } | null;
 };
 
 /** Days either side of today that "This week" covers. */
@@ -166,10 +166,11 @@ export default function Dashboard(props: Props) {
     const owed = d.population - d.compliant;
     const inCompany = props.company ? `&company=${props.company}` : '';
     const waiting = props.requestsWaiting;
-    const waitingTotal = waiting ? waiting.attendance + waiting.leave + waiting.wfh + waiting.loans : 0;
+    const waitingTotal = waiting ? waiting.attendance + waiting.leave + waiting.wfh + waiting.loans + waiting.medical : 0;
     const waitingParts = waiting ? [
         waiting.leave && `${waiting.leave} leave`, waiting.wfh && `${waiting.wfh} WFH`,
         waiting.attendance && plural(waiting.attendance, 'attendance fix', 'attendance fixes'), waiting.loans && plural(waiting.loans, 'loan'),
+        waiting.medical && `${waiting.medical} medical`,
     ].filter(Boolean).join(', ') : '';
 
     const within = (date: string) => Math.abs(daysBetween(today, date)) <= WEEK;

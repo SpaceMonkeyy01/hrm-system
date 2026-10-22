@@ -91,8 +91,7 @@ const groups: Group[] = [
         label: 'Company',
         items: [
             { title: 'Assets', href: '/assets', icon: Laptop },
-            { title: 'Loans', href: '/loans', icon: HandCoins, edit: true },
-            { title: 'Controlled documents', href: '/controlled-documents', icon: ScrollText },
+            { title: 'Loans', href: '/loans', icon: HandCoins, edit: true },            { title: 'Controlled documents', href: '/controlled-documents', icon: ScrollText },
             { title: 'Letter templates', href: '/letters/templates', icon: Mail, edit: true },
         ],
     },

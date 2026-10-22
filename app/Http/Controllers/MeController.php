@@ -12,6 +12,7 @@ use App\Models\LeaveRecord;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\Loan;
+use App\Models\MedicalRequest;
 use App\Models\Meeting;
 use App\Models\Review;
 use App\Models\WfhRequest;
@@ -107,6 +108,10 @@ class MeController extends Controller
                 ->latest('held_on')->latest('id')->get()->map->props(),
             'loans' => Loan::query()->with('decider:id,name', 'repayments')->where('employee_id', $employee->id)
                 ->latest('id')->limit(30)->get()->map->props(),
+            'medicalRequests' => MedicalRequest::query()->with('decider:id,name', 'payer:id,name')->where('employee_id', $employee->id)
+                ->latest('id')->limit(30)->get()->map->props(),
+            'medicalKinds' => MedicalRequest::KINDS,
+            'medicalPatients' => MedicalRequest::PATIENTS,
             'wfhRequests' => WfhRequest::query()->with('decider:id,name')->where('employee_id', $employee->id)
                 ->latest('id')->limit(30)->get()->map->props(),
             'leaveTypes' => LeaveType::query()->where('is_active', true)->orderBy('sort_order')->orderBy('name')->get(['id', 'name', 'yearly_days', 'per_leave_days']),
@@ -369,6 +374,75 @@ class MeController extends Controller
         $loan->update(['status' => 'cancelled']);
 
         return back()->with('success', 'Loan request cancelled.');
+    }
+
+    /**
+     * Claim back a medical bill (bills attached, required while uploads are on) or ask for an advance for treatment
+     * (a doctor's estimate may be attached). HR approves the amount, then marks it paid.
+     */
+    public function storeMedicalRequest(Request $request): RedirectResponse
+    {
+        $employee = $this->employee($request);
+        $cfg = config('hrm.uploads');
+        $file = ['file', 'mimes:'.implode(',', $cfg['extensions']), 'max:'.$cfg['max_kb']];
+        $data = $request->validate([
+            'kind' => ['required', Rule::in(array_keys(MedicalRequest::KINDS))],
+            'patient' => ['required', Rule::in(array_keys(MedicalRequest::PATIENTS))],
+            'treatment_date' => ['nullable', 'required_if:kind,reimbursement', 'date_format:Y-m-d', 'after_or_equal:'.CarbonImmutable::today()->subYear()->toDateString(), 'before_or_equal:'.CarbonImmutable::today()->addYear()->toDateString()],
+            'amount' => ['required', 'numeric', 'min:1', 'max:10000000'],
+            'reason' => ['required', 'string', 'max:1000'],
+            'attachment' => ! $cfg['enabled'] ? ['prohibited'] : ($request->input('kind') === 'reimbursement' ? ['required', ...$file] : ['nullable', ...$file]),
+        ], [
+            'treatment_date.required_if' => 'Give the date of the treatment on the bill.',
+            'treatment_date.after_or_equal' => 'That is more than a year ago. Talk to HR.',
+            'treatment_date.before_or_equal' => 'Pick a date within the next year.',
+            'reason.required' => 'Say what the treatment is for.',
+            'attachment.required' => 'Attach the bills (a photo is fine). Put several bills in one PDF, or send one request each.',
+            'attachment.mimes' => 'Attach a PDF, JPG or PNG file.',
+            'attachment.max' => 'The file is larger than '.round($cfg['max_kb'] / 1024).' MB.',
+            'attachment.prohibited' => 'Attachments are switched off for now. Hand the bills to HR.',
+        ]);
+        if ($data['kind'] === 'reimbursement' && ! empty($data['treatment_date']) && $data['treatment_date'] > CarbonImmutable::today()->toDateString()) {
+            throw ValidationException::withMessages(['treatment_date' => 'A bill to claim back is for treatment that already happened.']);
+        }
+
+        $upload = $data['attachment'] ?? null;
+        $stored = null;
+        if ($upload) {
+            $ext = strtolower($upload->guessExtension() ?: $upload->getClientOriginalExtension());
+            $stored = $upload->storeAs("medical-requests/{$employee->id}", Str::random(40).'.'.$ext, $cfg['disk']);
+        }
+        try {
+            MedicalRequest::create([
+                'employee_id' => $employee->id, 'kind' => $data['kind'], 'patient' => $data['patient'], 'treatment_date' => $data['treatment_date'] ?? null,
+                'amount' => $data['amount'], 'reason' => $data['reason'], 'requested_by' => $request->user()->id,
+                'attachment_path' => $stored, 'attachment_name' => $upload ? Str::limit(basename($upload->getClientOriginalName()), 250, '') : null,
+                'attachment_mime' => $upload?->getMimeType(), 'attachment_size' => $upload?->getSize(),
+            ]);
+        } catch (\Throwable $e) {
+            $stored && Storage::disk($cfg['disk'])->delete($stored);   // no orphan file without a row
+            throw $e;
+        }
+
+        return back()->with('success', 'Sent to HR. You\'ll see the answer here.');
+    }
+
+    public function cancelMedicalRequest(Request $request, MedicalRequest $medicalRequest): RedirectResponse
+    {
+        abort_unless($medicalRequest->employee_id === $this->employee($request)->id, 404);
+        if ($medicalRequest->status !== 'pending') {
+            throw ValidationException::withMessages(['status' => 'Only a request HR hasn\'t answered yet can be cancelled.']);
+        }
+        $medicalRequest->update(['status' => 'cancelled']);
+
+        return back()->with('success', 'Medical request cancelled.');
+    }
+
+    public function medicalRequestFile(Request $request, MedicalRequest $medicalRequest): StreamedResponse
+    {
+        abort_unless($medicalRequest->employee_id === $this->employee($request)->id, 404);
+
+        return MedicalRequestController::stream($medicalRequest);
     }
 
     public function acknowledgeConduct(Request $request, ConductEntry $entry): RedirectResponse

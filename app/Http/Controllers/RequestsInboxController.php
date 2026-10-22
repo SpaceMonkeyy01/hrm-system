@@ -6,6 +6,7 @@ use App\Models\AttendanceRequest;
 use App\Models\Company;
 use App\Models\LeaveRequest;
 use App\Models\Loan;
+use App\Models\MedicalRequest;
 use App\Models\WfhRequest;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -24,6 +25,7 @@ class RequestsInboxController extends Controller
         'leave' => [LeaveRequest::class, 'Leave', 'Leave applications with the signed form.', '/leave/requests', 'start_date'],
         'wfh' => [WfhRequest::class, 'Work from home', 'Days someone asks to work from home.', '/attendance/wfh', 'start_date'],
         'loans' => [Loan::class, 'Loans', 'Loan requests, with the amount and months to repay.', '/loans', 'created_at'],
+        'medical' => [MedicalRequest::class, 'Medical', 'Medical bills to claim back and advances for treatment.', '/medical', 'created_at'],
     ];
 
     /** @return array<string, int> key => requests waiting for HR (from people of $company only, when given) */

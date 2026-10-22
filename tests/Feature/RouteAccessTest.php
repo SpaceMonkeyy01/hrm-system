@@ -84,7 +84,7 @@ class RouteAccessTest extends TestCase
         }
         $expected = ['/', 'account', 'cron/reminders/{token}', 'cron/machine/{token}', 'login', 'logout', 'forgot-password', 'reset-password', 'reset-password/{token}', 'me', 'me/contact', 'me/requests', 'me/requests/{correction}',
             'me/reviews/{review}', 'me/clock', 'me/reviews/{review}/acknowledge', 'me/photo', 'me/leave-requests', 'me/leave-requests/{leaveRequest}', 'me/leave-requests/{leaveRequest}/file', 'me/letters/{letter}',
-            'me/wfh-requests', 'me/wfh-requests/{wfhRequest}', 'me/loans', 'me/loans/{loan}', 'me/conduct/{entry}/acknowledge', 'me/meetings/{meeting}/acknowledge', 'employees/{employee}/photo', 'storage/{path}', 'up'];
+            'me/wfh-requests', 'me/wfh-requests/{wfhRequest}', 'me/loans', 'me/loans/{loan}', 'me/medical-requests', 'me/medical-requests/{medicalRequest}', 'me/medical-requests/{medicalRequest}/file', 'me/conduct/{entry}/acknowledge', 'me/meetings/{meeting}/acknowledge', 'employees/{employee}/photo', 'storage/{path}', 'up'];
         $this->assertSame([], array_values(array_diff(array_unique($open), $expected)));
     }
 
@@ -141,6 +141,7 @@ class RouteAccessTest extends TestCase
             'repayment' => \App\Models\LoanRepayment::create(['loan_id' => $loanId, 'month' => '2026-05-01', 'amount' => 2000])->id,
             'entry' => \App\Models\ConductEntry::create(['employee_id' => $e->id, 'type' => 'appreciation', 'happened_on' => '2026-05-13', 'title' => 'Test'])->id,
             'meeting' => \App\Models\Meeting::create(['employee_id' => $e->id, 'type' => 'other', 'held_on' => '2026-05-13', 'notes' => 'Test'])->id,
+            'medicalRequest' => \App\Models\MedicalRequest::create(['employee_id' => $e->id, 'kind' => 'advance', 'amount' => 1000, 'reason' => 'Test'])->id,
             'wfhRequest' => \App\Models\WfhRequest::create(['employee_id' => $e->id, 'start_date' => '2026-05-13', 'end_date' => '2026-05-13', 'reason' => 'Test'])->id,
             'team' => Team::create(['department_id' => $dept->id, 'name' => 'Test team'])->id,
             'file' => EmployeeFile::create(['employee_id' => $e->id, 'original_name' => 'x.pdf', 'path' => 'employee-files/none.pdf', 'mime' => 'application/pdf', 'size' => 1])->id,
