@@ -63,7 +63,7 @@ export function MyWfhRequests({ requests, today }: { requests: WfhRequestRow[]; 
                 <h2 className="font-bold">Work from home</h2>
                 <Button onClick={() => setAsking(true)}><House /> Ask to work from home</Button>
             </div>
-            {requests.length > 0 && (
+            {requests.length === 0 ? <p className="text-sm text-muted-foreground">No work from home requests yet.</p> : (
                 <ul className="divide-y rounded-lg border">
                     {requests.map((r) => (
                         <li key={r.id} className="grid gap-2 px-3 py-3 text-sm sm:grid-cols-[1fr_auto] sm:items-start">

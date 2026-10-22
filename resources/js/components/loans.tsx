@@ -74,7 +74,7 @@ export function MyLoans({ loans }: { loans: LoanRow[] }) {
                 <h2 className="font-bold">Loans</h2>
                 <Button variant="outline" onClick={() => setAsking(true)}><HandCoins /> Ask for a loan</Button>
             </div>
-            {loans.length > 0 && (
+            {loans.length === 0 ? <p className="text-sm text-muted-foreground">No loan requests yet.</p> : (
                 <ul className="divide-y rounded-lg border">
                     {loans.map((l) => (
                         <li key={l.id} className="grid gap-2 px-3 py-3 text-sm sm:grid-cols-[1fr_auto] sm:items-start">

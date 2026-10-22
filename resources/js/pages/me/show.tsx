@@ -184,8 +184,13 @@ export default function MyPage(props: Props) {
     }
     const a = props.attendance;
     const today = props.today;
-    const pending = props.requests.filter((r) => r.status === 'pending').length + (props.wfhRequests ?? []).filter((r) => r.status === 'pending').length
-        + (props.loans ?? []).filter((l) => l.status === 'pending').length + (props.medicalRequests ?? []).filter((m) => m.status === 'pending').length;
+    // Waiting for HR, counted on the tab each request lives on.
+    const attendancePending = props.requests.filter((r) => r.status === 'pending').length + (props.wfhRequests ?? []).filter((r) => r.status === 'pending').length;
+    const leavePending = (props.leaveRequests ?? []).filter((r) => r.status === 'pending').length;
+    const carePending = (props.loans ?? []).filter((l) => l.status === 'pending').length + (props.medicalRequests ?? []).filter((m) => m.status === 'pending').length;
+    // #requests was the old Employee care tab (links in emails sent before it was renamed).
+    const hash = typeof window !== 'undefined' ? window.location.hash.slice(1) : '';
+    const openTab = hash === 'requests' ? 'care' : hash;
     const yourTurn = (props.reviews ?? []).filter((r) => r.canSelfReview || (r.status === 'completed' && !r.acknowledged_at)).length;
     const owed = props.documents.filter((d) => !d.done);
     const toAck = [...(props.conduct ?? []), ...(props.meetings ?? [])].filter((x) => !x.acknowledged_at).length;
@@ -201,11 +206,11 @@ export default function MyPage(props: Props) {
             />
             {props.clock?.enabled && <div className="max-w-4xl px-4 pt-6 md:px-6"><ClockCard clock={props.clock} today={today} /></div>}
             {/* Opens on a #tab link, else on Reviews when there is one to do, else Attendance. */}
-            <Tabs defaultValue={(typeof window !== 'undefined' && window.location.hash.slice(1)) || (yourTurn ? 'reviews' : 'attendance')} className="px-4 py-6 md:px-6">
+            <Tabs defaultValue={openTab || (yourTurn ? 'reviews' : 'attendance')} className="px-4 py-6 md:px-6">
                 <TabsList className="mb-4">
-                    <TabsTrigger value="attendance">Attendance</TabsTrigger>
-                    <TabsTrigger value="leave">Leave</TabsTrigger>
-                    <TabsTrigger value="requests">Requests{pending ? ` (${pending})` : ''}</TabsTrigger>
+                    <TabsTrigger value="attendance">Attendance{attendancePending ? ` (${attendancePending})` : ''}</TabsTrigger>
+                    <TabsTrigger value="leave">Leave{leavePending ? ` (${leavePending})` : ''}</TabsTrigger>
+                    <TabsTrigger value="care">Employee care{carePending ? ` (${carePending})` : ''}</TabsTrigger>
                     <TabsTrigger value="reviews">Reviews{yourTurn ? ` (${yourTurn})` : ''}</TabsTrigger>
                     <TabsTrigger value="feedback">Feedback{toAck ? ` (${toAck})` : ''}</TabsTrigger>
                     <TabsTrigger value="documents">Documents</TabsTrigger>
@@ -283,86 +288,97 @@ export default function MyPage(props: Props) {
                                 </table>
                             </div>
                         </>)}
+                        <div className="mt-4 grid max-w-3xl gap-4">
+                            <MyWfhRequests requests={props.wfhRequests ?? []} today={today} />
+                            <section className="grid gap-3">
+                                <h2 className="font-bold">Attendance fixes</h2>
+                                <p className="text-sm text-muted-foreground">Fixes you asked HR for. Once approved, the new times count in your attendance.</p>
+                                {props.requests.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">None yet. Use "Ask to fix" next to a day above.</p>
+                                ) : (
+                                    <ul className="divide-y rounded-lg border">
+                                        {props.requests.map((r) => (
+                                            <li key={r.id} className="grid gap-2 px-3 py-3 text-sm sm:grid-cols-[1fr_auto] sm:items-start">
+                                                <div>
+                                                    <p className="font-semibold">
+                                                        {formatDate(r.date)}
+                                                        <span className="font-normal text-muted-foreground">: in {r.check_in ?? 'as punched'}, out {r.check_out ?? 'as punched'}</span>
+                                                    </p>
+                                                    <p className="text-muted-foreground">{r.reason}</p>
+                                                    {r.decision_note && <p className="mt-1">HR: {r.decision_note}</p>}
+                                                    <p className="mt-1 text-xs text-muted-foreground">
+                                                        Sent {formatDateTime(r.created_at)}{r.decided_at && `, answered ${formatDateTime(r.decided_at)}${r.decided_by ? ` by ${r.decided_by}` : ''}`}
+                                                    </p>
+                                                </div>
+                                                <div className="flex items-center gap-2 sm:justify-end">
+                                                    <StatusPill value={r.status_label} tone={requestTone[r.status]} />
+                                                    {r.status === 'pending' && (
+                                                        <Button variant="ghost" size="sm" onClick={() => router.delete(`/me/requests/${r.id}`, { preserveScroll: true })}>Cancel</Button>
+                                                    )}
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </section>
+                        </div>
                     </div>
                 </TabsContent>
 
                 <TabsContent value="leave">
-                    <div className="grid max-w-3xl gap-4">
+                    <div className="grid max-w-3xl gap-8">
+                        {props.leave.balances.length > 0 && (
+                            <section className="grid gap-2">
+                                <h2 className="font-bold">Your balance for {props.leave.year}</h2>
+                                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" aria-label="Leave balance">
+                                    {props.leave.balances.map((b) => (
+                                        <div key={b.type_id} className="rounded-lg border px-3 py-2" title={balanceTitle(b)}>
+                                            <span className="block text-xs text-muted-foreground">{b.type}</span>
+                                            <span className="font-semibold tabular-nums">{balanceText(b)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                {props.leave.deductions.days > 0 && (
+                                    <p className="text-sm text-muted-foreground">Deducted {props.leave.deductions.days} {props.leave.deductions.days === 1 ? 'day' : 'days'} (Casual first, then Annual): {deductionText(props.leave.deductions)}. Ask HR to fix a day if one is wrong.</p>
+                                )}
+                                {props.leave.counted.length > 0 && (
+                                    <p className="text-sm text-muted-foreground">Counted in HR's sheet before the app: {props.leave.counted.map((c) => `${c.type} ${c.days}`).join(', ')}.</p>
+                                )}
+                            </section>
+                        )}
                         <MyLeaveRequests requests={props.leaveRequests ?? []} types={props.leaveTypes ?? []} parts={props.leaveParts ?? {}}
                             uploads={props.uploads ?? { enabled: false, max_mb: 10 }} today={today} />
-                        <h2 className="mt-2 font-bold">Approved leave in {props.leave.year}</h2>
-                        <p className="text-sm text-muted-foreground">Once HR approves a request it shows here and comes off your balance.</p>
-                        {props.leave.balances.length > 0 && (
-                            <div className="flex flex-wrap gap-2 text-sm" aria-label="Leave balance">
-                                {props.leave.balances.map((b) => (
-                                    <span key={b.type_id} className="rounded-md border px-2.5 py-1" title={balanceTitle(b)}>
-                                        <span className="text-muted-foreground">{b.type}</span> <span className="font-semibold tabular-nums">{balanceText(b)}</span>
-                                    </span>
-                                ))}
-                            </div>
-                        )}
-                        {props.leave.deductions.days > 0 && (
-                            <p className="text-sm text-muted-foreground">Deducted {props.leave.deductions.days} {props.leave.deductions.days === 1 ? 'day' : 'days'} (Casual first, then Annual): {deductionText(props.leave.deductions)}. Ask HR to fix a day if one is wrong.</p>
-                        )}
-                        {props.leave.counted.length > 0 && (
-                            <p className="text-sm text-muted-foreground">Counted in HR's sheet before the app: {props.leave.counted.map((c) => `${c.type} ${c.days}`).join(', ')}.</p>
-                        )}
-                        {Object.keys(props.leave.totals).length > 0 && (
-                            <div className="flex flex-wrap gap-2 text-sm">
-                                {Object.entries(props.leave.totals).map(([type, days]) => (
-                                    <span key={type} className="rounded-md border px-2.5 py-1"><span className="text-muted-foreground">{type}</span> <span className="font-semibold tabular-nums">{days}</span></span>
-                                ))}
-                            </div>
-                        )}
-                        {props.leave.records.length === 0 ? <EmptyState title={`No leave recorded in ${props.leave.year}.`} /> : (
-                            <ul className="divide-y rounded-lg border">
-                                {props.leave.records.map((r) => (
-                                    <li key={r.id} className="grid gap-0.5 px-3 py-2 text-sm sm:grid-cols-[10rem_1fr_auto]">
-                                        <span className="font-semibold">{r.type}</span>
-                                        <span className="tabular-nums">{leaveDates(r)}</span>
-                                        <span className="text-muted-foreground tabular-nums">{r.days} {r.days === 1 ? 'day' : 'days'}</span>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
+                        <section className="grid gap-3">
+                            <h2 className="font-bold">Approved leave in {props.leave.year}</h2>
+                            <p className="text-sm text-muted-foreground">Once HR approves a request it shows here and comes off your balance.</p>
+                            {Object.keys(props.leave.totals).length > 0 && (
+                                <div className="flex flex-wrap gap-2 text-sm">
+                                    {Object.entries(props.leave.totals).map(([type, days]) => (
+                                        <span key={type} className="rounded-md border px-2.5 py-1"><span className="text-muted-foreground">{type}</span> <span className="font-semibold tabular-nums">{days}</span></span>
+                                    ))}
+                                </div>
+                            )}
+                            {props.leave.records.length === 0 ? <EmptyState title={`No leave recorded in ${props.leave.year}.`} /> : (
+                                <ul className="divide-y rounded-lg border">
+                                    {props.leave.records.map((r) => (
+                                        <li key={r.id} className="grid gap-0.5 px-3 py-2 text-sm sm:grid-cols-[10rem_1fr_auto]">
+                                            <span className="font-semibold">{r.type}</span>
+                                            <span className="tabular-nums">{leaveDates(r)}</span>
+                                            <span className="text-muted-foreground tabular-nums">{r.days} {r.days === 1 ? 'day' : 'days'}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </section>
                     </div>
                 </TabsContent>
 
-                <TabsContent value="requests">
-                    <div className="grid max-w-3xl gap-4">
-                        <MyWfhRequests requests={props.wfhRequests ?? []} today={today} />
+                <TabsContent value="care">
+                    <div className="grid max-w-3xl gap-8">
+                        <p className="text-sm text-muted-foreground">Ask for a loan or medical help, and see everything you asked for with HR's answer. Only you and HR see this.</p>
                         <MyLoans loans={props.loans ?? []} />
                         <MyMedicalRequests requests={props.medicalRequests ?? []} kinds={props.medicalKinds ?? {}} patients={props.medicalPatients ?? {}}
                             uploads={props.uploads ?? { enabled: false, max_mb: 10 }} />
-                        <h2 className="mt-2 font-bold">Attendance fixes</h2>
-                        <p className="text-sm text-muted-foreground">Fixes you asked HR for. Once approved, the new times count in your attendance.</p>
-                        {props.requests.length === 0 ? (
-                            <EmptyState title="No requests yet.">Use "Ask to fix" next to a day on the Attendance tab.</EmptyState>
-                        ) : (
-                            <ul className="divide-y rounded-lg border">
-                                {props.requests.map((r) => (
-                                    <li key={r.id} className="grid gap-2 px-3 py-3 text-sm sm:grid-cols-[1fr_auto] sm:items-start">
-                                        <div>
-                                            <p className="font-semibold">
-                                                {formatDate(r.date)}
-                                                <span className="font-normal text-muted-foreground">: in {r.check_in ?? 'as punched'}, out {r.check_out ?? 'as punched'}</span>
-                                            </p>
-                                            <p className="text-muted-foreground">{r.reason}</p>
-                                            {r.decision_note && <p className="mt-1">HR: {r.decision_note}</p>}
-                                            <p className="mt-1 text-xs text-muted-foreground">
-                                                Sent {formatDateTime(r.created_at)}{r.decided_at && `, answered ${formatDateTime(r.decided_at)}${r.decided_by ? ` by ${r.decided_by}` : ''}`}
-                                            </p>
-                                        </div>
-                                        <div className="flex items-center gap-2 sm:justify-end">
-                                            <StatusPill value={r.status_label} tone={requestTone[r.status]} />
-                                            {r.status === 'pending' && (
-                                                <Button variant="ghost" size="sm" onClick={() => router.delete(`/me/requests/${r.id}`, { preserveScroll: true })}>Cancel</Button>
-                                            )}
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
                     </div>
                 </TabsContent>
 

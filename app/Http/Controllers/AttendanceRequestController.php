@@ -92,7 +92,7 @@ class AttendanceRequestController extends Controller
         $sent = StaffMail::send($correction->employee_id, 'Your attendance fix was approved', [
             'Your request to fix '.$correction->date->format('j M Y').' was approved. The new times count in your attendance.',
             ...StaffMail::hrNote($data['note'] ?? null),
-        ], '/me#requests');
+        ], '/me#attendance');
 
         return back()->with('success', 'Approved. The new times count on '.$correction->date->format('j M').'.'.StaffMail::note($sent, 'They'));
     }
@@ -105,7 +105,7 @@ class AttendanceRequestController extends Controller
 
         $sent = StaffMail::send($correction->employee_id, 'Your attendance fix was not approved', [
             'Your request to fix '.$correction->date->format('j M Y').' was not approved.', ...StaffMail::hrNote($data['note']),
-        ], '/me#requests');
+        ], '/me#attendance');
 
         return back()->with('success', 'Marked as not approved. The person sees your reason on their page.'.StaffMail::note($sent, 'They'));
     }

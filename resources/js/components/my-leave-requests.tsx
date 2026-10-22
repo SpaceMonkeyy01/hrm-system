@@ -95,7 +95,7 @@ export function MyLeaveRequests({ requests, types, parts, uploads, today }: {
                 <h2 className="font-bold">Leave requests</h2>
                 <Button onClick={() => setApplying(true)}><Plus /> Apply for leave</Button>
             </div>
-            {requests.length > 0 && (
+            {requests.length === 0 ? <p className="text-sm text-muted-foreground">No leave requests yet.</p> : (
                 <ul className="divide-y rounded-lg border">
                     {requests.map((r) => (
                         <li key={r.id} className="grid gap-2 px-3 py-3 text-sm sm:grid-cols-[1fr_auto] sm:items-start">

@@ -55,7 +55,7 @@ class WfhRequestController extends Controller
         return StaffMail::send($r->employee, $outcome === 'approved' ? 'Work from home approved' : 'Work from home not approved', [
             "Your request to work from home on $when was ".($outcome === 'approved' ? 'approved. Clock in on My page from home as usual.' : 'not approved.'),
             ...StaffMail::hrNote($note),
-        ], '/me#requests');
+        ], '/me#attendance');
     }
 
     public function reject(Request $request, WfhRequest $wfhRequest): RedirectResponse

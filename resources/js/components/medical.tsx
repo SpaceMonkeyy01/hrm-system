@@ -107,7 +107,7 @@ export function MyMedicalRequests({ requests, kinds, patients, uploads }: {
                 <h2 className="font-bold">Medical</h2>
                 <Button variant="outline" onClick={() => setAsking(true)}><Stethoscope /> Medical request</Button>
             </div>
-            {requests.length > 0 && (
+            {requests.length === 0 ? <p className="text-sm text-muted-foreground">No medical requests yet.</p> : (
                 <ul className="divide-y rounded-lg border">
                     {requests.map((r) => (
                         <li key={r.id} className="grid gap-2 px-3 py-3 text-sm sm:grid-cols-[1fr_auto] sm:items-start">

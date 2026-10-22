@@ -72,7 +72,7 @@ class MedicalRequestController extends Controller
         $sent = StaffMail::send($medicalRequest->employee, 'Your medical request was approved', [
             "Your medical request was approved for $amount$part. HR will let you know when it is paid.",
             ...StaffMail::hrNote($data['note'] ?? null),
-        ], '/me#requests');
+        ], '/me#care');
 
         return back()->with('success', "Approved $amount for {$medicalRequest->employee->full_name}.".StaffMail::note($sent, $medicalRequest->employee->full_name));
     }
@@ -83,7 +83,7 @@ class MedicalRequestController extends Controller
         $this->mustBe($medicalRequest, 'pending');
         $medicalRequest->update(['status' => 'rejected', 'decided_by' => $request->user()->id, 'decided_at' => now(), 'decision_note' => $data['note']]);
         $sent = StaffMail::send($medicalRequest->employee, 'Your medical request was not approved',
-            ['Your medical request was not approved.', ...StaffMail::hrNote($data['note'])], '/me#requests');
+            ['Your medical request was not approved.', ...StaffMail::hrNote($data['note'])], '/me#care');
 
         return back()->with('success', 'Not approved. The person sees your reason on My page.'.StaffMail::note($sent, $medicalRequest->employee->full_name));
     }
@@ -100,7 +100,7 @@ class MedicalRequestController extends Controller
         $sent = StaffMail::send($medicalRequest->employee, 'Your medical request was paid', [
             'Rs '.number_format($medicalRequest->approved_amount).' for your medical request was paid on '.$medicalRequest->paid_on->format('j M Y')
                 .($medicalRequest->paid_note ? " ({$medicalRequest->paid_note})" : '').'.',
-        ], '/me#requests');
+        ], '/me#care');
 
         return back()->with('success', 'Marked as paid.'.StaffMail::note($sent, $medicalRequest->employee->full_name));
     }

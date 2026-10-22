@@ -66,7 +66,7 @@ class LoanController extends Controller
             "Your loan request was approved. Rs ".number_format($loan->installment).' will be deducted from your salary each month for '.$loan->months
                 .' months, starting '.CarbonImmutable::parse($loan->first_month)->format('F Y').'.',
             ...StaffMail::hrNote($data['note'] ?? null),
-        ], '/me#requests');
+        ], '/me#care');
 
         return back()->with('success', "Approved {$loan->employee->full_name}'s loan: $plan.".StaffMail::note($sent, $loan->employee->full_name));
     }
@@ -76,7 +76,7 @@ class LoanController extends Controller
         $data = $request->validate(['note' => ['required', 'string', 'max:500']], ['note.required' => 'Say why, so the person knows what to do next.']);
         $this->mustBe($loan, 'pending');
         $loan->update(['status' => 'rejected', 'decided_by' => $request->user()->id, 'decided_at' => now(), 'decision_note' => $data['note']]);
-        $sent = StaffMail::send($loan->employee, 'Your loan request was not approved', ['Your loan request was not approved.', ...StaffMail::hrNote($data['note'])], '/me#requests');
+        $sent = StaffMail::send($loan->employee, 'Your loan request was not approved', ['Your loan request was not approved.', ...StaffMail::hrNote($data['note'])], '/me#care');
 
         return back()->with('success', 'Not approved. The person sees your reason on My page.'.StaffMail::note($sent, $loan->employee->full_name));
     }
