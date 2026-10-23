@@ -5,7 +5,8 @@ namespace App\Services\Reports;
 /**
  * Every report on the Reports page. A new report is one entry here plus a method on a *Reports class.
  *
- *   filters  which controls the page shows: month | range | year | date | within, plus company and department
+ *   filters  which controls the page shows: month | range | year | date | within, plus company, department, team, manager
+ *   range    'today': the range starts on today instead of the 1st of the month (reports with a row per person per day)
  *   private  HR and admin only (reads Employee::PRIVATE_FIELDS)
  *   wide     day-by-day grid: the page lets the table scroll sideways
  */
@@ -13,7 +14,7 @@ final class ReportCatalog
 {
     public const GROUPS = ['attendance' => 'Attendance', 'people' => 'People', 'performance' => 'Performance', 'compliance' => 'Compliance', 'leave' => 'Leave and holidays'];
 
-    /** @return array<string, array{group: string, title: string, description: string, filters: list<string>, run: array{0: class-string, 1: string}, private?: bool, wide?: bool}> */
+    /** @return array<string, array{group: string, title: string, description: string, filters: list<string>, run: array{0: class-string, 1: string}, private?: bool, wide?: bool, range?: string}> */
     public static function all(): array
     {
         $org = ['company', 'department'];
@@ -31,6 +32,9 @@ final class ReportCatalog
             'attendance-sheet' => ['group' => 'attendance', 'title' => 'Monthly attendance sheet',
                 'description' => 'Everyone by every day of the month, one code per day. Replaces the combined machine and HR.my file.',
                 'filters' => ['month', ...$org], 'run' => [AttendanceReports::class, 'sheet'], 'wide' => true],
+            'team-sign-in' => ['group' => 'attendance', 'title' => 'Team sign-in sheet',
+                'description' => 'One row per person per day, by manager: first and second sign-in and sign-out, hours and remarks. Pick a manager or team, then download it to share.',
+                'filters' => ['range', ...$org, 'team', 'manager'], 'range' => 'today', 'run' => [AttendanceReports::class, 'signIn']],
             'attendance-log' => ['group' => 'attendance', 'title' => 'Attendance log',
                 'description' => 'Every day with its check-ins and check-outs, including split days (office, then remote).',
                 'filters' => ['range', ...$org], 'run' => [AttendanceReports::class, 'log']],

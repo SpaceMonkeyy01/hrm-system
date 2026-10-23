@@ -3,11 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Company;
+use App\Models\Employee;
+use App\Models\Team;
 use App\Services\Reports\ReportCatalog;
 use App\Services\Reports\ReportFilters;
 use App\Support\Csv;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -44,11 +47,18 @@ class ReportController extends Controller
             'filters' => [
                 'month' => $filters->month, 'from' => $filters->from, 'to' => $filters->to, 'year' => $filters->year,
                 'date' => $filters->date, 'within' => $filters->within, 'company' => $filters->company, 'department' => $filters->department,
-                'day' => $filters->day, 'week' => $filters->week,
+                'day' => $filters->day, 'week' => $filters->week, 'team' => $filters->team, 'manager' => $filters->manager,
             ],
             'today' => $filters->today->toDateString(),
             'companies' => Company::query()->orderBy('name')->with('departments:id,company_id,name')->get(['id', 'name'])
                 ->map(fn ($c) => ['id' => $c->id, 'name' => $c->name, 'departments' => $c->departments->sortBy('name')->map->only('id', 'name')->values()->all()]),
+            // Only for reports with those filters: teams (by department) and everyone who manages someone current.
+            'teams' => in_array('team', $def['filters'], true)
+                ? Team::query()->orderBy('name')->get(['id', 'name', 'department_id'])->map->only('id', 'name', 'department_id') : [],
+            'managers' => in_array('manager', $def['filters'], true)
+                ? Employee::query()->whereIn('id', Employee::query()->whereIn('status', ['active', 'offboarding'])->whereNotNull('manager_id')->select('manager_id'))
+                    ->orderBy('full_name')->get(['id', 'full_name', 'employee_code', 'company_id'])
+                    ->map(fn ($e) => ['id' => $e->id, 'name' => $e->full_name, 'code' => $e->employee_code, 'company_id' => $e->company_id]) : [],
             'result' => ['columns' => $result->columns, 'rows' => $result->rows, 'summary' => $result->summary, 'notes' => $result->notes],
         ]);
     }
@@ -61,12 +71,19 @@ class ReportController extends Controller
             in_array('month', $def['filters'], true) => $filters->month,
             in_array('day', $def['filters'], true) => $filters->day,
             in_array('week', $def['filters'], true) => "week-of-{$filters->week}",
-            in_array('range', $def['filters'], true) => "{$filters->from}-to-{$filters->to}",
+            in_array('range', $def['filters'], true) => $filters->from === $filters->to ? $filters->from : "{$filters->from}-to-{$filters->to}",
             in_array('year', $def['filters'], true) => (string) $filters->year,
             default => $filters->today->toDateString(),
         };
 
-        return Csv::download("$report-$period.csv", $header, $rows);
+        // A manager's or team's sheet is named after them, so the files HR forwards are told apart.
+        $who = match (true) {
+            (bool) $filters->manager => Employee::find($filters->manager)?->full_name,
+            (bool) $filters->team => Team::find($filters->team)?->name,
+            default => null,
+        };
+
+        return Csv::download("$report-$period".($who ? '-'.Str::slug($who) : '').'.csv', $header, $rows);
     }
 
     private function run(array $def, ReportFilters $filters)
@@ -94,6 +111,8 @@ class ReportController extends Controller
             'week' => ['nullable', 'date_format:Y-m-d'],
             'company' => ['nullable', 'integer'],
             'department' => ['nullable', 'integer'],
+            'team' => ['nullable', 'integer'],
+            'manager' => ['nullable', 'integer'],
         ], ['month.regex' => 'Pick a month like 2026-10.']);
 
         $today = CarbonImmutable::today();
@@ -105,7 +124,7 @@ class ReportController extends Controller
         $week = CarbonImmutable::parse($f['week'] ?? $today->toDateString())->startOfWeek(CarbonImmutable::MONDAY)
             ->min($today->startOfWeek(CarbonImmutable::MONDAY))->toDateString();
         $day = min($f['day'] ?? $today->toDateString(), $today->toDateString());
-        $from = $f['from'] ?? $today->startOfMonth()->toDateString();
+        $from = $f['from'] ?? (($def['range'] ?? null) === 'today' ? $today : $today->startOfMonth())->toDateString();
         $to = $f['to'] ?? $today->toDateString();
         if ($to < $from) {
             throw ValidationException::withMessages(['to' => 'The end date is before the start date.']);
@@ -126,6 +145,8 @@ class ReportController extends Controller
             week: $week,
             company: isset($f['company']) ? (int) $f['company'] : null,
             department: isset($f['department']) ? (int) $f['department'] : null,
+            team: isset($f['team']) ? (int) $f['team'] : null,
+            manager: isset($f['manager']) ? (int) $f['manager'] : null,
         )];
     }
 }

@@ -21,6 +21,8 @@ final class ReportFilters
         public readonly string $week = '',  // Y-m-d, the Monday that starts the week (weekly report)
         public readonly ?int $company = null,
         public readonly ?int $department = null,
+        public readonly ?int $team = null,
+        public readonly ?int $manager = null,   // employees.id: that person's direct reports
     ) {}
 
     public function monthStart(): CarbonImmutable
@@ -45,12 +47,14 @@ final class ReportFilters
         return $this->weekStart()->addDays(6);
     }
 
-    /** Employees in the chosen company / department. */
+    /** Employees in the chosen company / department / team, or reporting to the chosen manager. */
     public function employees(): Builder
     {
         return Employee::query()
             ->when($this->company, fn ($q, $v) => $q->where('company_id', $v))
-            ->when($this->department, fn ($q, $v) => $q->where('department_id', $v));
+            ->when($this->department, fn ($q, $v) => $q->where('department_id', $v))
+            ->when($this->team, fn ($q, $v) => $q->where('team_id', $v))
+            ->when($this->manager, fn ($q, $v) => $q->where('manager_id', $v));
     }
 
     /** Current staff (active or offboarding) in the chosen company / department. */

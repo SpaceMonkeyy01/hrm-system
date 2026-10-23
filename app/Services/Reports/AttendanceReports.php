@@ -337,6 +337,94 @@ class AttendanceReports
     }
 
     /** Every day with a time on it, and each stretch of work: office blocks and HR.my sessions. */
+    // ------------------------------------------------------------------ team sign-in sheet
+
+    /** Days a sign-in sheet leaves out when nobody punched: they aren't workdays. */
+    private const QUIET_DAYS = ['Day off', 'Holiday'];
+
+    /**
+     * The sheet HR sends to managers and leads: a row per person per day, by manager then name, with the first two
+     * sessions as sign-in / sign-out pairs and the rest of the day in remarks.
+     */
+    public function signIn(ReportFilters $f): ReportResult
+    {
+        $employees = $f->employedBetween($f->from, $f->to)->with(['department:id,name', 'team:id,name', 'manager:id,full_name'])
+            ->get([...self::EMPLOYEE_COLUMNS, 'team_id', 'manager_id'])
+            // By manager (no manager last), then name
+            ->sortBy(fn (Employee $e) => [$e->manager ? 0 : 1, $e->manager?->full_name ?? '', $e->full_name])->values();
+        $board = new AttendanceBoard($employees, $f->from, $f->to);
+        $now = CarbonImmutable::now();
+        $tones = config('hrm.attendance.statuses') + ['Late' => 'pending'];
+        $r = (new ReportResult)->column('manager', 'Manager')->column('team', 'Team')->column('employee', 'Employee', 'employee')
+            ->column('date', 'Date', 'date')->column('status', 'Status', 'status', ['tones' => $tones])
+            ->column('in1', '1st sign in')->column('out1', '1st sign out')->column('in2', '2nd sign in')->column('out2', '2nd sign out')
+            ->column('worked', 'Hours worked', 'minutes')->column('remarks', 'Remarks');
+
+        $count = [];
+        $people = [];
+        foreach ($employees as $e) {
+            foreach ($board->dates() as $date) {
+                $day = $board->day($e, $date, $now);
+                $status = self::shownStatus($day);
+                if ($status === null || (in_array($status, self::QUIET_DAYS, true) && $day['sessions'] === [])) {
+                    continue;
+                }
+                // A session wholly inside another (HR.my tapped during the office day) is not a separate sign-in.
+                $sessions = array_values(array_filter($day['sessions'], fn ($s) => empty($s['inside'])));
+                $time = fn (?string $t) => $t === null ? null : self::sheetTime($t, $date);
+                $count[$status] = ($count[$status] ?? 0) + 1;
+                $people[$e->id] = true;
+                $r->rows[] = [
+                    'manager' => $e->manager?->full_name, 'team' => $e->team?->name, 'employee' => ReportResult::person($e), 'date' => $date,
+                    'status' => $status, 'in1' => $time($sessions[0]['in'] ?? null), 'out1' => $time($sessions[0]['out'] ?? null),
+                    'in2' => $time($sessions[1]['in'] ?? null), 'out2' => $time($sessions[1]['out'] ?? null),
+                    'worked' => $day['worked'], 'remarks' => self::remarks($day, array_slice($sessions, 2), $date),
+                ];
+            }
+        }
+        $late = $count['Late'] ?? 0;
+        $absent = $count['Absent'] ?? 0;
+        $missing = $count['Missing punch'] ?? 0;
+        $r->stat('People', count($people))->stat('Days', count($r->rows))->stat('Late', $late, $late ? 'pending' : null)
+            ->stat('Absent', $absent, $absent ? 'missing' : null)->stat('Missing punch', $missing, $missing ? 'pending' : null)
+            ->stat('On leave', $count['On leave'] ?? 0)
+            ->note('A time after midnight shows the date it happened on, e.g. "01:30 (24 Oct)". A third sign-in or more is listed under Remarks. Days off and holidays with no punches are left out.');
+        $this->notLinkedNote($r, $employees, $board);
+
+        return $r;
+    }
+
+    /** "09:07"; a time past midnight on the work day's clock ("25:30") becomes "01:30 (24 Oct)". */
+    private static function sheetTime(string $time, string $date): string
+    {
+        $minutes = AttendanceRules::minutes($time);
+
+        return $minutes < 1440 ? AttendanceRules::clock($minutes)
+            : AttendanceRules::clock($minutes % 1440).' ('.CarbonImmutable::parse($date)->addDays(intdiv($minutes, 1440))->format('j M').')';
+    }
+
+    /** "Late 14m · WFH · Annual · Also 20:10-21:00 · HR note" */
+    private static function remarks(array $day, array $extra, string $date): ?string
+    {
+        $parts = array_filter([
+            $day['late'] > 0 ? 'Late '.self::duration($day['late']) : null,
+            $day['early'] > 0 ? 'Left early '.self::duration($day['early']) : null,
+            ! empty($day['wfh']) ? 'WFH' : null,
+            $day['leave'] ? $day['leave']['type'].($day['leave']['part'] !== 'full' ? ' (half day)' : '') : null,
+            $day['holiday'] ?: null,
+            $extra ? 'Also '.implode(', ', array_map(fn ($s) => ($s['in'] ? self::sheetTime($s['in'], $date) : '?').'-'.($s['out'] ? self::sheetTime($s['out'], $date) : '?'), $extra)) : null,
+            $day['note'],
+        ]);
+
+        return $parts ? implode(' · ', $parts) : null;
+    }
+
+    /** 74 -> "1h 14m", 14 -> "14m" */
+    private static function duration(int $minutes): string
+    {
+        return ($minutes >= 60 ? intdiv($minutes, 60).'h ' : '').($minutes % 60).'m';
+    }
+
     public function log(ReportFilters $f): ReportResult
     {
         $tones = config('hrm.attendance.statuses');

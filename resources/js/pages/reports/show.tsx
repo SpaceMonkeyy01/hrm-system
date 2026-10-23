@@ -23,13 +23,16 @@ type Column = { key: string; label: string; type: 'text' | 'number' | 'date' | '
 type Person = { id: number; name: string; code: string };
 type DayCell = { code: string; tone: Tone | null; title: string };
 type Row = Record<string, unknown>;
-type Filters = { month: string; from: string; to: string; year: number; date: string; within: number; company: number | 'all' | null; department: number | null; day: string; week: string };
+type Filters = { month: string; from: string; to: string; year: number; date: string; within: number; company: number | 'all' | null; department: number | null; day: string; week: string; team: number | null; manager: number | null };
 type Company = { id: number; name: string; departments: { id: number; name: string }[] };
 type Props = {
     report: { key: string; title: string; description: string; group: string; filters: string[]; wide: boolean };
     filters: Filters;
     today: string;
     companies: Company[];
+    /** Only filled for reports with the team / manager filters. */
+    teams: { id: number; name: string; department_id: number | null }[];
+    managers: { id: number; name: string; code: string; company_id: number }[];
     result: { columns: Column[]; rows: Row[]; summary: { label: string; value: string | number; tone?: Tone }[]; notes: string[] };
 };
 
@@ -68,7 +71,7 @@ function Cell({ c, v }: { c: Column; v: unknown }) {
     }
 }
 
-export default function ReportShow({ report, filters, today, companies, result }: Props) {
+export default function ReportShow({ report, filters, today, companies, teams, managers, result }: Props) {
     const errors = usePage().props.errors as Record<string, string>;
     const [sort, setSort] = useState<{ key: string; dir: 1 | -1 } | null>(null);
     const [q, setQ] = useState('');
@@ -86,6 +89,8 @@ export default function ReportShow({ report, filters, today, companies, result }
         if (has('within')) out.within = all.within;
         if (has('company') && all.company) out.company = all.company;
         if (has('department') && all.department) out.department = all.department;
+        if (has('team') && all.team) out.team = all.team;
+        if (has('manager') && all.manager) out.manager = all.manager;
         return out;
     };
     const go = (changes: Partial<Filters>) => router.get(`/reports/${report.key}`, params(changes), { preserveState: true, preserveScroll: true, replace: true });
@@ -94,6 +99,10 @@ export default function ReportShow({ report, filters, today, companies, result }
     const departments = companies
         .filter((c) => !filters.company || c.id === filters.company)
         .flatMap((c) => c.departments.map((d) => ({ value: d.id, label: companies.length > 1 && !filters.company ? `${d.name} (${c.name})` : d.name })));
+    const departmentIds = new Set(departments.map((d) => d.value));
+    const teamOptions = teams.filter((t) => (filters.department ? t.department_id === filters.department : t.department_id !== null && departmentIds.has(t.department_id)))
+        .map((t) => ({ value: t.id, label: t.name }));
+    const managerOptions = managers.filter((m) => !filters.company || m.company_id === filters.company).map((m) => ({ value: m.id, label: `${m.name} (${m.code})` }));
     const personKey = result.columns.find((c) => c.type === 'employee')?.key;
 
     const rows = useMemo(() => {
@@ -179,13 +188,25 @@ export default function ReportShow({ report, filters, today, companies, result }
                     {has('company') && companies.length > 1 && (
                         <label className="grid gap-1 text-xs font-semibold text-muted-foreground">Company
                             <NativeSelect className="w-40" value={filters.company ?? ''} placeholder="All companies" options={companies.map((c) => ({ value: c.id, label: c.name }))}
-                                onChange={(e) => go({ company: e.target.value ? Number(e.target.value) : 'all', department: null })} />
+                                onChange={(e) => go({ company: e.target.value ? Number(e.target.value) : 'all', department: null, team: null, manager: null })} />
                         </label>
                     )}
                     {has('department') && (
                         <label className="grid gap-1 text-xs font-semibold text-muted-foreground">Department
                             <NativeSelect className="w-56" value={filters.department ?? ''} placeholder="All departments" options={departments}
-                                onChange={(e) => go({ department: e.target.value ? Number(e.target.value) : null })} />
+                                onChange={(e) => go({ department: e.target.value ? Number(e.target.value) : null, team: null })} />
+                        </label>
+                    )}
+                    {has('team') && (
+                        <label className="grid gap-1 text-xs font-semibold text-muted-foreground">Team
+                            <NativeSelect className="w-52" value={filters.team ?? ''} placeholder="All teams" options={teamOptions}
+                                onChange={(e) => go({ team: e.target.value ? Number(e.target.value) : null })} />
+                        </label>
+                    )}
+                    {has('manager') && (
+                        <label className="grid gap-1 text-xs font-semibold text-muted-foreground">Manager or lead
+                            <NativeSelect className="w-60" value={filters.manager ?? ''} placeholder="Everyone" options={managerOptions}
+                                onChange={(e) => go({ manager: e.target.value ? Number(e.target.value) : null })} />
                         </label>
                     )}
                     {personKey && (

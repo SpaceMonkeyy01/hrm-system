@@ -178,6 +178,37 @@ class ReportsTest extends TestCase
         $this->assertStringContainsString('20:00-23:30 remote', $this->row($this->props('/reports/attendance-sheet?month=2026-05'), 'Fake Linked')['d19']['title']);
     }
 
+    public function test_team_sign_in_sheet_by_manager_with_two_sessions_and_a_night_shift(): void
+    {
+        $lead = $this->employee($this->company, ['full_name' => 'Fake Lead']);
+        $team = \App\Models\Team::create(['department_id' => $this->linked->department_id ?? \App\Models\Department::first()->id, 'name' => 'Fake CS']);
+        $this->linked->update(['manager_id' => $lead->id, 'team_id' => $team->id, 'hr_portal_id' => 'BCC-901']);
+        // 19 May: office in the morning, then from home in the evening until 01:30 the next morning.
+        foreach (['2026-05-19 09:00:00', '2026-05-19 13:00:00'] as $at) {
+            AttendancePunch::create(['source' => 'machine', 'device_user_id' => '1', 'punched_at' => $at, 'work_date' => '2026-05-19']);
+        }
+        foreach (['In' => '2026-05-19 20:00:00', 'Out' => '2026-05-20 01:30:00'] as $action => $at) {
+            AttendancePunch::create(['source' => 'hrmy', 'device_user_id' => 'BCC-901', 'punched_at' => $at, 'work_date' => '2026-05-19', 'method' => $action]);
+        }
+
+        $props = $this->props("/reports/team-sign-in?from=2026-05-18&to=2026-05-19&manager={$lead->id}");
+        $rows = array_map(fn ($r) => [$r['manager'], $r['team'], $r['employee']['name'], $r['date'], $r['status'], $r['in1'], $r['out1'], $r['in2'], $r['out2'], $r['remarks']],
+            $props['result']['rows']);
+        $this->assertSame([
+            ['Fake Lead', 'Fake CS', 'Fake Linked', '2026-05-18', 'Late', '09:30', '17:05', null, null, 'Late 30m'],
+            ['Fake Lead', 'Fake CS', 'Fake Linked', '2026-05-19', 'Present', '09:00', '13:00', '20:00', '01:30 (20 May)', null],
+        ], $rows);
+        $this->assertContains(['id' => $lead->id, 'name' => 'Fake Lead', 'code' => $lead->employee_code, 'company_id' => $this->company->id], $props['managers']);
+
+        // The team filter gives the same person; with no range it is today only.
+        $this->assertSame(['Fake Linked'], array_unique(array_column(array_column($this->props("/reports/team-sign-in?from=2026-05-18&to=2026-05-19&team={$team->id}")['result']['rows'], 'employee'), 'name')));
+        $this->assertSame(['2026-05-20', '2026-05-20'], [($f = $this->props('/reports/team-sign-in')['filters'])['from'], $f['to']]);
+
+        // The download is named after the manager.
+        $this->actingAs($this->user())->get("/reports/team-sign-in/export?from=2026-05-19&to=2026-05-19&manager={$lead->id}")
+            ->assertOk()->assertHeader('content-disposition', 'attachment; filename=team-sign-in-2026-05-19-fake-lead.csv');
+    }
+
     public function test_late_and_absence_lists(): void
     {
         $late = $this->props('/reports/late-arrivals?from=2026-05-18&to=2026-05-19')['result']['rows'];
