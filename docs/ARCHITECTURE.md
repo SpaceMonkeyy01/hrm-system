@@ -1,225 +1,693 @@
 # HRM System: architecture
 
-Every diagram below is Mermaid source (renders on GitHub, GitLab and in VS Code). A PNG and SVG of each sits next to its source in `docs/diagrams/`.
+_For developers joining the project. Last rewritten 2026-10-23 against `main`. Every diagram is Mermaid source (renders on GitHub and in VS Code). The ERDs in section 5 were generated from the migrated schema, not drawn by hand._
+
+**Keep this file true.** A new table, a new subsystem, a new external service or a change to who can do what updates the matching section here in the same commit. `CLAUDE.md` sends every developer and AI agent here first.
+
+## 0. The system in one paragraph
+
+An internal HR app for two companies, BCC and Emerge (about 280 people). HR keeps the employee master, onboarding and document checklists, probation, offboarding, leave, attendance (from a ZKTeco fingerprint machine, the HR.my portal and an in-app clock-in), staff requests (WFH, attendance fixes, loans, medical), performance reviews, letters, assets and controlled documents. Staff get a self-service "My page". One Laravel monolith serves server-rendered React pages through Inertia: there is no separate API and no SPA backend.
+
+| | |
+|---|---|
+| Backend | Laravel 13, PHP 8.3 |
+| Frontend | React 19 + TypeScript, Inertia 3, Tailwind 4, shadcn/ui, Vite 8 |
+| Database | PostgreSQL (Neon) in production; SQLite locally and in tests; the suite also runs on Postgres |
+| Hosting | Render (Docker, free plan), Cloudflare R2 for files, Resend for email, cron-job.org for timed jobs |
+| Size | 46 app tables, ~56 models, ~48 controllers, ~50 pages, ~380 feature tests |
+
+```
+hrm-system/
+  app/Http/Controllers      one controller per area; Settings/* is admin-only
+  app/Models                Eloquent models; Concerns/LogsActivity writes the audit log
+  app/Services              the rules: HrRules, StatusBoard, AttendanceBoard, AttendanceRules, LeaveBalances, Reports/*, Import/*
+  app/Support               file readers (Xls, Xlsx), ZK machine client, CSV writer
+  app/Console/Commands      hr:* artisan commands
+  config/hrm.php            every HR value, status list, option set and switch
+  routes/web.php            every URL and its permission group
+  resources/js/pages        one React page per screen (Inertia::render('x/y') -> pages/x/y.tsx)
+  resources/js/components   shared UI; ui/ is shadcn
+  tests/Feature             behaviour tests; RouteAccessTest walks every route
+  docs/                     this file, deploy guides, reviews
+```
 
 ## 1. Deployment
 
-One Laravel app on the existing cPanel VPS, next to the current Laravel app. Free components only: Apache and PHP-FPM from EasyApache, MySQL from cPanel, SSL from AutoSSL. Node is only needed on a developer machine to build the frontend; the server serves the built files from `public/build`. The `schedule:run` cron is required (no longer optional): it sends the daily reminder email, using the mail settings in `.env`.
-
 ```mermaid
-flowchart TB
-    subgraph CLIENT["«device» HR staff computer or phone"]
-        BROWSER["«artifact» React 19 + Inertia 3 pages<br/>public/build (built once with npm run build)"]
+flowchart LR
+    subgraph USERS["People"]
+        HR["HR, admin, viewer<br/>(browser)"]
+        STAFF["Staff<br/>(My page, phone or PC)"]
     end
-
-    subgraph VPS["«node» Company VPS: GoDaddy, AlmaLinux 9, cPanel/WHM"]
-        subgraph WEB["«execution environment» Apache + PHP-FPM 8.3 (EasyApache / MultiPHP)"]
-            APP["«artifact» Laravel 13 app<br/>document root = hrm/public<br/>subdomain e.g. hrm.yourdomain.com"]
-        end
-        DB[("«database» MySQL<br/>cpaneluser_hrm")]
-        FILES[["«file system» storage/<br/>logs, import reports, sessions"]]
-        CRON["«cron» php artisan schedule:run<br/>every minute (required: daily reminder email)"]
+    subgraph RENDER["Render: Docker web service, Singapore, free plan"]
+        APP["Laravel 13 + built React<br/>serversideup/php:8.3-fpm-nginx<br/>on start: migrate --force, caches"]
     end
+    NEON[("Neon Postgres<br/>DB_URL, sslmode=require")]
+    R2[["Cloudflare R2 bucket hrm-files<br/>disk s3: scanned documents"]]
+    RESEND["Resend API<br/>(Render free blocks SMTP)"]
+    CRON["cron-job.org"]
+    ZK["ZKTeco machine in the office<br/>TCP 4370 via port forward"]
+    DNS["hrm.bluecascade.org<br/>(custom domain)"]
 
-    XLSX[/"HR_Onboarding.xlsx<br/>one-time import"/]
-
-    BROWSER -- "HTTPS (cPanel AutoSSL, free)<br/>Inertia requests: JSON page props" --> APP
-    APP -- "PDO / Eloquent" --> DB
-    APP --> FILES
-    CRON -- "hr:send-reminders daily 08:00" --> APP
-    APP -. "SMTP: reminder email to HR and admin" .-> MAIL[("«service» Mail server<br/>cPanel email account")]
-    XLSX -- "php artisan hr:import --fresh" --> APP
+    HR & STAFF -- HTTPS --> DNS --> APP
+    APP -- Eloquent / pdo_pgsql --> NEON
+    APP -- S3 API --> R2
+    APP -- password links, staff notices, daily digest --> RESEND
+    CRON -- "GET /cron/reminders/{token} daily 08:00 PKT" --> APP
+    CRON -- "GET /cron/machine/{token} every 5-10 min" --> APP
+    APP -- "read-only ZK protocol (ZkClient)" --> ZK
 ```
 
-## 2. Components
+- **Build** (`Dockerfile`, three stages): `node:22-slim` runs `npm run build` into `public/build`; `composer:2` installs PHP packages without dev; the runtime image adds `intl`, `pdo_pgsql`, `gd`. Port 8080, upload limit 12 MB. Health check `/up`.
+- **On every start** serversideup's automations run `migrate --force`, `storage:link` and the config/route/view caches. A data fix that must reach live goes in a migration (example: `2026_10_23_000400_set_hr_logins_home_company.php`), written through models so it is logged, and only filling what is empty.
+- **Deploy** = `git push` to `main` on GitHub; Render auto-deploys. Changes to `render.yaml` env vars need a Blueprint sync. Secrets (`APP_KEY`, `DB_URL`, R2 keys, `RESEND_API_KEY`, `ZK_*`, `CRON_TOKEN`) live only in Render's environment, never in the repo.
+- **Free plan facts**: the instance sleeps after 15 idle minutes (first request is slow) and its disk is wiped on restart, so nothing durable may be written to local disk in production: files go to R2, sessions and cache to the database.
+- **No scheduler process.** `routes/console.php` schedules `hr:send-reminders`, but Render runs no `schedule:run`; cron-job.org calls `CronController` URLs instead (token compared with `hash_equals`, 404 when wrong, `throttle:10,1`).
+- **Queue** is `sync` in production and tests: nothing implements `ShouldQueue`, mail is sent inside the request. A mail failure is `report()`ed and the action still saves.
+- **Local**: SQLite `database/database.sqlite`, `php artisan serve`, `npm run dev` or `npm run build`. The machine needs PHP 8.3. `docs/DEPLOY-cPanel.md` describes the older VPS host and is not in use.
 
-Requests flow left to right. Controllers never compute a status themselves: they call `HrRules` (single-person rules) or `StatusBoard` (the same rules for many people at once, one query). The values and rules live in `config/hrm.php`.
+## 2. How a request flows
 
 ```mermaid
 flowchart LR
     subgraph FE["Browser: resources/js"]
-        PAGES["pages/*.tsx<br/>dashboard, employees, onboarding,<br/>documents, plan, offboarding,<br/>controlled-documents, settings, account"]
-        GRID["ChecklistGrid<br/>StatusPicker (optimistic save)"]
-        PAGES --> GRID
+        PAGE["pages/**/*.tsx<br/>props from the controller"]
+        LAYOUT["layouts: AppLayout (sidebar),<br/>LoginScene (auth/*), PrintLayout (print/*)"]
     end
-
-    subgraph BE["Laravel: app/"]
-        ROUTES["routes/web.php<br/>auth / can:edit-hr / can:admin"]
-        MW["Middleware<br/>HandleInertiaRequests<br/>EnsureUserIsActive"]
-        CTRL["Http/Controllers<br/>Dashboard, Employee, Onboarding,<br/>DocumentChecklist, ChecklistEntry,<br/>ProbationPlan, Offboarding,<br/>ControlledDocument, Export, Settings/*"]
-        SVC["Services<br/>HrRules = sheet formulas<br/>StatusBoard = statuses for many people<br/>Reminders = what is due today"]
-        CFG["config/hrm.php<br/>status values, done rules,<br/>probation days, dropdown lists"]
-        MODELS["Models<br/>+ LogsActivity trait"]
-        IMPORT["Import (hr:import)<br/>XlsxReader > NameMatcher ><br/>HrWorkbookImporter"]
+    subgraph BE["Laravel"]
+        ROUTE["routes/web.php<br/>auth / can:self-service /<br/>can:view-hr / can:edit-hr / can:admin"]
+        MW["web middleware:<br/>HandleInertiaRequests (shared props)<br/>EnsureUserIsActive<br/>RememberCompany"]
+        CTRL["Controller<br/>$request->validate()"]
+        RULES["Services: HrRules, StatusBoard,<br/>AttendanceBoard/Rules, LeaveBalances,<br/>ReviewRules, Reports/*"]
+        CFG["config/hrm.php"]
+        MODEL["Models + LogsActivity"]
     end
-
-    DB[("MySQL / SQLite")]
-
-    PAGES -- "Inertia visit, router.put / post" --> ROUTES
-    ROUTES --> MW --> CTRL
-    CTRL --> SVC --> CFG
-    CTRL --> MODELS --> DB
-    IMPORT --> MODELS
-    IMPORT --> SVC
-    CTRL -- "Inertia::render(page, props)" --> PAGES
+    DB[("Postgres / SQLite")]
+    PAGE -- "Inertia visit / router.post, put, delete" --> ROUTE --> MW --> CTRL
+    CTRL --> RULES --> CFG
+    CTRL --> MODEL --> DB
+    CTRL -- "Inertia::render(page, props) or back()->with(success)" --> PAGE
 ```
 
-| Layer | Folder | What it does |
+| Layer | Where | Rule |
 |---|---|---|
-| Pages | `resources/js/pages` | One React file per screen. Props come from the controller's `Inertia::render()`. |
-| Shared UI | `resources/js/components` | `ChecklistGrid`, `StatusPicker`, `StatusPill`, forms, shadcn/ui primitives. |
-| Routes | `routes/web.php` | Every URL. Permissions are route middleware: `auth`, `can:edit-hr`, `can:admin`. |
-| Controllers | `app/Http/Controllers` | Validate input, call rules, save models, return a page or redirect back. |
-| Rules | `app/Services/HrRules.php`, `config/hrm.php` | The sheet's formulas as code. |
-| Status board | `app/Services/StatusBoard.php` | Loads checklist values for many employees in one query and applies `HrRules`. |
-| Reminders | `app/Services/Reminders.php`, `config/hrm.php` `reminders` | What HR has to act on today (probation, check-ins, documents, offboarding), computed live from `StatusBoard` and `HrRules`, never stored. Feeds the dashboard's "Needs attention" card and the daily email (`hr:send-reminders`, `app/Mail/RemindersDigest.php`). |
-| Home and Overview | `DashboardController` (Home, `/dashboard`), `OverviewController` (`/overview`), `app/Services/HrSnapshot.php`, `app/Services/PeopleStats.php` | Home is what needs doing today; Overview is company-wide charts. Both read onboarding and document numbers from `HrSnapshot`, and headcount, joiners, leavers and turnover from `PeopleStats`. |
-| Reports | `app/Services/Reports` (`ReportCatalog` lists them), `ReportController`, `resources/js/pages/reports` | Each report returns a `ReportResult` (columns, rows, summary, notes). The screen and the CSV download read the same result. Attendance reports go through `AttendanceBoard`, so they match the Attendance page. A new report is one catalog entry plus one method. |
-| Assets | `AssetController`, `app/Models/Asset.php`, `AssetAssignment.php`, `config/hrm.php` `assets` | Who has which company property. An asset is with someone while its assignment has no `returned_on`. Status changes only through Give / Take back (rules in `AssetController`). `OffboardingController::complete` refuses while anything is still out. |
-| Performance reviews | `ReviewController` (HR), `MeController` (self-review, acknowledge), `app/Services/ReviewRules.php`, `config/hrm.php` `reviews` | Cycle draft > open > closed; review self_review > manager_review > completed. Each cycle keeps its own copy of the criteria. Each side's draft stays private until sent; the person never sees the recommendation. HR and admin only, even for reading. |
-| Org chart | `OrgChartController` | Company > department > team from each profile, and reporting lines from Manager. Loops in manager data are cut, not followed. |
-| Models | `app/Models` | Eloquent models. `LogsActivity` writes every create, update and delete to `activity_log`. |
-| Import | `app/Services/Import`, `app/Support/Xlsx` | `php artisan hr:import`: reads the workbook, matches names, writes data and a report. |
+| Routes | `routes/web.php` | Every write route sits in a permission group. `RouteAccessTest` fails if one doesn't. |
+| Controllers | `app/Http/Controllers` | Validate, call a service for anything computed, save through models, return a page or `back()` with a flash message. |
+| Rules | `app/Services/*`, `config/hrm.php` | Status logic lives in one place. Controllers and React never compute onboarding, document, probation or attendance status themselves. |
+| Models | `app/Models` | Strict mode outside production: eager-load (`with()`), no lazy loading, no unknown attributes. New columns with defaults also need the default in `$attributes`. |
+| Shared props | `HandleInertiaRequests` | `auth.user`, `auth.can.{edit,admin,view,self}`, `flash`, `nav` (sidebar badges, HR only), `me.todo` (staff). |
+| Pages | `resources/js/pages` | Props shape mirrors the controller; shared types in `resources/js/types/index.ts`. Dates arrive as `Y-m-d`, timestamps as ISO 8601. |
 
-## 3. Data model
+## 3. Who can do what
 
-The fix for the spreadsheet's main problem: one `employees` row per person with a unique `employee_code`, and every other record points at `employees.id`. The sheet joined tabs on the typed name, which broke on every typo.
+| Role (`users.role`) | Gets |
+|---|---|
+| `employee` | My page only, for the employee record linked by `users.employee_id`. |
+| `viewer` | Every HR page read-only. Private fields arrive as `null`. |
+| `hr` | Everything a viewer sees, plus all edits, approvals, files, letters, reviews, staff logins. |
+| `admin` | Everything, plus deletes and Settings (users of every role, structure, checklists, test email). |
+
+- **Gates** (`AppServiceProvider`): `view-hr` (admin, hr, viewer), `edit-hr` (admin, hr), `admin`, `self-service` (a login linked to an employee). Route groups use them as `can:` middleware; hiding a button in React is never the check.
+- **My page** (`MeController`) only ever reads `$request->user()->employee_id`, never an id from the URL.
+- **Private fields**: `Employee::PRIVATE_FIELDS` (CNIC, date of birth, addresses, emergency contact, bank details) are sent as `null` unless `can('edit-hr')`, and logged as `hidden` in the activity log. Loans, medical requests, meetings, conduct entries and the machine comm key have their own `PRIVATE_FIELDS`. Exports follow the same rule (the employees CSV drops CNIC for viewers).
+- **Logins**: no public sign-up. Admins manage every login in Settings > Users; HR creates **staff** logins only (`StaffLoginsController`, `/logins`), and gets 403 on any other role. The person sets their own password from an emailed link (password broker `invites`, 3 days; resets use `users`, 60 minutes). `EnsureUserIsActive` logs out switched-off logins; making an employee `exited` switches their login off (`Employee::booted`).
+- **Companies**: `users.company_id` is a login's home company. `RememberCompany` remembers the All / BCC / Emerge choice per login on the pages in its `PAGES` list and opens them on the home company. It narrows what is shown; it is not a restriction.
+- **Tests that hold this in place**: `RouteAccessTest` (every write route gated; employee logins get 403 everywhere outside My page; viewers 403 on edit routes; HR 403 on admin routes), `AccessTest`, `SecurityRegressionTest`, `StaffLoginsTest`, `CompanySwitchTest`.
+- **Why no row-level security**: only the Laravel app connects to the database, with one credential. Access control is in the app layer above. Anything that ever connects to the database directly (a BI tool, a second service) changes this.
+
+## 4. Data model
+
+46 app tables plus Laravel's own (`users` is shared, `sessions`, `cache`, `jobs`, `password_reset_tokens`, `migrations`). Conventions:
+
+- **Everything links to `employees.id`.** Never join or look up by name; names are matched only by the importers.
+- **Who did it**: most tables carry `created_by`, `updated_by`, `decided_by`, `requested_by` etc. pointing at `users`. They are left out of the diagrams below. `User::HISTORY_COLUMNS` must list every one of them (a test checks).
+- **Soft deletes** on employees; a deleted employee is archived, not removed.
+- **Audit**: every model with `LogsActivity` writes created / updated (`{field: [old, new]}`) / deleted to `activity_log`.
+- **Settings** that HR can change at runtime (probation days, leave weights) live in `app_settings` as key/value rows; everything else is in `config/hrm.php`.
+- **Checklist items are data**: a new document type or onboarding step is a row in `checklist_items`, not a migration. Keys in `HrRules::REQUIRED_KEYS` must never be removed.
+
+### 4.1 People and organisation
 
 ```mermaid
-classDiagram
-    direction LR
-    class Company {
-        +id
-        +name  BCC | Emerge
-        +code
-        +employee_code_prefix  BCC- | Emerge-
-        +employee_code_digits
+erDiagram
+    companies {
+        int id PK
+        string name
+        string code
     }
-    class Department {
-        +id
-        +company_id
-        +name
+    departments {
+        int id PK
+        int company_id FK
+        string name
+        int head_employee_id FK
     }
-    class Team {
-        +id
-        +department_id
-        +name
+    teams {
+        int id PK
+        int department_id FK
+        string name
     }
-    class Employee {
-        +id
-        +employee_code  UNIQUE
-        +full_name
-        +first_name / last_name
-        +cnic
-        +email / phone
-        +company_id / department_id / team_id
-        +manager_id
-        +role_title / employment_type
-        +start_date
-        +status  active | offboarding | exited
-        +exit_date
-        +hr_portal_id / attendance_machine_id
-        +drive_folder_url
-        +needs_review / review_note
-        +deleted_at  soft delete
+    employees {
+        int id PK
+        int company_id FK
+        string employee_code
+        string full_name
+        string email
+        int department_id FK
+        int team_id FK
+        int manager_id FK
+        date start_date
+        string status
+        date exit_date
+        string hr_portal_id
     }
-    class ChecklistItem {
-        +id
-        +list  onboarding | document | offboarding
-        +key  e.g. nda_signed
-        +label
-        +option_set  yes_no | session | document | clearance
-        +sort_order / is_active
+    categories {
+        int id PK
+        string name
     }
-    class ChecklistEntry {
-        +id
-        +employee_id
-        +checklist_item_id
-        +status  value from option_set
-        +updated_by
+    employee_category {
+        int employee_id FK
+        int category_id FK
     }
-    class Onboarding {
-        +id
-        +employee_id  UNIQUE
-        +cohort  Group A/B/C
-        +probation_end_date
-        +probation_result  Pending | Pass | Extend | Fail
-        +notes
+    users {
+        int id PK
+        string name
+        string email
+        datetime email_verified_at
+        string role
+        bool is_active
+        int employee_id FK
+        datetime last_login_at
+        int company_id FK
     }
-    class ProbationPlan {
-        +id
-        +employee_id  UNIQUE
-        +final_performance / behaviour / reliability
-        +overall_fit
-        +manager_recommendation / hr_comments
-        +employee / manager / hr signed name + date
+    employment_history {
+        int id PK
+        int employee_id FK
+        date effective_date
     }
-    class ProbationPlanItem {
-        +id
-        +section  goal | behaviour | attendance | deliverable
-        +title / detail / due_date
-        +status / evaluation
-        +manager_notes / employee_notes
-    }
-    class ProbationCheckin {
-        +id
-        +kind  day30 | day60 | day90 | extra
-        +held_on / next_follow_up
-        +manager_summary / employee_summary
-        +action_items / initials
-    }
-    class Offboarding {
-        +id
-        +employee_id
-        +type  Resignation | Termination | ...
-        +notice_date / last_working_day
-        +status  in_progress | completed | cancelled
-        +reason / exit_interview_notes
-    }
-    class ControlledDocument {
-        +id
-        +doc_number  BCC-0001 UNIQUE
-        +doc_type / name / status
-        +issued_on / obsolete_on
-        +link_url
-    }
-    class User {
-        +id
-        +email
-        +role  admin | hr | viewer
-        +is_active
-    }
-    class ActivityLog {
-        +id
-        +user_id / employee_id
-        +subject_type / subject_id
-        +event
-        +changes  JSON field: [old, new]
-        +created_at
-    }
-    Company "1" --> "*" Department : has
-    Department "1" --> "*" Team : has
-    Company "1" --> "*" Employee : employs
-    Department "1" --> "*" Employee : in
-    Team "1" --> "*" Employee : in
-    Employee "0..1" --> "*" Employee : manages
-    Employee "1" --> "*" ChecklistEntry : one value per item
-    ChecklistItem "1" --> "*" ChecklistEntry : defines the column
-    Employee "1" --> "0..1" Onboarding : tracker row
-    Employee "1" --> "0..1" ProbationPlan : 90-day plan
-    ProbationPlan "1" *-- "*" ProbationPlanItem : rows
-    ProbationPlan "1" *-- "*" ProbationCheckin : log
-    Employee "1" --> "*" Offboarding : cases
-    Employee "1" --> "*" ActivityLog : history
-    User "1" --> "*" ActivityLog : made the change
+    employees |o--o{ departments : "head_employee_id"
+    companies ||--o{ departments : "company_id"
+    departments ||--o{ teams : "department_id"
+    employees |o--o{ employees : "secondary_manager_id"
+    departments |o--o{ employees : "secondary_department_id"
+    employees |o--o{ employees : "manager_id"
+    teams ||--o{ employees : "team_id"
+    departments ||--o{ employees : "department_id"
+    companies ||--o{ employees : "company_id"
+    categories ||--o{ employee_category : "category_id"
+    employees ||--o{ employee_category : "employee_id"
+    companies ||--o{ users : "company_id"
+    employees |o--o| users : "employee_id"
+    employees ||--o{ employment_history : "employee_id"
 ```
 
-Why checklists are rows (`checklist_items` + `checklist_entries`) and not 30 columns:
-- HR can add a document type or onboarding step in Settings, with no code change and no migration.
-- One grid component serves onboarding, documents and offboarding clearance.
-- Every single cell change is logged with who changed it, when, and the old and new value.
+`employees` has 55 columns: identity and contact, job (company, department, team, role, manager, secondary manager and department, employment type, work mode), the private fields, attendance links (`attendance_machine_id`, `hr_portal_id`, `attendance_device_id`), status (`active`, `review`, `offboarding`, `exited`) and import provenance (`legacy`, `source_ref`). Job changes write `employment_history` automatically (`JobHistory::record`).
 
-## 4. States
+### 4.2 Attendance
+
+```mermaid
+erDiagram
+    attendance_devices {
+        int id PK
+        string name
+        bool is_active
+        datetime info_read_at
+        string code
+    }
+    attendance_imports {
+        int id PK
+        string source
+        date date_from
+        date date_to
+    }
+    attendance_punches {
+        int id PK
+        string source
+        string device_user_id
+        datetime punched_at
+        int attendance_import_id FK
+        date work_date
+        int attendance_device_id FK
+    }
+    machine_syncs {
+        int id PK
+        int user_id FK
+        datetime started_at
+        datetime finished_at
+        int attendance_import_id FK
+        int attendance_device_id FK
+    }
+    attendance_adjustments {
+        int id PK
+        int employee_id FK
+        date date
+    }
+    attendance_requests {
+        int id PK
+        int employee_id FK
+        date date
+        string status
+        datetime decided_at
+    }
+    work_schedules {
+        int id PK
+        string name
+        string type
+        bool is_default
+    }
+    employee_work_schedules {
+        int id PK
+        int employee_id FK
+        int work_schedule_id FK
+    }
+    office_networks {
+        int id PK
+        string name
+    }
+    employees {
+        int id PK
+        int company_id FK
+        string employee_code
+        string full_name
+    }
+    attendance_devices ||--o{ attendance_punches : "attendance_device_id"
+    attendance_imports ||--o{ attendance_punches : "attendance_import_id"
+    attendance_devices ||--o{ machine_syncs : "attendance_device_id"
+    attendance_imports ||--o{ machine_syncs : "attendance_import_id"
+    employees ||--o{ attendance_adjustments : "employee_id"
+    employees ||--o{ attendance_requests : "employee_id"
+    work_schedules ||--o{ employee_work_schedules : "work_schedule_id"
+    employees ||--o{ employee_work_schedules : "employee_id"
+    attendance_devices ||--o{ employees : "attendance_device_id"
+    employees ||..o{ attendance_punches : "device_user_id, no FK"
+```
+
+`attendance_punches` has **no foreign key to employees**. A punch is `(source, device_user_id, punched_at)`, unique, and is matched to a person when the day is computed: `machine` punches by `employees.attendance_machine_id`, `hrmy` by `employees.hr_portal_id`, `app` by `employees.id`. Linking a number to a person (Attendance > Links) therefore re-attributes all of that number's past punches at once.
+
+### 4.3 Leave and holidays
+
+```mermaid
+erDiagram
+    leave_types {
+        int id PK
+        string name
+        bool is_paid
+        bool is_active
+    }
+    leave_records {
+        int id PK
+        int employee_id FK
+        int leave_type_id FK
+        date start_date
+        date end_date
+        string part
+        decimal days
+        string source
+    }
+    leave_requests {
+        int id PK
+        int employee_id FK
+        int leave_type_id FK
+        date start_date
+        date end_date
+        string part
+        decimal days
+        string status
+        datetime decided_at
+        int leave_record_id FK
+    }
+    leave_adjustments {
+        int id PK
+        int employee_id FK
+        int leave_type_id FK
+        decimal days
+        string source
+    }
+    holidays {
+        int id PK
+        date date
+        string name
+        int company_id FK
+    }
+    employees {
+        int id PK
+        int company_id FK
+        string employee_code
+        string full_name
+    }
+    companies {
+        int id PK
+        string name
+    }
+    employees ||--o{ leave_records : "employee_id"
+    leave_types ||--o{ leave_records : "leave_type_id"
+    employees ||--o{ leave_requests : "employee_id"
+    leave_types ||--o{ leave_requests : "leave_type_id"
+    leave_records ||--o{ leave_requests : "leave_record_id"
+    leave_types ||--o{ leave_adjustments : "leave_type_id"
+    employees ||--o{ leave_adjustments : "employee_id"
+    companies ||--o{ holidays : "company_id"
+    companies ||--o{ employees : "company_id"
+```
+
+### 4.4 Staff requests
+
+```mermaid
+erDiagram
+    wfh_requests {
+        int id PK
+        int employee_id FK
+        date start_date
+        date end_date
+        string status
+        datetime decided_at
+    }
+    loans {
+        int id PK
+        int employee_id FK
+        decimal amount
+        string status
+        datetime decided_at
+        datetime repaid_at
+    }
+    loan_repayments {
+        int id PK
+        int loan_id FK
+        decimal amount
+    }
+    medical_requests {
+        int id PK
+        int employee_id FK
+        string kind
+        date treatment_date
+        decimal amount
+        string status
+        datetime decided_at
+    }
+    attendance_requests {
+        int id PK
+        int employee_id FK
+        date date
+        string status
+        datetime decided_at
+    }
+    employees {
+        int id PK
+        int company_id FK
+        string employee_code
+        string full_name
+    }
+    employees ||--o{ wfh_requests : "employee_id"
+    employees ||--o{ loans : "employee_id"
+    loans ||--o{ loan_repayments : "loan_id"
+    employees ||--o{ medical_requests : "employee_id"
+    employees ||--o{ attendance_requests : "employee_id"
+```
+
+### 4.5 Onboarding, documents, probation, offboarding
+
+```mermaid
+erDiagram
+    checklist_items {
+        int id PK
+        string key
+        bool is_active
+    }
+    checklist_entries {
+        int id PK
+        int employee_id FK
+        int checklist_item_id FK
+        string status
+    }
+    employee_files {
+        int id PK
+        int employee_id FK
+        int checklist_item_id FK
+    }
+    onboardings {
+        int id PK
+        int employee_id FK
+        date probation_end_date
+        datetime closed_at
+    }
+    probation_plans {
+        int id PK
+        int employee_id FK
+        date plan_date
+    }
+    probation_plan_items {
+        int id PK
+        int probation_plan_id FK
+        string title
+        date due_date
+        string status
+    }
+    probation_checkins {
+        int id PK
+        int probation_plan_id FK
+        string kind
+    }
+    offboardings {
+        int id PK
+        int employee_id FK
+        string type
+        date notice_date
+        string status
+        datetime completed_at
+    }
+    employees {
+        int id PK
+        int company_id FK
+        string employee_code
+        string full_name
+    }
+    checklist_items ||--o{ checklist_entries : "checklist_item_id"
+    employees ||--o{ checklist_entries : "employee_id"
+    checklist_items ||--o{ employee_files : "checklist_item_id"
+    employees ||--o{ employee_files : "employee_id"
+    employees |o--o| onboardings : "employee_id"
+    employees |o--o| probation_plans : "employee_id"
+    probation_plans ||--o{ probation_plan_items : "probation_plan_id"
+    probation_plans ||--o{ probation_checkins : "probation_plan_id"
+    employees ||--o{ offboardings : "employee_id"
+```
+
+### 4.6 Reviews and feedback
+
+```mermaid
+erDiagram
+    review_cycles {
+        int id PK
+        string name
+        string status
+    }
+    reviews {
+        int id PK
+        int review_cycle_id FK
+        int employee_id FK
+        string status
+        datetime self_submitted_at
+        datetime manager_submitted_at
+        datetime acknowledged_at
+    }
+    conduct_entries {
+        int id PK
+        int employee_id FK
+        string type
+        string title
+        int issued_letter_id FK
+        datetime acknowledged_at
+    }
+    meetings {
+        int id PK
+        int employee_id FK
+        string type
+        datetime acknowledged_at
+    }
+    issued_letters {
+        int id PK
+        int employee_id FK
+        int letter_template_id FK
+    }
+    employees {
+        int id PK
+        int company_id FK
+        string employee_code
+        string full_name
+    }
+    employees ||--o{ reviews : "employee_id"
+    review_cycles ||--o{ reviews : "review_cycle_id"
+    issued_letters ||--o{ conduct_entries : "issued_letter_id"
+    employees ||--o{ conduct_entries : "employee_id"
+    employees ||--o{ meetings : "employee_id"
+    employees ||--o{ issued_letters : "employee_id"
+```
+
+### 4.7 Letters, assets, controlled documents
+
+```mermaid
+erDiagram
+    letter_templates {
+        int id PK
+        string name
+        bool is_active
+    }
+    issued_letters {
+        int id PK
+        int employee_id FK
+        int letter_template_id FK
+    }
+    controlled_documents {
+        int id PK
+        string name
+        string status
+    }
+    asset_types {
+        int id PK
+        string name
+        bool is_active
+    }
+    assets {
+        int id PK
+        string type
+        string name
+        string status
+        date purchase_date
+        int company_id FK
+    }
+    asset_assignments {
+        int id PK
+        int asset_id FK
+        int employee_id FK
+    }
+    companies {
+        int id PK
+        string name
+    }
+    employees {
+        int id PK
+        int company_id FK
+        string employee_code
+        string full_name
+    }
+    letter_templates ||--o{ issued_letters : "letter_template_id"
+    employees ||--o{ issued_letters : "employee_id"
+    companies ||--o{ assets : "company_id"
+    employees ||--o{ asset_assignments : "employee_id"
+    assets ||--o{ asset_assignments : "asset_id"
+    companies ||--o{ employees : "company_id"
+```
+
+### 4.8 Logins and audit
+
+```mermaid
+erDiagram
+    activity_log {
+        int id PK
+        int user_id FK
+        int employee_id FK
+        int subject_id
+    }
+    users {
+        int id PK
+        string name
+        string email
+        datetime email_verified_at
+        string role
+        bool is_active
+        int employee_id FK
+        datetime last_login_at
+        int company_id FK
+    }
+    employees {
+        int id PK
+        int company_id FK
+        string employee_code
+        string full_name
+        string email
+        int department_id FK
+        int team_id FK
+        int manager_id FK
+        date start_date
+        string status
+        date exit_date
+        string hr_portal_id
+    }
+    app_settings {
+        string key
+    }
+    employees ||--o{ activity_log : "employee_id"
+    users ||--o{ activity_log : "user_id"
+    employees |o--o| users : "employee_id"
+```
+
+## 5. Attendance
+
+The most involved subsystem. Three sources write punches; one engine turns punches into a status per person per day; every screen and report reads that engine.
+
+```mermaid
+flowchart LR
+    ZK["ZKTeco machine"] -- "ZkClient (TCP 4370)" --> SYNC["MachineSyncer<br/>cron URL, hr:sync-machine,<br/>Sync button"]
+    FILE[".xls / .xlsx<br/>machine Full day log,<br/>HR.my exports"] --> UP["AttendanceUploadController<br/>check > confirm"] --> IMP["AttendanceFileImporter"]
+    PRESS["My page clock button"] --> CLOCK["AttendanceClock::press<br/>office_networks decide office / remote"]
+    SYNC & IMP --> P[("attendance_punches<br/>insertOrIgnore")]
+    CLOCK --> P
+    SYNC --> MS[("machine_syncs,<br/>attendance_imports")]
+    IMP --> AI[("attendance_imports")]
+    REQ["Staff: fix a day<br/>attendance_requests"] -- "HR approves" --> ADJ[("attendance_adjustments")]
+    EDIT["HR edits a day<br/>PUT /attendance/{e}/{date}"] --> ADJ
+    P & ADJ --> BOARD["AttendanceBoard<br/>loads punches, adjustments, schedules,<br/>holidays, leave, WFH in bulk"]
+    SCHED[("work_schedules +<br/>employee_work_schedules")] --> BOARD
+    BOARD --> RULES["AttendanceRules::day<br/>sessions, late, early, overtime, status"]
+    RULES --> OUT["Attendance page, profile, My page,<br/>Reports, Home, Overview, leave deductions"]
+```
+
+- **Work date**: remote punches (HR.my, app) before `hrm.attendance.day_starts_at` (03:00) belong to the previous day; an app check-out takes its check-in's date. Machine punches keep their calendar date. Times after midnight show past 24:00 on the board ("25:30") and as "01:30 (24 Oct)" in the sign-in sheet.
+- **Sessions**: machine punches in a row form one block (first to last); HR.my and app punches pair In/Out. Double taps within 5 minutes are one punch. A session wholly inside another adds no time.
+- **Schedule**: the latest `employee_work_schedules` row on or before the date, else the `is_default` schedule. Fixed schedules give late (after start + grace), left early, half day, absent after the cut-off and overtime; flexible schedules give "short". Missing check-out is either filled with the end time (`missing_checkout = auto`) or flagged.
+- **Statuses** and their colours are in `config/hrm.php` `attendance.statuses` (Present, Late, Half day, Absent, Missing punch, On leave, Holiday, Day off, Worked day off, At work, Not in yet, Not linked, No data ...). "No data" means no punches from that source at all that day, so absence would be a guess.
+- **HR corrections** never edit punches: `attendance_adjustments` (one per person per day) override check-in/out or the sessions, or mark a weekly day off, always with a note.
+- **Machine sync** takes a cache lock per device, reads back `lookback_days` before the newest stored punch, records every attempt in `machine_syncs` (pruned after 30 days) and flags overdue devices in the daily digest.
+
+## 6. Workflows
+
+Every staff request follows the same pattern: the person creates it on My page (`can:self-service`) and may cancel while `pending`; HR approves or rejects (`can:edit-hr`, a reject needs a note); the decision emails the person through `StaffMail` (`StaffNotice`, sent from their company's HR address, linking back to `/me#section`). `RequestsInboxController::QUEUES` gathers the five queues on `/requests` and feeds the sidebar badges.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> pending: staff asks
+    pending --> cancelled: staff cancels
+    pending --> rejected: HR rejects (note required)
+    pending --> approved: HR approves
+    approved --> [*]
+    note right of approved
+        leave: creates a leave_record (refuses clashes)
+        attendance fix: writes attendance_adjustments
+        WFH: the days count as remote work (max 31)
+        loan: becomes active, then repaid when repayments reach the amount
+        medical: approved amount <= asked, then paid
+    end note
+```
+
+| Area | Controllers | Tables | Notes |
+|---|---|---|---|
+| Onboarding | `OnboardingController`, `ChecklistEntryController`, `DocumentChecklistController` | `onboardings`, `checklist_items`, `checklist_entries` | Grid cells save one at a time (optimistic). Statuses are computed by `HrRules` / `StatusBoard` (section 7). Closing removes a record from the tracker and reminders. |
+| Probation | `ProbationPlanController` | `probation_plans`, `probation_plan_items`, `probation_checkins` | End = start + `probation_days` (`app_settings`). The 90-day plan is behind `HRM_PROBATION_PLAN`. Extend needs a later end date. |
+| Files | `EmployeeFileController` | `employee_files` | PDF/JPG/PNG up to 10 MB on `hrm.uploads.disk` (R2 in production) under `employee-files/{id}/`. Served only through the app, HR and admin only. `HRM_FILES_ENABLED` switches uploads off. |
+| Offboarding | `OffboardingController` | `offboardings` | Complete needs every clearance item done and no assets still out; sets `exited`, which switches the login off. Cancel returns the person to active. |
+| Leave | `MeController`, `LeaveRequestController`, `LeaveController` | `leave_types`, `leave_records`, `leave_requests`, `leave_adjustments`, `holidays` | Balances in `LeaveBalances`: pro-rated allowance, records + adjustments used, plus deductions from attendance (absences, late/early) taken from Casual then Annual. Holidays are per company or common (`company_id` null). |
+| Requests | `AttendanceRequestController`, `WfhRequestController`, `LoanController`, `MedicalRequestController`, `RequestsInboxController` | see 4.4 | The pattern above. |
+| Reviews | `ReviewController`, `MeController`, `FeedbackController` | `review_cycles`, `reviews`, `conduct_entries`, `meetings` | Cycle draft > open > closed; review self_review > manager_review > completed. HR and admin only, even for reading. Staff acknowledge reviews, warnings and shared meeting notes on My page. |
+| Letters | `LetterController` | `letter_templates`, `issued_letters` | `LetterRenderer` fills 14 `{{fields}}`; reference `CODE/HR/YYYY/NNN`. Issuing can also create a conduct entry and tick an offboarding item. Print view `print/letter`. |
+| Assets | `AssetController` | `assets`, `asset_types`, `asset_assignments` | An asset is with someone while its assignment has no `returned_on`. Status changes only through give / take back. |
+| Controlled documents | `ControlledDocumentController` | `controlled_documents` | Numbered `BCC-0001`; Draft, Active, Obsolete. |
+| Staff logins | `StaffLoginsController`, `Settings\UserController`, `Settings\StaffLoginController` | `users` | See section 3. |
+
+## 7. Onboarding rules and the HR workbook import
+
+_Unchanged since the first version of this document; still how the code works._
+
+### 7.1 Onboarding and probation states
 
 ```mermaid
 stateDiagram-v2
@@ -243,7 +711,7 @@ stateDiagram-v2
     }
 ```
 
-## 5. Computed statuses (the sheet's formulas)
+### 7.2 Computed statuses (the sheet's formulas)
 
 Computed on every request from the checklist values, never stored, so they can't go stale. Source: `app/Services/HrRules.php`.
 
@@ -266,7 +734,7 @@ flowchart TB
     OC -.-> N1
 ```
 
-## 6. Sequence: HR changes one cell
+### 7.3 Sequence: HR changes one cell
 
 ```mermaid
 sequenceDiagram
@@ -276,7 +744,7 @@ sequenceDiagram
     participant C as ChecklistEntryController
     participant M as ChecklistEntry model
     participant LOG as LogsActivity trait
-    participant DB as MySQL
+    participant DB as Postgres
 
     HR->>UI: click a cell, or focus it and type Y / N / D
     UI->>UI: show the new value at once (optimistic)
@@ -292,7 +760,7 @@ sequenceDiagram
     UI->>UI: server value replaces the optimistic one, statuses recomputed by StatusBoard
 ```
 
-## 7. Import pipeline (`php artisan hr:import`)
+### 7.4 Import pipeline (`php artisan hr:import`)
 
 ```mermaid
 flowchart TD
@@ -320,28 +788,50 @@ flowchart TD
     DOCS --> REP["import-report-*.csv<br/>one row per decision"]
 ```
 
-## Permissions
+## 8. Timed jobs and email
 
-| Action | Employee | Viewer | HR | Admin |
-|---|:-:|:-:|:-:|:-:|
-| My page: own record, attendance, leave; update own contact details; ask HR to fix a day | yes | if linked | if linked | if linked |
-| See Home, Overview, Reports, employees, grids, plans, offboarding, documents | | yes | yes | yes |
-| Export CSV | | yes | yes | yes |
-| Add or edit employees, change checklist values, bulk update, approve attendance requests | | | yes | yes |
-| 90-day plans, offboarding, controlled documents | | | yes | yes |
-| Delete an employee (soft delete) or a controlled document | | | | yes |
-| Users, departments and teams, checklist items | | | | yes |
+| What | Trigger | Code |
+|---|---|---|
+| Daily digest to HR and admin (what is due: probation, check-ins, documents, offboarding, overdue machine) | cron-job.org `GET /cron/reminders/{token}` once a day (guarded by `Cache::add`) | `hr:send-reminders`, `app/Services/Reminders.php`, `app/Mail/RemindersDigest.php`. One digest per home company; an empty digest sends nothing. Sent from the default sender. |
+| Machine sync | cron-job.org `GET /cron/machine/{token}` every 5-10 minutes | `MachineSyncer::runAll` (devices with `auto_sync`) |
+| Staff notices (decisions, letters, warnings) | inline, in the request | `StaffMail` → `StaffNotice`, from `Company::mailFromFor` (`companies.hr_email`, else the default sender) |
+| Password and welcome links | inline | `SetPasswordNotification`; the link uses the host the sender is browsing on (`url()`), so send from `hrm.bluecascade.org` |
 
-"Linked" means the login has `users.employee_id` set (Settings > Users). An employee login must be linked; for other roles it is optional.
-`MeController` reads only `$request->user()->employee_id`, never an id from the URL.
+Artisan commands (`app/Console/Commands`): `hr:import` (one-time seed from the HR workbook), `hr:copy-data` (copy a whole database to another connection; used once to move to Neon), `hr:create-admin`, `hr:send-reminders --dry-run`, `hr:sync-machine {device?}`, `hr:redate-punches --apply`.
 
-Enforced on the server by route middleware (`can:view-hr`, `can:self-service`, `can:edit-hr`, `can:admin`, gates defined in `AppServiceProvider`). `tests/Feature/RouteAccessTest.php` checks that every HR route sits behind `can:view-hr` and returns 403 to an employee login. The React pages only hide buttons; a viewer calling the API directly gets 403 (covered by `tests/Feature/AccessTest.php`).
+## 9. Reports, imports and exports
 
-## Security notes
+- **Reports** (`app/Services/Reports`): `ReportCatalog` lists them, each a method returning a `ReportResult` (columns, rows, summary, notes). The screen and "Download for Excel" read the same result, so they never disagree. Filters: month, range, year, date, day, week, company, department, team, category, manager. A new report is one catalog entry and one method. Attendance reports go through `AttendanceBoard`. Private reports (`'private' => true`) are HR and admin only.
+- **CSV exports** (`ExportController`): employees, onboarding, documents, with the list's current filters. CNIC only for HR and admin.
+- **Spreadsheet imports** (`SpreadsheetImportController::KINDS`: details, assets, links, leave-sheet): download a template, upload, preview the plan, apply (the plan is recomputed before saving) or discard. HR only.
+- **Attendance files** are covered in section 5. **The HR workbook seed** is section 7.
 
-- No public sign-up. Admins create logins; switched-off users are logged out on their next request.
-- Login is rate limited (5 tries per minute per email and IP).
-- Employees are soft-deleted and every change is in `activity_log`.
-- `public/` is the only web-visible folder. The `local` disk does not serve files over HTTP. Import reports (they contain names) stay in `storage/app/private/import`.
-- Inertia DevTools recording is switched off in `.env` (`INERTIA_DEVTOOLS_ENABLED=false`) so request data is never written to disk, even if `APP_ENV` is left on `local` by mistake.
-- Strict Eloquent mode is on outside production (no lazy loading, no silent attribute typos).
+## 10. Frontend
+
+- `resources/js/app.tsx` resolves pages with `import.meta.glob('./pages/**/*.tsx')` and picks the layout by name: `auth/*` → `LoginScene`, `print/*` → `PrintLayout`, the rest → `AppLayout` (sidebar from `components/app-sidebar.tsx`).
+- Shared building blocks: `ChecklistGrid` and `StatusPicker` (the onboarding and document grids), `StatusPill` (word plus colour, never colour alone), `CompanySwitch`, `FilterBar`, `EmployeeSearch`, `ClockCard`, `DecideDialog`, `FlashToaster`; shadcn primitives in `components/ui`.
+- Design tokens are in `resources/css/app.css` `@theme`: brand navy `#00435C` for actions, colour only for status, every text pair at 4.5:1. Fonts: Atkinson Hyperlegible Next (body, numbers), Jost (titles).
+- UI copy: sentence case, plain words HR staff use, buttons say what they do ("Save plan", not "Submit").
+
+## 11. Working on it
+
+| To add | Do |
+|---|---|
+| A page | Controller method + route in the right permission group + `resources/js/pages/<area>/<name>.tsx`; keep `types/index.ts` in step. |
+| A write route | Inside a `can:edit-hr`, `can:admin` or `can:self-service` group, with `$request->validate()`. `RouteAccessTest` enforces it. |
+| A table | Migration, model with `LogsActivity`, defaults mirrored in `$attributes`, any `*_by` column added to `User::HISTORY_COLUMNS`, and a section 4 ERD update. |
+| A status or option | `config/hrm.php`; the formula in `HrRules` / `AttendanceRules`, never in a controller or React. |
+| A checklist item | A row in Settings > Checklists (or `ChecklistItemSeeder` for defaults), not a migration. |
+| A report | `ReportCatalog` entry + method in `app/Services/Reports`. |
+| A data fix on live | A migration through models (logged), filling only what is empty. |
+
+**Definition of done**: `php vendor/bin/phpunit` passes (also `-c phpunit.pgsql.xml` against a local Postgres for anything database-specific), `npx tsc --noEmit` is clean, `npm run build` works, and the changed screen has been opened in a browser at desktop and phone width. **No real HR data** in the repo, tests, fixtures, screenshots or logs: tests build fake workbooks with `tests/Support/XlsxBuilder.php`.
+
+## 12. Security notes
+
+- HTTPS only, secure session cookies, `APP_DEBUG=false` in production, sessions in the database.
+- Login rate limit: 5 tries per minute per email and IP. Password links expire (3 days for invites, 60 minutes for resets).
+- Employees are soft-deleted; every change is in `activity_log` with private values masked.
+- Files: private disk or R2 bucket, never public URLs; served by `EmployeeFileController` after the permission check.
+- Strict Eloquent outside production; Inertia DevTools recording off.
+- Open items (owner's list, 2026-10-23): rotate the Neon password, keep an offline copy of `APP_KEY`, replace the admin login copied from the local machine, two-step login for admin and HR, encrypting CNIC and bank account columns, own database backups beyond Neon's short restore window.

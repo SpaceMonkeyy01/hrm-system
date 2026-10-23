@@ -153,6 +153,9 @@ class CoverageTest extends TestCase
 
         $emp = $this->csv($this->actingAs($viewer)->get('/export/employees')->assertOk()->streamedContent());
         $this->assertCount(3, $emp, 'employees export includes exited people');
+        // CNIC is private: viewers don't get the column, HR does.
+        $this->assertArrayNotHasKey('CNIC', $emp[0]);
+        $this->assertArrayHasKey('CNIC', $this->csv($this->actingAs($this->user('hr'))->get('/export/employees')->assertOk()->streamedContent())[0]);
     }
 
     // T9

@@ -25,7 +25,7 @@ class ExportController extends Controller
         $board = new StatusBoard($employees->pluck('id')->all());
 
         [$header, $rows] = match ($type) {
-            'employees' => $this->employees($employees),
+            'employees' => $this->employees($employees, $request->user()->can('edit-hr')),
             'onboarding' => $this->onboarding($employees, $board),
             'documents' => $this->documents($employees, $board),
         };
@@ -38,13 +38,16 @@ class ExportController extends Controller
         return [$e->employee_code, $e->full_name, $e->company?->name, $e->department?->name];
     }
 
-    private function employees($employees): array
+    /** CNIC is one of Employee::PRIVATE_FIELDS: only HR and admin get the column (viewers don't see it on screen either). */
+    private function employees($employees, bool $private): array
     {
+        $cnic = fn (array $cols, $value) => $private ? [...$cols, $value] : $cols;
+
         return [
             ['Code', 'Name', 'Company', 'Department', 'Team', 'Role', 'Employment type', 'Work mode', 'Start date', 'Status',
-                'Exit date', 'CNIC', 'Email', 'Phone', 'HR.my ID', 'Attendance machine ID', 'Drive folder', 'Needs review', 'System ID'],
+                ...$cnic(['Exit date'], 'CNIC'), 'Email', 'Phone', 'HR.my ID', 'Attendance machine ID', 'Drive folder', 'Needs review', 'System ID'],
             $employees->map(fn ($e) => [...$this->base($e), $e->team?->name, $e->role_title, $e->employment_type, $e->work_mode,
-                $e->start_date?->toDateString(), $e->status, $e->exit_date?->toDateString(), $e->cnic, $e->email, $e->phone,
+                $e->start_date?->toDateString(), $e->status, ...$cnic([$e->exit_date?->toDateString()], $e->cnic), $e->email, $e->phone,
                 $e->hr_portal_id, $e->attendance_machine_id, $e->drive_folder_url, $e->needs_review ? 'Yes' : '', $e->system_id])->all(),
         ];
     }

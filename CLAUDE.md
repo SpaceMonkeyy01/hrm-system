@@ -19,4 +19,4 @@ Laravel 13 + Inertia 3 + React 19 (TypeScript) + Tailwind 4. Read `docs/ARCHITEC
 9. **UI copy:** sentence case, plain words HR staff use, buttons say what they do ("Save plan", not "Submit").
 
 ## Definition of done
-Tests pass, `tsc` is clean, `npm run build` works, and any changed screen has been opened in a browser.
+Tests pass, `tsc` is clean, `npm run build` works, and any changed screen has been opened in a browser. A new table, subsystem, external service or permission change also updates `docs/ARCHITECTURE.md` in the same commit.
