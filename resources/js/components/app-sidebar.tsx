@@ -10,6 +10,7 @@ import {
     FileCheck2,
     HeartHandshake,
     House,
+    KeyRound,
     Inbox,
     Laptop,
     LogOut,
@@ -80,6 +81,7 @@ const groups: Group[] = [
             { title: 'Documents', href: '/documents', icon: FileCheck2 },
             { title: 'Reviews', href: '/reviews', icon: Star, edit: true, badge: 'reviews' },
             { title: 'Offboarding', href: '/offboarding', icon: DoorOpen },
+            { title: 'Staff logins', href: '/logins', icon: KeyRound, edit: true },
         ],
     },
     {

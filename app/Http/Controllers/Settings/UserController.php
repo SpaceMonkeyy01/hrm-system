@@ -120,8 +120,14 @@ class UserController extends Controller
     /** A fresh link to choose a password: the welcome email ran out, went to spam, or they forgot it. */
     public function sendLink(User $user): RedirectResponse
     {
+        return self::mailLink($user);
+    }
+
+    /** Emails a login a link to choose a password (also HR's Staff logins page, StaffLoginsController). */
+    public static function mailLink(User $user): RedirectResponse
+    {
         if (! $user->is_active) {
-            throw ValidationException::withMessages(['user' => "{$user->email} is switched off. Tick \"Can log in\" and save first."]);
+            throw ValidationException::withMessages(['user' => "{$user->email} is switched off. Switch it back on first."]);
         }
         $invite = $user->last_login_at === null;   // never signed in: the welcome wording
         try {

@@ -25,6 +25,8 @@ import type { Feedback } from '@/components/feedback';
 import { AdjustDialog, DayStatus, duration, SessionsLine, TimeCell } from '@/components/attendance';
 import type { AttendanceDay } from '@/components/attendance';
 import { AssetList } from '@/components/assets';
+import { LoginCard } from '@/components/login-card';
+import type { ProfileLogin } from '@/components/login-card';
 import type { AssetRow } from '@/components/assets';
 import { balanceText, balanceTitle, deductionText, leaveDates } from '@/components/leave';
 import type { LeaveBalance, LeaveCounted, LeaveDeductions, LeaveRecordRow } from '@/components/leave';
@@ -76,6 +78,8 @@ type Props = {
     letters: { id: number; reference: string; subject: string | null; issued_on: string; issued_by: string | null }[] | null;
     /** HR and admin only (null for viewers) */
     feedback: Feedback | null;
+    /** Their login; null when there is none, and always null for viewers (HR and admin only). */
+    login: ProfileLogin | null;
     /** HR and admin only. */
     completeness: { done: number; total: number; missing: string[] } | null;
     /** Null for viewer logins: they only get fileCount. */
@@ -488,7 +492,7 @@ function DetailCard({ title, rows, showEmpty, children }: { title: string; rows:
 }
 
 /** Details tab: cards with what is on file; empty fields fold away behind "Show N empty fields". */
-function DetailsTab({ e }: { e: Employee }) {
+function DetailsTab({ e, login, isAdmin }: { e: Employee; login?: ProfileLogin | null; isAdmin: boolean }) {
     const [showEmpty, setShowEmpty] = useState(false);
     const link = (p: { id: number; name: string } | null) => p && <Link className="text-cascade hover:underline" href={`/employees/${p.id}`}>{p.name}</Link>;
     const cards: { title: string; rows: DetailRow[] }[] = [
@@ -544,6 +548,7 @@ function DetailsTab({ e }: { e: Employee }) {
                         )}
                     </DetailCard>
                 ))}
+                {login !== undefined && <LoginCard employee={e} login={login} isAdmin={isAdmin} />}
             </div>
             {empty.length > 0 && (
                 <div className="text-sm">
@@ -684,7 +689,7 @@ export default function EmployeeShow(props: Props) {
                 </TabsList>
 
                 <TabsContent value="overview">
-                    <DetailsTab e={e} />
+                    <DetailsTab e={e} login={can ? props.login : undefined} isAdmin={auth.can.admin} />
                 </TabsContent>
 
 

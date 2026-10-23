@@ -9,6 +9,7 @@ use App\Models\Category;
 use App\Models\Company;
 use App\Models\Department;
 use App\Models\Employee;
+use App\Models\User;
 use App\Models\EmploymentHistory;
 use App\Models\Onboarding;
 use App\Models\Team;
@@ -200,6 +201,9 @@ class EmployeeController extends Controller
             'letters' => $private ? LetterController::letterRows($employee->id) : null,
             // Warnings, appreciation and meeting notes: HR and admin only.
             'feedback' => $private ? FeedbackController::forEmployee($employee->id) : null,
+            // Their login, if any (HR can create staff logins and send the link: StaffLoginsController). HR and admin only.
+            'login' => $private ? (fn (?User $u) => $u ? [...$u->only('id', 'email', 'role', 'is_active'), 'last_login_at' => $u->last_login_at?->toIso8601String()] : null)(
+                User::where('employee_id', $employee->id)->first(['id', 'email', 'role', 'is_active', 'last_login_at'])) : null,
             'employmentHistory' => $employee->employmentHistory->map(fn (EmploymentHistory $h) => [
                 'id' => $h->id, 'effective_date' => $h->effective_date->toDateString(), 'change_type' => $h->change_type,
                 'changes' => $h->changes ?? [], 'note' => $h->note, 'by' => $h->author?->name,

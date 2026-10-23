@@ -40,6 +40,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SpreadsheetImportController;
+use App\Http\Controllers\StaffLoginsController;
 use App\Http\Controllers\Settings\ChecklistItemController;
 use App\Http\Controllers\Settings\StaffLoginController;
 use App\Http\Controllers\Settings\StructureController;
@@ -137,6 +138,12 @@ Route::middleware('auth')->group(function () {
             Route::post('employees/{employee}/review-decision', [EmployeeController::class, 'decideReview'])->name('employees.review-decision');
             Route::post('employees/{employee}/history', [EmploymentHistoryController::class, 'store'])->name('history.store');
             Route::post('employees/{employee}/photo', [PhotoController::class, 'update'])->name('photo.update');
+            // Staff logins (My page only): HR creates them and sends the password link. Other roles: Settings > Users (admin).
+            Route::get('logins', [StaffLoginsController::class, 'index'])->name('logins.index');
+            Route::post('logins', [StaffLoginsController::class, 'storeAll'])->name('logins.store-all');
+            Route::post('employees/{employee}/login', [StaffLoginsController::class, 'store'])->name('logins.store');
+            Route::post('logins/{user}/send-link', [StaffLoginsController::class, 'sendLink'])->name('logins.send-link');
+            Route::put('logins/{user}/active', [StaffLoginsController::class, 'setActive'])->name('logins.active');
             // Letters (LetterController): draft, issue, print. HR and admin only: letters carry CNIC numbers.
             Route::get('employees/{employee}/letters/new', [LetterController::class, 'draft'])->name('letters.draft');
             Route::post('employees/{employee}/letters', [LetterController::class, 'issue'])->name('letters.issue');
