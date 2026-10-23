@@ -28,6 +28,8 @@ bootstrap/cache/*.php
 tests
 phpunit*.xml
 .phpunit.result.cache
-docs
+# docs/ARCHITECTURE.md ships: Settings > System architecture renders it. The rest of docs/ stays out.
+docs/*
+!docs/ARCHITECTURE.md
 *.log
 composer.offline.*
