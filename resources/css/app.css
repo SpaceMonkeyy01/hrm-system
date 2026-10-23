@@ -3,6 +3,9 @@
 
 @source '../views';
 
+/* The login scene's desktop layout: wide enough and landscape (portrait tablets get the phone layout). */
+@custom-variant wide (@media (min-width: 64rem) and (min-aspect-ratio: 5/4));
+
 /*
  * HRM design tokens
  * Chrome is ink on paper; colour is reserved for status, plus Blue Cascade navy for actions.
@@ -310,14 +313,17 @@
     }
 }
 
-/* Login scene (pages/auth/login.tsx): slow orbit, floating doodles, coffee steam. Still for reduced motion. */
+/* Login scene (layouts/login-scene.tsx): dot grid, slow orbit, floating plane, coffee steam, fish tails. Still for reduced motion
+   (the swimming fish are SVG animateMotion, left out by the component itself). */
+.login-dots { background-color: #f3f8fb; background-image: radial-gradient(#d3e3ec 1.4px, transparent 1.6px); background-size: 26px 26px; }
 @keyframes login-spin { to { transform: rotate(360deg); } }
 @keyframes login-float { from { transform: translateY(0); } to { transform: translateY(-8px); } }
 @keyframes login-steam { from { opacity: .2; transform: translateY(2px); } to { opacity: 1; transform: translateY(-4px); } }
-.login-orbit { transform-origin: 420px 450px; animation: login-spin 60s linear infinite; }
+@keyframes login-wag { from { transform: rotate(-16deg); } to { transform: rotate(16deg); } }
+.login-orbit { transform-origin: 420px 450px; animation: login-spin 90s linear infinite; }
 .login-float-1 { animation: login-float 5s ease-in-out infinite alternate; }
-.login-float-2 { animation: login-float 6.5s ease-in-out infinite alternate; }
 .login-steam { animation: login-steam 2.4s ease-in-out infinite alternate; }
+.login-tail { transform-box: fill-box; transform-origin: right center; animation: login-wag .45s ease-in-out infinite alternate; }
 @media (prefers-reduced-motion: reduce) {
-    .login-orbit, .login-float-1, .login-float-2, .login-steam { animation: none; }
+    .login-orbit, .login-float-1, .login-steam, .login-tail { animation: none; }
 }
