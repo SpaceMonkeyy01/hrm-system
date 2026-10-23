@@ -23,6 +23,7 @@ import {
     Users,
     Workflow,
     Mail,
+    Network,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Avatar } from '@/components/avatar';
@@ -102,7 +103,10 @@ const groups: Group[] = [
     },
 ];
 
-const settings: Item[] = [{ title: 'Settings', href: '/settings/users', icon: Settings, match: '/settings' }];
+const settings: Item[] = [
+    { title: 'Settings', href: '/settings/users', icon: Settings, match: '/settings' },
+    { title: 'System architecture', href: '/settings/architecture', icon: Network },
+];
 
 const mine: Item[] = [{ title: 'My page', href: '/me', icon: CircleUserRound }];
 

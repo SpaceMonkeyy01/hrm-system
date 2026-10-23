@@ -1,6 +1,6 @@
 # HRM System: architecture
 
-_For developers joining the project. Last rewritten 2026-10-23 against `main`. Every diagram is Mermaid source (renders on GitHub and in VS Code). The ERDs in section 5 were generated from the migrated schema, not drawn by hand._
+_For developers joining the project. Last rewritten 2026-10-23 against `main`. Every diagram is Mermaid source (renders on GitHub and in VS Code). The ERDs in section 4 were generated from the migrated schema, not drawn by hand._
 
 **Keep this file true.** A new table, a new subsystem, a new external service or a change to who can do what updates the matching section here in the same commit. `CLAUDE.md` sends every developer and AI agent here first.
 
@@ -105,7 +105,7 @@ flowchart LR
 | `employee` | My page only, for the employee record linked by `users.employee_id`. |
 | `viewer` | Every HR page read-only. Private fields arrive as `null`. |
 | `hr` | Everything a viewer sees, plus all edits, approvals, files, letters, reviews, staff logins. |
-| `admin` | Everything, plus deletes and Settings (users of every role, structure, checklists, test email). |
+| `admin` | Everything, plus deletes, Settings (users of every role, structure, checklists, test email) and Settings > System architecture, which renders this file (`Settings\ArchitectureController`). |
 
 - **Gates** (`AppServiceProvider`): `view-hr` (admin, hr, viewer), `edit-hr` (admin, hr), `admin`, `self-service` (a login linked to an employee). Route groups use them as `can:` middleware; hiding a button in React is never the check.
 - **My page** (`MeController`) only ever reads `$request->user()->employee_id`, never an id from the URL.

@@ -41,6 +41,7 @@ use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SpreadsheetImportController;
 use App\Http\Controllers\StaffLoginsController;
+use App\Http\Controllers\Settings\ArchitectureController;
 use App\Http\Controllers\Settings\ChecklistItemController;
 use App\Http\Controllers\Settings\StaffLoginController;
 use App\Http\Controllers\Settings\StructureController;
@@ -314,6 +315,7 @@ Route::middleware('auth')->group(function () {
         // Settings (admin)
         Route::prefix('settings')->name('settings.')->middleware('can:admin')->group(function () {
             Route::get('users', [UserController::class, 'index'])->name('users.index');
+            Route::get('architecture', ArchitectureController::class)->name('architecture');
             Route::post('test-email', TestEmailController::class)->middleware('throttle:5,1')->name('test-email');
             Route::post('users', [UserController::class, 'store'])->name('users.store');
             Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
