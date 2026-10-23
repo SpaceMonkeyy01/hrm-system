@@ -18,7 +18,7 @@ class RememberCompany
     public const PAGES = [
         'dashboard', 'overview', 'org-chart', 'reports.show', 'requests.index', 'employees.index', 'onboarding.index', 'documents.index',
         'attendance.index', 'attendance.requests', 'wfh-requests.index', 'leave.index', 'leave-requests.index', 'loans.index', 'medical.index',
-        'assets.index',
+        'assets.index', 'logins.index',
     ];
 
     public function handle(Request $request, Closure $next): Response

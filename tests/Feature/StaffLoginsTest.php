@@ -111,4 +111,36 @@ class StaffLoginsTest extends TestCase
         $this->actingAs($hr)->get("/employees/{$none->id}")->assertInertia(fn (AssertableInertia $p) => $p->where('login', null));
         $this->actingAs($this->user('viewer'))->get("/employees/{$with->id}")->assertInertia(fn (AssertableInertia $p) => $p->where('login', null));
     }
+    public function test_the_company_switch_narrows_the_page_and_the_create_all_button(): void
+    {
+        $emerge = Company::create(['name' => 'Emerge', 'code' => 'EMG', 'employee_code_prefix' => 'EMG-', 'employee_code_digits' => 3]);
+        $bcc = $this->employee($this->company, ['email' => 'b@example.com']);
+        $emg = $this->employee($emerge, ['email' => 'e@example.com']);
+        $bccLogin = $this->user('employee', ['employee_id' => $this->employee($this->company)->id]);
+        $this->user('employee', ['employee_id' => $this->employee($emerge)->id]);
+        $hr = $this->user('hr');
+
+        $this->actingAs($hr)->get("/logins?company={$emerge->id}")->assertInertia(fn (AssertableInertia $p) => $p
+            ->where('company', $emerge->id)->has('logins', 1)->where('without', fn ($w) => collect($w)->pluck('id')->all() === [$emg->id]));
+        $this->actingAs($hr)->get("/logins?company={$this->company->id}")->assertInertia(fn (AssertableInertia $p) => $p
+            ->where('logins.0.id', $bccLogin->id)->where('without', fn ($w) => collect($w)->pluck('id')->all() === [$bcc->id]));
+        $this->actingAs($hr)->get('/logins?company=all')->assertInertia(fn (AssertableInertia $p) => $p->where('company', null)->has('logins', 2)->has('without', 2));
+
+        $this->actingAs($hr)->post('/logins', ['send' => true, 'company' => $emerge->id])->assertSessionHas('success');
+        $this->assertTrue(User::where('employee_id', $emg->id)->exists());
+        $this->assertFalse(User::where('employee_id', $bcc->id)->exists());
+    }
+
+    public function test_the_one_off_migration_gives_each_hr_login_its_company_and_sender_without_overwriting(): void
+    {
+        config(['mail.from.address' => 'hrm@bluecascade.org']);
+        $emerge = Company::create(['name' => 'Emerge', 'code' => 'EMG', 'employee_code_prefix' => 'EMG-', 'employee_code_digits' => 3, 'hr_email' => 'kept@bluecascade.org']);
+        $bccHr = $this->user('hr', ['email' => 'hr@bluecascade.org']);
+        $emgHr = $this->user('hr', ['email' => 'hr.emerge@bluecascade.org', 'company_id' => $this->company->id]);   // already chosen: kept
+
+        (require database_path('migrations/2026_10_23_000400_set_hr_logins_home_company.php'))->up();
+
+        $this->assertSame([$this->company->id, $this->company->id], [$bccHr->fresh()->company_id, $emgHr->fresh()->company_id]);
+        $this->assertSame(['hr@bluecascade.org', 'kept@bluecascade.org'], [$this->company->fresh()->hr_email, $emerge->fresh()->hr_email]);
+    }
 }

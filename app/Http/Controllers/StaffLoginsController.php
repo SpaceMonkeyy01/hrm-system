@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Settings\StaffLoginController;
 use App\Http\Controllers\Settings\UserController;
+use App\Models\Company;
 use App\Models\Employee;
 use App\Models\User;
 use App\Notifications\SetPasswordNotification;
@@ -24,17 +25,21 @@ class StaffLoginsController extends Controller
 {
     public function index(): Response
     {
-        $logins = User::query()->where('role', 'employee')->with('employee:id,full_name,employee_code,status')->orderBy('name')
+        $switch = Company::switchProps();
+        $company = $switch['company'];
+        $logins = User::query()->where('role', 'employee')
+            ->when($company, fn ($q) => $q->whereHas('employee', fn ($e) => $e->inCompany($company)))
+            ->with('employee:id,full_name,employee_code,status')->orderBy('name')
             ->get(['id', 'name', 'email', 'is_active', 'last_login_at', 'employee_id', 'created_at']);
         $linked = User::whereNotNull('employee_id')->pluck('employee_id')->flip();
         $emails = User::pluck('email')->map(fn ($e) => Str::lower($e))->flip();
 
-        return Inertia::render('logins/index', [
+        return Inertia::render('logins/index', $switch + [
             'logins' => $logins->map(fn (User $u) => [...$u->only('id', 'name', 'email', 'is_active'),
                 'employee' => $u->employee ? ['id' => $u->employee->id, 'name' => $u->employee->full_name, 'code' => $u->employee->employee_code, 'status' => $u->employee->status] : null,
                 'last_login_at' => $u->last_login_at?->toIso8601String(), 'created_at' => $u->created_at?->toIso8601String()]),
             // Current staff with no login yet, and why one can't be made for some of them.
-            'without' => Employee::query()->whereIn('status', ['active', 'offboarding'])->orderBy('full_name')->get(['id', 'full_name', 'employee_code', 'email'])
+            'without' => Employee::query()->whereIn('status', ['active', 'offboarding'])->inCompany($company)->orderBy('full_name')->get(['id', 'full_name', 'employee_code', 'email'])
                 ->reject(fn ($e) => $linked->has($e->id))
                 ->map(fn ($e) => ['id' => $e->id, 'name' => $e->full_name, 'code' => $e->employee_code, 'email' => $e->email,
                     'problem' => ! $e->email ? 'no_email' : ($emails->has(Str::lower($e->email)) ? 'email_taken' : null)])
@@ -72,7 +77,7 @@ class StaffLoginsController extends Controller
         return back()->with('success', "Login created. $email has an email with a link to choose their password.");
     }
 
-    /** Everyone current with a work email and no login (the same as the button on Settings > Users). */
+    /** Everyone current with a work email and no login, in the picked company (the same as the button on Settings > Users). */
     public function storeAll(Request $request): RedirectResponse
     {
         return app(StaffLoginController::class)->store($request);

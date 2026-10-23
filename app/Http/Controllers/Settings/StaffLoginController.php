@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Models\Company;
 use App\Models\Employee;
 use App\Models\User;
 use App\Notifications\SetPasswordNotification;
@@ -19,10 +20,10 @@ use Illuminate\Support\Str;
  */
 class StaffLoginController extends Controller
 {
-    /** Current employees who could get a login now, and how many can't for want of a work email. */
-    public static function candidates(): array
+    /** Current employees (of one company, or all) who could get a login now, and how many can't for want of a work email. */
+    public static function candidates(?int $company = null): array
     {
-        $current = Employee::query()->whereIn('status', ['active', 'offboarding'])->get(['id', 'full_name', 'email']);
+        $current = Employee::query()->whereIn('status', ['active', 'offboarding'])->inCompany($company)->get(['id', 'full_name', 'email']);
         $linked = User::whereNotNull('employee_id')->pluck('employee_id')->flip();
         $emails = User::pluck('email')->map(fn ($e) => Str::lower($e))->flip();
         $open = $current->reject(fn ($e) => $linked->has($e->id));
@@ -38,7 +39,7 @@ class StaffLoginController extends Controller
     {
         $request->validate(['send' => ['boolean']]);
         /** @var Collection<int, Employee> $ready */
-        $ready = self::candidates()['ready'];
+        $ready = self::candidates(Company::picked())['ready'];   // HR's Staff logins page sends its company switch
         if ($ready->isEmpty()) {
             return back()->with('error', 'Nobody to create a login for: everyone with a work email already has one.');
         }

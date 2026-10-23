@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { Avatar } from '@/components/avatar';
 import { EmptyState } from '@/components/empty-state';
 import { HelpTip } from '@/components/help-tip';
+import { CompanySwitch, companyParam } from '@/components/company-switch';
 import { sendLoginLink, setLoginActive } from '@/components/login-card';
 import { PageHeader } from '@/components/page-header';
 import { StatusPill } from '@/components/status-pill';
@@ -23,7 +24,9 @@ const PER_PAGE = 50;
 const firstError = (e: Record<string, string>) => toast.error(Object.values(e)[0] ?? 'Not done.');
 
 /** Staff logins (My page only): HR creates them and sends the password link. HR, viewer and admin logins: Settings > Users. */
-export default function StaffLogins({ logins, without }: { logins: Login[]; without: Without[] }) {
+export default function StaffLogins({ logins, without, company, companies }: {
+    logins: Login[]; without: Without[]; company: number | null; companies: { id: number; name: string }[];
+}) {
     const [tab, setTab] = useState<Tab>(() => (logins.length === 0 && without.length > 0 ? 'without' : 'with'));
     const [q, setQ] = useState('');
     const [never, setNever] = useState(false);
@@ -42,8 +45,9 @@ export default function StaffLogins({ logins, without }: { logins: Login[]; with
     const from = (Math.min(page, pages) - 1) * PER_PAGE;
     const switchTab = (t: Tab) => { setTab(t); setPage(1); setNever(false); };
 
-    const createAll = () => confirm(`Create ${plural(ready.length, 'login')} and email each person a link to choose their password?`)
-        && router.post('/logins', { send: true }, { preserveScroll: true, onError: firstError });
+    const companyName = companies.find((c) => c.id === company)?.name;
+    const createAll = () => confirm(`Create ${plural(ready.length, companyName ? `${companyName} login` : 'login')} and email each person a link to choose their password?`)
+        && router.post('/logins', { send: true, ...companyParam(company) }, { preserveScroll: true, onError: firstError });
     const createOne = (w: Without) => confirm(`Create a login for ${w.name} and email ${w.email} the link?`)
         && router.post(`/employees/${w.id}/login`, {}, { preserveScroll: true, onError: firstError });
 
@@ -51,7 +55,11 @@ export default function StaffLogins({ logins, without }: { logins: Login[]; with
         <>
             <Head title="Staff logins" />
             <PageHeader title="Staff logins" description="Logins for staff to see their own record on My page. Each person chooses their own password from an emailed link."
-                actions={ready.length > 0 && <Button onClick={createAll}><MailPlus /> Create {plural(ready.length, 'login')}</Button>} />
+                actions={<>
+                    <CompanySwitch companies={companies} value={company}
+                        onChange={(id) => { setPage(1); router.get('/logins', companyParam(id), { preserveState: true, preserveScroll: true, replace: true }); }} />
+                    {ready.length > 0 && <Button onClick={createAll}><MailPlus /> Create {plural(ready.length, 'login')}</Button>}
+                </>} />
 
             <div className="grid gap-4 px-4 py-4 md:px-6">
                 {ready.length > 0 && (
