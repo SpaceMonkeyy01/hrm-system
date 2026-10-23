@@ -348,14 +348,14 @@ class AttendanceReports
      */
     public function signIn(ReportFilters $f): ReportResult
     {
-        $employees = $f->employedBetween($f->from, $f->to)->with(['department:id,name', 'team:id,name', 'manager:id,full_name'])
+        $employees = $f->employedBetween($f->from, $f->to)->with(['department:id,name', 'team:id,name', 'manager:id,full_name', 'categories:id,name'])
             ->get([...self::EMPLOYEE_COLUMNS, 'team_id', 'manager_id'])
             // By manager (no manager last), then name
             ->sortBy(fn (Employee $e) => [$e->manager ? 0 : 1, $e->manager?->full_name ?? '', $e->full_name])->values();
         $board = new AttendanceBoard($employees, $f->from, $f->to);
         $now = CarbonImmutable::now();
         $tones = config('hrm.attendance.statuses') + ['Late' => 'pending'];
-        $r = (new ReportResult)->column('manager', 'Manager')->column('team', 'Team')->column('employee', 'Employee', 'employee')
+        $r = (new ReportResult)->column('manager', 'Manager')->column('team', 'Team')->column('categories', 'Categories')->column('employee', 'Employee', 'employee')
             ->column('date', 'Date', 'date')->column('status', 'Status', 'status', ['tones' => $tones])
             ->column('in1', '1st sign in')->column('out1', '1st sign out')->column('in2', '2nd sign in')->column('out2', '2nd sign out')
             ->column('worked', 'Hours worked', 'minutes')->column('remarks', 'Remarks');
@@ -375,7 +375,7 @@ class AttendanceReports
                 $count[$status] = ($count[$status] ?? 0) + 1;
                 $people[$e->id] = true;
                 $r->rows[] = [
-                    'manager' => $e->manager?->full_name, 'team' => $e->team?->name, 'employee' => ReportResult::person($e), 'date' => $date,
+                    'manager' => $e->manager?->full_name, 'team' => $e->team?->name, 'categories' => $e->categories->pluck('name')->implode(', ') ?: null, 'employee' => ReportResult::person($e), 'date' => $date,
                     'status' => $status, 'in1' => $time($sessions[0]['in'] ?? null), 'out1' => $time($sessions[0]['out'] ?? null),
                     'in2' => $time($sessions[1]['in'] ?? null), 'out2' => $time($sessions[1]['out'] ?? null),
                     'worked' => $day['worked'], 'remarks' => self::remarks($day, array_slice($sessions, 2), $date),

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Category;
 use App\Models\Company;
 use App\Models\Employee;
 use App\Models\Team;
@@ -48,6 +49,7 @@ class ReportController extends Controller
                 'month' => $filters->month, 'from' => $filters->from, 'to' => $filters->to, 'year' => $filters->year,
                 'date' => $filters->date, 'within' => $filters->within, 'company' => $filters->company, 'department' => $filters->department,
                 'day' => $filters->day, 'week' => $filters->week, 'team' => $filters->team, 'manager' => $filters->manager,
+                'category' => $filters->category,
             ],
             'today' => $filters->today->toDateString(),
             'companies' => Company::query()->orderBy('name')->with('departments:id,company_id,name')->get(['id', 'name'])
@@ -55,6 +57,7 @@ class ReportController extends Controller
             // Only for reports with those filters: teams (by department) and everyone who manages someone current.
             'teams' => in_array('team', $def['filters'], true)
                 ? Team::query()->orderBy('name')->get(['id', 'name', 'department_id'])->map->only('id', 'name', 'department_id') : [],
+            'categories' => in_array('category', $def['filters'], true) ? Category::query()->orderBy('name')->get(['id', 'name'])->map->only('id', 'name') : [],
             'managers' => in_array('manager', $def['filters'], true)
                 ? Employee::query()->whereIn('id', Employee::query()->whereIn('status', ['active', 'offboarding'])->whereNotNull('manager_id')->select('manager_id'))
                     ->orderBy('full_name')->get(['id', 'full_name', 'employee_code', 'company_id'])
@@ -80,6 +83,7 @@ class ReportController extends Controller
         $who = match (true) {
             (bool) $filters->manager => Employee::find($filters->manager)?->full_name,
             (bool) $filters->team => Team::find($filters->team)?->name,
+            (bool) $filters->category => Category::find($filters->category)?->name,
             default => null,
         };
 
@@ -113,6 +117,7 @@ class ReportController extends Controller
             'department' => ['nullable', 'integer'],
             'team' => ['nullable', 'integer'],
             'manager' => ['nullable', 'integer'],
+            'category' => ['nullable', 'integer'],
         ], ['month.regex' => 'Pick a month like 2026-10.']);
 
         $today = CarbonImmutable::today();
@@ -147,6 +152,7 @@ class ReportController extends Controller
             department: isset($f['department']) ? (int) $f['department'] : null,
             team: isset($f['team']) ? (int) $f['team'] : null,
             manager: isset($f['manager']) ? (int) $f['manager'] : null,
+            category: isset($f['category']) ? (int) $f['category'] : null,
         )];
     }
 }

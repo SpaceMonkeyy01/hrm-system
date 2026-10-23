@@ -5,7 +5,7 @@ namespace App\Services\Reports;
 /**
  * Every report on the Reports page. A new report is one entry here plus a method on a *Reports class.
  *
- *   filters  which controls the page shows: month | range | year | date | within, plus company, department, team, manager
+ *   filters  which controls the page shows: month | range | year | date | within, plus company, department, team, manager, category
  *   range    'today': the range starts on today instead of the 1st of the month (reports with a row per person per day)
  *   private  HR and admin only (reads Employee::PRIVATE_FIELDS)
  *   wide     day-by-day grid: the page lets the table scroll sideways
@@ -34,7 +34,7 @@ final class ReportCatalog
                 'filters' => ['month', ...$org], 'run' => [AttendanceReports::class, 'sheet'], 'wide' => true],
             'team-sign-in' => ['group' => 'attendance', 'title' => 'Team sign-in sheet',
                 'description' => 'One row per person per day, by manager: first and second sign-in and sign-out, hours and remarks. Pick a manager or team, then download it to share.',
-                'filters' => ['range', ...$org, 'team', 'manager'], 'range' => 'today', 'run' => [AttendanceReports::class, 'signIn']],
+                'filters' => ['range', ...$org, 'team', 'category', 'manager'], 'range' => 'today', 'run' => [AttendanceReports::class, 'signIn']],
             'attendance-log' => ['group' => 'attendance', 'title' => 'Attendance log',
                 'description' => 'Every day with its check-ins and check-outs, including split days (office, then remote).',
                 'filters' => ['range', ...$org], 'run' => [AttendanceReports::class, 'log']],

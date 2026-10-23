@@ -204,6 +204,13 @@ class ReportsTest extends TestCase
         $this->assertSame(['Fake Linked'], array_unique(array_column(array_column($this->props("/reports/team-sign-in?from=2026-05-18&to=2026-05-19&team={$team->id}")['result']['rows'], 'employee'), 'name')));
         $this->assertSame(['2026-05-20', '2026-05-20'], [($f = $this->props('/reports/team-sign-in')['filters'])['from'], $f['to']]);
 
+        // The category filter, and the person's categories on each row.
+        $neon = \App\Models\Category::create(['name' => 'Fake Neon']);
+        $this->linked->categories()->attach($neon->id);
+        $byCategory = $this->props("/reports/team-sign-in?from=2026-05-18&to=2026-05-18&category={$neon->id}")['result']['rows'];
+        $this->assertSame([['Fake Linked', 'Fake Neon']], array_map(fn ($r) => [$r['employee']['name'], $r['categories']], $byCategory));
+        $this->assertSame([], $this->props('/reports/team-sign-in?from=2026-05-18&to=2026-05-18&category='.\App\Models\Category::create(['name' => 'Fake Other'])->id)['result']['rows']);
+
         // The download is named after the manager.
         $this->actingAs($this->user())->get("/reports/team-sign-in/export?from=2026-05-19&to=2026-05-19&manager={$lead->id}")
             ->assertOk()->assertHeader('content-disposition', 'attachment; filename=team-sign-in-2026-05-19-fake-lead.csv');
